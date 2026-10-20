@@ -62,3 +62,5 @@ footer{text-align:center;color:var(--mut);font-size:13px;padding:40px}
 .ftools{display:flex;flex-wrap:wrap;gap:6px}.ftool{margin:0}}
 @media(max-width:560px){.grid3,.grid4{grid-template-columns:1fr}main{padding:14px}}
 .panel input:not([type=checkbox]),.panel select,.panel textarea{max-width:100%;min-width:0}.signer select{width:auto;flex:none}.editor>*{min-width:0}
+.dz{border:3px dashed #94a3b8;border-radius:16px;background:#fff;text-align:center;padding:44px 20px;margin-bottom:20px;transition:.15s}.dz.over{border-color:var(--brand);background:#ecfdf5}.dz p{color:var(--mut)}
+#dropov{position:fixed;inset:0;background:#0f766ecc;z-index:80;display:none;place-items:center;pointer-events:none}#dropov.on{display:grid}#dropov div{border:4px dashed #fff;border-radius:24px;padding:60px 80px;color:#fff;font-size:32px;font-weight:800}
