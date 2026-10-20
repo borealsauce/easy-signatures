@@ -64,3 +64,5 @@ footer{text-align:center;color:var(--mut);font-size:13px;padding:40px}
 .panel input:not([type=checkbox]),.panel select,.panel textarea{max-width:100%;min-width:0}.signer select{width:auto;flex:none}.editor>*{min-width:0}
 .dz{border:3px dashed #94a3b8;border-radius:16px;background:#fff;text-align:center;padding:44px 20px;margin-bottom:20px;transition:.15s}.dz.over{border-color:var(--brand);background:#ecfdf5}.dz p{color:var(--mut)}
 #dropov{position:fixed;inset:0;background:#0f766ecc;z-index:80;display:none;place-items:center;pointer-events:none}#dropov.on{display:grid}#dropov div{border:4px dashed #fff;border-radius:24px;padding:60px 80px;color:#fff;font-size:32px;font-weight:800}
+.pages.placing .page{cursor:crosshair}.fld.ghost{opacity:.6;pointer-events:none;border-style:dashed;z-index:5}
+#hint{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 16px;border-radius:99px;font-size:13px;z-index:70}
