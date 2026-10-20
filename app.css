@@ -66,3 +66,4 @@ footer{text-align:center;color:var(--mut);font-size:13px;padding:40px}
 #dropov{position:fixed;inset:0;background:#0f766ecc;z-index:80;display:none;place-items:center;pointer-events:none}#dropov.on{display:grid}#dropov div{border:4px dashed #fff;border-radius:24px;padding:60px 80px;color:#fff;font-size:32px;font-weight:800}
 .pages.placing .page{cursor:crosshair}.fld.ghost{opacity:.6;pointer-events:none;border-style:dashed;z-index:5}
 #hint{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 16px;border-radius:99px;font-size:13px;z-index:70}
+.fld .h{position:absolute;background:#fff;border:2px solid currentColor;border-radius:3px;z-index:2}.fld .hl,.fld .hr{top:50%;width:8px;height:16px;margin-top:-8px;cursor:ew-resize}.fld .hl{left:-1px}.fld .hr{right:-1px}.fld .ht{left:50%;top:-1px;width:16px;height:8px;margin-left:-8px;cursor:ns-resize}.fld.sel{overflow:visible}
