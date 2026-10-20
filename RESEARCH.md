@@ -1,6 +1,6 @@
 # E-signature market research → Easy Digital Signatures demo
 
-**Name check:** "Easy Digital Signatures" had no e-signature product in search results (Signloom, Inkpact and Penpact are taken or close, so they were rejected).
+**Name:** Easy Digital Signatures (owner bought easydigitalsignatures.com; not yet pointed at the site). Earlier candidates Signloom, Inkpact and Penpact were rejected as taken or too close.
 
 ## SignNow (airSlate), core feature set
 Upload PDF/Word · drag-and-drop fields (signature, initials, date, text, checkbox, dropdown) · add multiple signers with roles and **signing order** · send invites by email · guided signer view · draw/type/upload signature · instant completion notifications · audit trail and document IDs · templates · team documents and org dashboard · **kiosk / in-person signing** · 2FA/phone authentication · reusable forms · reminders · pricing tiers Business / Business Premium / Enterprise (per user).
