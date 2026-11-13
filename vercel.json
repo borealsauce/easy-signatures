@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/api" }
+  ],
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 60,
+      "includeFiles": "{index.html,app.js,app.css,shared/**,layouts/**,supabase/**}"
+    }
+  },
+  "crons": [
+    { "path": "/api/cron/reminders", "schedule": "0 15 * * *" }
+  ]
+}

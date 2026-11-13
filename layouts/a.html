@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Easy Digital Signatures — Corporate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/layouts/preview.css">
+<style>
+  :root{--ink:#0b1f33;--teal:#14b8a6;--muted:#5b6b7c}
+  *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,sans-serif;color:var(--ink);background:#e7eef6}
+  a{color:inherit}
+  .nav{display:flex;align-items:center;gap:22px;padding:18px 7vw;position:relative;z-index:2}
+  .logo{font-weight:800;text-decoration:none;letter-spacing:-.03em}
+  .nav a{text-decoration:none;font-size:14px;color:#d7e4f2}
+  .nav .sp{flex:1}
+  .btn{display:inline-flex;align-items:center;border-radius:999px;padding:10px 16px;text-decoration:none;font-weight:600;border:1px solid transparent}
+  .btn.ghost{border-color:rgba(255,255,255,.25);color:#fff}
+  .btn.solid{background:#14b8a6;color:#042f2e}
+  .hero{position:relative;overflow:hidden;color:#f8fafc;background:
+    radial-gradient(ellipse 70% 55% at 8% -10%, rgba(45,212,191,.45), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 100% 0%, rgba(56,189,248,.28), transparent 50%),
+    radial-gradient(ellipse 40% 40% at 70% 100%, rgba(15,118,110,.55), transparent 60%),
+    linear-gradient(165deg,#071525,#0c2340 60%,#12324f)}
+  .hero:before{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.16) 1px, transparent 1px);background-size:22px 22px;mask-image:linear-gradient(#000 20%, transparent 85%);pointer-events:none}
+  .wrap{position:relative;z-index:1;display:grid;grid-template-columns:1.1fr .9fr;gap:48px;align-items:center;padding:36px 7vw 84px}
+  h1{font-size:58px;line-height:1.02;letter-spacing:-.045em;margin:0 0 16px}
+  .lede{font-size:18px;color:#d5e2ef;max-width:520px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+  .glass{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:22px;padding:22px;backdrop-filter:blur(16px);box-shadow:0 30px 70px rgba(0,0,0,.28)}
+  .kicker{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#99f6e4}
+  .donut{display:grid;grid-template-columns:140px 1fr;gap:16px;align-items:center;margin-top:8px}
+  .legend{font-size:14px;color:#e2e8f0} .legend b{display:block;font-size:22px;color:#fff}
+  .sample{font-size:12px;color:#94a3b8;margin-top:10px}
+  section{padding:72px 7vw}
+  h2{font-size:36px;letter-spacing:-.04em;margin:0 0 8px}
+  .sub{color:var(--muted);margin:0 0 28px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .card{background:rgba(255,255,255,.72);border:1px solid rgba(15,23,42,.06);border-radius:18px;padding:20px;box-shadow:0 16px 40px rgba(15,35,58,.06)}
+  .card h3{margin:12px 0 6px;font-size:17px} .card p{margin:0;color:var(--muted);font-size:14px;line-height:1.5}
+  .band{background:linear-gradient(180deg,#d9e5f2,#e7eef6)}
+  .prices{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .price{background:#fff;border-radius:20px;padding:24px;box-shadow:0 18px 40px rgba(15,35,58,.08)}
+  .price.hot{background:linear-gradient(180deg,#0f766e,#115e59);color:#fff}
+  .price .amt{font-size:42px;font-weight:800;letter-spacing:-.04em}
+  .price ul{padding-left:18px;line-height:1.7;font-size:14px}
+  footer{padding:28px 7vw 48px;color:#64748b;font-size:13px}
+  @media(max-width:900px){.wrap,.grid,.prices{grid-template-columns:1fr} h1{font-size:40px} .donut{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="hero">
+  <nav class="nav"><a class="logo" href="/layouts/a">Easy Digital Signatures</a><div class="sp"></div><a href="#pricing">Pricing</a><a class="btn ghost" href="/#/login">Log in</a><a class="btn solid" href="/#/signup">Start free</a></nav>
+  <div class="wrap">
+    <div>
+      <div class="kicker">Electronic signatures</div>
+      <h1>Send it. Get it signed. Keep the proof.</h1>
+      <p class="lede">Place fields on any PDF, email a secure link, and finish with a flattened file plus an audit certificate. Signers never need an account.</p>
+      <div class="row"><a class="btn solid" href="/#/signup">Create your free account</a><a class="btn ghost" href="#pricing">See pricing</a></div>
+    </div>
+    <div class="glass">
+      <div class="kicker">Document status</div>
+      <div class="donut">
+        <svg viewBox="0 0 120 120" width="140" height="140" aria-hidden="true">
+          <circle cx="60" cy="60" r="46" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="14"/>
+          <circle cx="60" cy="60" r="46" fill="none" stroke="#5eead4" stroke-width="14" stroke-linecap="round" stroke-dasharray="213 289" transform="rotate(-90 60 60)"/>
+          <text x="60" y="56" text-anchor="middle" fill="#fff" font-size="22" font-family="Inter" font-weight="700">174</text>
+          <text x="60" y="74" text-anchor="middle" fill="#99f6e4" font-size="9" font-family="Inter">documents</text>
+        </svg>
+        <div class="legend"><div><b>128</b> Signed</div><div style="margin-top:10px"><b>46</b> Out for signature</div></div>
+      </div>
+      <div class="sample">Sample data for layout preview</div>
+    </div>
+  </div>
+</header>
+<section>
+  <h2>What you actually use</h2>
+  <p class="sub">The parts teams ask for on day one. The rest stays out of the way.</p>
+  <div class="grid">
+    <article class="card"><svg width="28" height="28" fill="none" stroke="#0f766e" stroke-width="1.7"><rect x="4" y="5" width="20" height="18" rx="2"/><path d="M8 12h8M8 16h5"/></svg><h3>Drag-and-drop fields</h3><p>Signature, initials, date, and text. Click to place, Shift-click to repeat, Esc to cancel.</p></article>
+    <article class="card"><svg width="28" height="28" fill="none" stroke="#0f766e" stroke-width="1.7"><rect x="7" y="3" width="14" height="22" rx="2"/><path d="M11 20h6"/></svg><h3>Guided signing on any device</h3><p>Signers move field to field in the browser. No account, no app install.</p></article>
+    <article class="card"><svg width="28" height="28" fill="none" stroke="#0f766e" stroke-width="1.7"><path d="M7 4h10l5 5v15H7z"/><path d="M16 4v6h6M10 16h8M10 20h5"/></svg><h3>Audit certificate</h3><p>A flattened PDF plus a certificate page with timestamps, IP, and SHA-256 fingerprints.</p></article>
+    <article class="card"><svg width="28" height="28" fill="none" stroke="#0f766e" stroke-width="1.7"><circle cx="14" cy="14" r="9"/><path d="M14 9v6l4 2"/></svg><h3>Reminders that keep it moving</h3><p>Set a nudge and an expiration. Pending signers get a real email, not a log line.</p></article>
+    <article class="card"><svg width="28" height="28" fill="none" stroke="#0f766e" stroke-width="1.7"><rect x="6" y="6" width="12" height="16" rx="2"/><rect x="10" y="4" width="12" height="16" rx="2"/></svg><h3>Reusable templates</h3><p>Build from a blank page or your own file. Roles, not prewritten legal forms.</p></article>
+    <article class="card"><svg width="28" height="28" fill="none" stroke="#0f766e" stroke-width="1.7"><path d="M5 14h18M14 5v18" stroke-linecap="round"/></svg><h3>One free document</h3><p>Verify email and a mobile number. After that, $1 each or $10 a month for 100.</p></article>
+  </div>
+</section>
+<section class="band" id="pricing">
+  <h2>Pricing</h2>
+  <p class="sub">Charged when you send for signature. The free document is limited to one verified phone.</p>
+  <div class="prices">
+    <div class="price"><h3>Free</h3><div class="amt">$0</div><p>1 document after email and phone verification</p><ul><li>Sealed PDF and certificate</li><li>One phone, one free document</li></ul><a class="btn solid" href="/#/signup">Start free</a></div>
+    <div class="price hot"><h3>Pay as you go</h3><div class="amt">$1</div><p>per document, when you click send</p><ul><li>Single document for $1</li><li>10 for $10, or 25 for $25</li><li>Apple Pay and Google Pay at checkout</li></ul><a class="btn ghost" href="/#/pricing">Buy documents</a></div>
+    <div class="price"><h3>Monthly</h3><div class="amt">$10</div><p>100 documents each month</p><ul><li>Then $1 each, or use a pack</li><li>Cancel in the billing portal</li></ul><a class="btn solid" href="/#/signup">Subscribe</a></div>
+  </div>
+</section>
+<footer>Easy Digital Signatures · Layout A is a preview. The current homepage stays live until a design is chosen.</footer>
+<script src="/layouts/preview.js"></script>
+</body>
+</html>

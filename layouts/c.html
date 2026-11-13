@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Easy Digital Signatures — Grove</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,680&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/layouts/preview.css">
+<style>
+  :root{--ink:#14211c;--muted:#5c6b64}
+  *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,sans-serif;color:var(--ink);background:#f3f1ea}
+  a{color:inherit;text-decoration:none}
+  .hero{position:relative;overflow:hidden;color:#f4fff9;background:
+    radial-gradient(ellipse 50% 45% at 0% 0%, rgba(52,211,153,.35), transparent 55%),
+    radial-gradient(ellipse 40% 40% at 100% 20%, rgba(16,185,129,.25), transparent 50%),
+    linear-gradient(160deg,#04241e,#0f3d34 50%,#12352e)}
+  .hero:before{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.18) 1px, transparent 1.2px);background-size:18px 18px;opacity:.35;pointer-events:none}
+  .nav{position:relative;z-index:2;display:flex;gap:18px;align-items:center;padding:18px 7vw}
+  .logo{font-family:Fraunces,Georgia,serif;font-size:20px}
+  .nav .sp{flex:1} .nav a{font-size:14px;color:#d1fae5}
+  .btn{display:inline-flex;border-radius:999px;padding:11px 16px;font-weight:600}
+  .btn.go{background:#ecfdf5;color:#064e3b}
+  .btn.line{border:1px solid rgba(236,253,245,.35);color:#ecfdf5}
+  .wrap{position:relative;z-index:1;display:grid;grid-template-columns:1fr 1.05fr;gap:36px;align-items:center;padding:18px 7vw 80px}
+  h1{font-family:Fraunces,Georgia,serif;font-weight:560;font-size:58px;line-height:1.02;letter-spacing:-.03em;margin:0 0 12px}
+  .lede{font-size:18px;color:#d1fae5;max-width:460px}
+  .frame{background:linear-gradient(#fff,#f8faf8);color:var(--ink);border-radius:22px;padding:18px;box-shadow:0 40px 80px rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.4)}
+  .frame head,.toprow{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#64748b}
+  .shot{display:grid;grid-template-columns:150px 1fr;gap:12px;margin-top:12px}
+  .list{display:flex;flex-direction:column;gap:8px}
+  .list div{background:#fff;border:1px solid #e7e5e4;border-radius:12px;padding:10px 12px;font-size:13px;box-shadow:0 6px 16px rgba(15,23,42,.04)}
+  .pill{float:right;font-size:11px;font-weight:700;color:#047857;background:#d1fae5;border-radius:99px;padding:2px 8px}
+  .pill.wait{color:#9a3412;background:#ffedd5}
+  section{padding:70px 7vw} h2{font-family:Fraunces,Georgia,serif;font-weight:560;font-size:38px;margin:0 0 8px}
+  .sub{color:var(--muted);margin:0 0 24px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .card{background:rgba(255,255,255,.7);border:1px solid rgba(20,33,28,.06);border-radius:18px;padding:18px;box-shadow:0 12px 30px rgba(20,40,30,.05)}
+  .card h3{margin:10px 0 6px} .card p{margin:0;color:var(--muted);font-size:14px;line-height:1.55}
+  .paper{background:#e7efe8}
+  .prices{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .price{background:#fff;border-radius:22px;padding:22px;box-shadow:0 16px 40px rgba(20,40,30,.06)}
+  .price.hot{outline:2px solid #059669}
+  .amt{font-family:Fraunces,Georgia,serif;font-size:44px}
+  .price ul{padding-left:18px;line-height:1.7;font-size:14px;color:#3f4f48}
+  footer{padding:24px 7vw 48px;color:#6b7280;font-size:13px}
+  .sample{font-size:12px;color:#78716c;margin-top:8px}
+  @media(max-width:900px){.wrap,.grid,.prices,.shot{grid-template-columns:1fr} h1{font-size:40px}}
+</style>
+</head>
+<body>
+<header class="hero">
+  <nav class="nav"><a class="logo" href="/layouts/c">Easy Digital Signatures</a><div class="sp"></div><a href="#pricing">Pricing</a><a href="/#/login">Log in</a><a class="btn go" href="/#/signup">Start free</a></nav>
+  <div class="wrap">
+    <div>
+      <p style="letter-spacing:.14em;text-transform:uppercase;font-size:12px;color:#6ee7b7">Friendly, not fluffy</p>
+      <h1>Get the signature. Keep a record you can trust.</h1>
+      <p class="lede">A clean place to send a document, watch who has signed, and download one PDF when it’s done.</p>
+      <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap"><a class="btn go" href="/#/signup">Create your free account</a><a class="btn line" href="#pricing">Pricing</a></div>
+    </div>
+    <div class="frame">
+      <div class="toprow"><strong style="color:#14211c">This month</strong><span>Workspace</span></div>
+      <div class="shot">
+        <svg viewBox="0 0 120 120" width="150" height="150" aria-hidden="true">
+          <circle cx="60" cy="60" r="42" fill="none" stroke="#e7e5e4" stroke-width="12"/>
+          <circle cx="60" cy="60" r="42" fill="none" stroke="#059669" stroke-width="12" stroke-linecap="round" stroke-dasharray="194 264" transform="rotate(-90 60 60)"/>
+          <text x="60" y="56" text-anchor="middle" font-size="20" font-family="Fraunces,Georgia,serif" fill="#14211c">174</text>
+          <text x="60" y="72" text-anchor="middle" font-size="9" font-family="Inter" fill="#78716c">sample</text>
+        </svg>
+        <div class="list">
+          <div>Vendor agreement <span class="pill">Signed</span></div>
+          <div>Offer letter <span class="pill">Signed</span></div>
+          <div>Lease addendum <span class="pill wait">Out for signature</span></div>
+          <div style="color:#444">128 signed · 46 waiting</div>
+        </div>
+      </div>
+      <div class="sample">Sample data for layout preview</div>
+    </div>
+  </div>
+</header>
+<section>
+  <h2>The short list</h2>
+  <p class="sub">Enough to finish a real document. No feature pile.</p>
+  <div class="grid">
+    <article class="card"><svg width="26" height="26" fill="none" stroke="#047857" stroke-width="1.7"><rect x="4" y="5" width="18" height="16" rx="2"/><path d="M8 12h7"/></svg><h3>Drag-and-drop fields</h3><p>Drop a signature or initials on the page. Shift-click places another.</p></article>
+    <article class="card"><svg width="26" height="26" fill="none" stroke="#047857" stroke-width="1.7"><rect x="8" y="3" width="10" height="20" rx="2"/><path d="M11 18h4"/></svg><h3>Guided signing on any device</h3><p>Phone or laptop. The signer follows one field at a time.</p></article>
+    <article class="card"><svg width="26" height="26" fill="none" stroke="#047857" stroke-width="1.7"><path d="M7 4h8l5 5v13H7z"/></svg><h3>Audit certificate</h3><p>The finished PDF is flat, with a certificate page and a public fingerprint.</p></article>
+    <article class="card"><svg width="26" height="26" fill="none" stroke="#047857" stroke-width="1.7"><circle cx="13" cy="13" r="8"/><path d="M13 9v5l3 2"/></svg><h3>Reminders</h3><p>Choose how often to nudge, and when the link should expire.</p></article>
+    <article class="card"><svg width="26" height="26" fill="none" stroke="#047857" stroke-width="1.7"><rect x="5" y="7" width="11" height="14" rx="2"/><rect x="10" y="4" width="11" height="14" rx="2"/></svg><h3>Reusable templates</h3><p>Blank pages or your own PDF. No stock contracts.</p></article>
+    <article class="card"><svg width="26" height="26" fill="none" stroke="#047857" stroke-width="1.7"><path d="M13 4v18M4 13h18"/></svg><h3>A price you can say out loud</h3><p>1 free document, then $1 each, or $10 a month for 100.</p></article>
+  </div>
+</section>
+<section class="paper" id="pricing">
+  <h2>Pricing</h2>
+  <p class="sub">The free document unlocks after email and phone verification. Paying is never blocked by those checks.</p>
+  <div class="prices">
+    <div class="price"><h3>Free</h3><div class="amt">$0</div><ul><li>1 document on the account</li><li>One phone number, ever</li><li>Full certificate</li></ul><a class="btn go" href="/#/signup" style="background:#064e3b;color:#fff">Start free</a></div>
+    <div class="price hot"><h3>Per document</h3><div class="amt">$1</div><ul><li>Charged when you send</li><li>Pack of 10 for $10</li><li>Pack of 25 for $25</li></ul><a class="btn go" href="/#/pricing" style="background:#059669;color:#fff">Buy documents</a></div>
+    <div class="price"><h3>Monthly</h3><div class="amt">$10</div><ul><li>100 documents a month</li><li>$1 each after 100</li><li>Apple Pay and Google Pay</li></ul><a class="btn go" href="/#/signup" style="background:#064e3b;color:#fff">Subscribe</a></div>
+  </div>
+</section>
+<footer>Easy Digital Signatures · Layout C is a preview.</footer>
+<script src="/layouts/preview.js"></script>
+</body>
+</html>
