@@ -37,7 +37,11 @@ The tables are created again on boot when `AUTO_MIGRATE` is not `0`, so the SQL 
 
 Use an address on the verified domain. Confirmation mail, signing invitations, reminders, and the completed PDF all go out through this key.
 
-## 3. Twilio (SMS and line type)
+## 3. Twilio (optional SMS)
+
+Phone verification is optional. If `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_VERIFY_SERVICE_SID` are all unset, production still starts. The phone screen, the “verify your phone” banner, and the settings phone link stay hidden. Signers still get email links, and the free document unlocks after email confirmation. Device, email-alias, IP, and card checks still apply. A phone number is not collected, so the one-number and virtual-number checks are not available until Twilio is turned on.
+
+Set **all three** variables to turn SMS back on. Behavior is then the same as before: the free document requires a verified mobile number, and virtual numbers are blocked when Lookup can see the line type.
 
 1. Create an account at [twilio.com](https://www.twilio.com).
 2. **Verify → Services → Create.** Copy the Service SID. The channel is SMS.
@@ -46,11 +50,11 @@ Use an address on the verified domain. Confirmation mail, signing invitations, r
 
 | Variable | Where |
 |---|---|
-| `TWILIO_ACCOUNT_SID` | Account dashboard |
-| `TWILIO_AUTH_TOKEN` | Account dashboard |
-| `TWILIO_VERIFY_SERVICE_SID` | Verify → Services |
+| `TWILIO_ACCOUNT_SID` | Account dashboard. Optional. |
+| `TWILIO_AUTH_TOKEN` | Account dashboard. Optional. |
+| `TWILIO_VERIFY_SERVICE_SID` | Verify → Services. Optional. |
 
-Trial accounts can only text verified destination numbers. Upgrade the Twilio account before real customers sign up.
+Trial accounts can only text verified destination numbers. Upgrade the Twilio account before real customers use SMS. If only one or two of the three variables are set, SMS stays off.
 
 ## 4. Stripe (one-time packs)
 

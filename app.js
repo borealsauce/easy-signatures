@@ -24,7 +24,7 @@ function closeModal() { $('#modal').classList.add('hidden') }
 $('#modal').onclick = e => { if (e.target.id === 'modal') closeModal() }
 
 let TOKEN = localStorage.getItem('eds_token') || ''
-let S = { docs: [], templates: [], links: [], me: null, usage: null, brand: { company: '', color: '#0f766e' }, folders: ['All', 'Sales', 'HR', 'Real Estate', 'Legal'], prop: null }
+let S = { docs: [], templates: [], links: [], me: null, usage: null, smsEnabled: true, brand: { company: '', color: '#0f766e' }, folders: ['All', 'Sales', 'HR', 'Real Estate', 'Legal'], prop: null }
 let activeId = null
 let saveTimer = null
 
@@ -172,7 +172,7 @@ async function route() {
 }
 window.onhashchange = () => { route().catch(e => toast(e.message || 'Something went wrong')) }
 
-function landing() { V.innerHTML = marketingHtml({ loggedIn: !!S.me }) }
+function landing() { V.innerHTML = marketingHtml({ loggedIn: !!S.me, smsEnabled: S.smsEnabled !== false }) }
 
 function pricing() { location.hash = '#pricing' }
 
@@ -210,12 +210,12 @@ function login() {
     setToken(res.json.token)
     await hydrate()
     if (sessionStorage.getItem('eds_buy')) { await resumeBuy(); return }
-    location.hash = S.usage?.phoneVerified ? '#/app' : '#/phone'
+    location.hash = (!S.smsEnabled || S.usage?.phoneVerified) ? '#/app' : '#/phone'
   }
 }
 
 function signup() {
-  V.innerHTML = `<div class="card auth"><h1>Create your account</h1><p>You’ll confirm your email, then a mobile number, before the free document unlocks.</p>
+  V.innerHTML = `<div class="card auth"><h1>Create your account</h1><p>${S.smsEnabled ? 'You’ll confirm your email, then a mobile number, before the free document unlocks.' : 'You’ll confirm your email before the free document unlocks.'}</p>
   <label class="f">Full name</label><input id="nm" autocomplete="name" style="width:100%">
   <label class="f">Email</label><input id="em" type="email" autocomplete="email" style="width:100%">
   <label class="f">Password</label><input id="pw" type="password" autocomplete="new-password" style="width:100%">
@@ -229,6 +229,7 @@ function signup() {
 }
 
 function phone() {
+  if (!S.smsEnabled) return location.hash = '#/app'
   if (!S.me) return location.hash = '#/login'
   V.innerHTML = `<div class="card auth"><h1>Verify your phone</h1><p>This unlocks your one free document. Paying does not require a phone number.</p>
   <label class="f">Mobile number</label><input id="ph" placeholder="+1 415 555 0100" autocomplete="tel" style="width:100%">
@@ -254,7 +255,7 @@ function phone() {
 function phoneBanner() {
   if (!S.me) return ''
   if (!S.usage?.emailVerified) return `<div class="banner">Confirm your email before you send a document. <button id="resend">Resend link</button></div>`
-  if (!S.usage?.phoneVerified) return `<div class="banner"><b>Verify your phone to unlock 1 free document.</b><br><a href="#/phone">Add a mobile number</a><p class="note">${esc(PHONE_NOTE)}</p></div>`
+  if (S.smsEnabled && !S.usage?.phoneVerified) return `<div class="banner"><b>Verify your phone to unlock 1 free document.</b><br><a href="#/phone">Add a mobile number</a><p class="note">${esc(PHONE_NOTE)}</p></div>`
   if (S.usage && !S.usage.freeAvailable && S.usage.freeReason && S.usage.freeReason !== 'already_used') return `<div class="banner">${esc(S.usage.freeMessage)}</div>`
   return ''
 }
@@ -740,7 +741,8 @@ function proposal() {
   r()
 }
 function settings() {
-  V.innerHTML = `<h1>Settings</h1><div class="grid3" style="grid-template-columns:1fr 1fr"><div class="card"><h3>Account</h3><p>${esc(S.me.name)}<br>${esc(S.me.email)}</p><p>${S.usage?.phoneVerified ? 'Phone verified ' + esc(S.usage.phone) : 'Phone not verified'}</p><p><a href="#/phone">Update phone</a></p><button id="out">Log out</button>
+  const phoneLine = S.smsEnabled ? `<p>${S.usage?.phoneVerified ? 'Phone verified ' + esc(S.usage.phone) : 'Phone not verified'}</p><p><a href="#/phone">Update phone</a></p>` : ''
+  V.innerHTML = `<h1>Settings</h1><div class="grid3" style="grid-template-columns:1fr 1fr"><div class="card"><h3>Account</h3><p>${esc(S.me.name)}<br>${esc(S.me.email)}</p>${phoneLine}<button id="out">Log out</button>
   <h3 style="margin-top:16px">Folders</h3><p>${S.folders.slice(1).map(esc).join(' · ') || 'None yet'}</p><button id="addf">+ Folder</button></div>
   <div class="card"><h3>Branding</h3><label class="f">Company name</label><input id="bc" value="${esc(S.brand.company || '')}" style="width:100%"><label class="f">Accent color</label><input id="bk" type="color" value="${S.brand.color || '#0f766e'}"><p class="note">Used on signer emails and the certificate.</p>
   <div class="card" style="border-top:5px solid ${S.brand.color || '#0f766e'};margin-top:10px"><b>${esc(S.brand.company || 'Your company')}</b> sent you a document</div>
@@ -771,6 +773,10 @@ function adoptPath() {
 async function boot() {
   deviceLocal()
   adoptPath()
+  try {
+    const cfg = await fetch('/api/config').then(r => r.json())
+    S.smsEnabled = cfg.smsEnabled !== false
+  } catch { S.smsEnabled = true }
   const params = new URLSearchParams(location.search)
   if (TOKEN) {
     const me = await api('/api/me')

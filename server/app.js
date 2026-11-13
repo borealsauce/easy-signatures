@@ -96,6 +96,7 @@ export async function createApp(env = process.env) {
       authMode: config.authMode,
       stripeMode: config.stripeMode,
       smsMode: config.smsMode,
+      smsEnabled: config.smsMode !== 'off',
       emailMode: config.emailMode,
       appUrl: config.appUrl,
       publishableKey: config.stripePublishableKey || '',
@@ -132,7 +133,7 @@ export async function createApp(env = process.env) {
     res.type('html').send(`<!doctype html><meta charset="utf-8"><title>Email confirmed</title>
       <body style="font-family:Inter,system-ui,sans-serif;background:#f4f7fb;color:#14213d;display:grid;place-items:center;min-height:100vh">
       <div style="background:#fff;padding:28px;border-radius:16px;max-width:420px;text-align:center">
-      <h1>Email confirmed</h1><p>You can log in and verify a phone number to unlock your free document.</p>
+      <h1>Email confirmed</h1><p>${config.smsMode === 'off' ? 'You can log in and send your free document.' : 'You can log in and verify a phone number to unlock your free document.'}</p>
       <p><a href="/#/login">Continue to log in</a></p></div></body>`)
   })
 
@@ -444,6 +445,7 @@ export async function createApp(env = process.env) {
   return {
     app,
     config,
+    db,
     mailbox,
     async close() { await db.close() }
   }

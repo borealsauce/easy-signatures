@@ -1,7 +1,11 @@
 const sig = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 11.5c2-1 3.4 1.1 5-.2 1.8-1.4 2.7-3.5 6-2.5"/><path d="M3 13.5h6.5"/></svg>`
 
-export function marketingHtml({ loggedIn }) {
+export function marketingHtml({ loggedIn, smsEnabled = true }) {
   const start = loggedIn ? '#/new' : '#/signup'
+  const verifyLine = smsEnabled ? 'Verify your email and phone' : 'Verify your email'
+  const freeLine = smsEnabled
+    ? 'Verify email and a mobile number. After that, $1 each, 10 for $5, or 50 for $10.'
+    : 'Verify your email. After that, $1 each, 10 for $5, or 50 for $10.'
   const account = loggedIn ? '<a href="#/app">Dashboard</a>' : '<a href="#/login">Log in</a>'
   return `<div class="mkt">
   <header class="hero">
@@ -55,7 +59,7 @@ export function marketingHtml({ loggedIn }) {
       <h2>Pricing</h2>
       <p class="lede">Your first document is free. After that, buy a pack and use it whenever you send.</p>
       <div class="price-grid">
-        <article class="plan"><h3>First document</h3><div class="amt">Free</div><p class="desc">Your first document is on the house</p><ul><li>Verify your email and phone</li><li>Sealed PDF and audit certificate</li></ul><a class="btn btn-teal" href="${start}">Actually start free</a></article>
+        <article class="plan"><h3>First document</h3><div class="amt">Free</div><p class="desc">Your first document is on the house</p><ul><li>${verifyLine}</li><li>Sealed PDF and audit certificate</li></ul><a class="btn btn-teal" href="${start}">Actually start free</a></article>
         <article class="plan"><h3>1 document</h3><div class="amt">$1</div><p class="desc">Pay as you go</p><ul><li>Use it whenever you send</li><li>Apple Pay and Google Pay at checkout</li></ul><button class="btn btn-ghost" onclick="buy('doc1')">Buy 1</button></article>
         <article class="plan"><h3>10 documents</h3><div class="amt">$5</div><p class="desc">50¢ per document</p><ul><li>Use them whenever you send</li><li>Apple Pay and Google Pay at checkout</li></ul><button class="btn btn-ghost" onclick="buy('doc10')">Buy 10</button></article>
         <article class="plan featured"><h3>50 documents · Best value</h3><div class="amt">$10</div><p class="desc">20¢ per document</p><ul><li>Use them whenever you send</li><li>Apple Pay and Google Pay at checkout</li></ul><button class="btn" onclick="buy('doc50')">Buy 50</button></article>
@@ -85,7 +89,7 @@ export function marketingHtml({ loggedIn }) {
           <article class="feat"><div class="icon">${sig}</div><h3>Audit certificate</h3><p>A flattened PDF plus a certificate page with timestamps, IP, and SHA-256 fingerprints.</p></article>
           <article class="feat"><div class="icon">${sig}</div><h3>Reminders that keep it moving</h3><p>Set a nudge and an expiration. Pending signers get a real email, not a log line.</p></article>
           <article class="feat"><div class="icon">${sig}</div><h3>Reusable templates</h3><p>Build from a blank page or your own file. Roles, not prewritten legal forms.</p></article>
-          <article class="feat"><div class="icon">${sig}</div><h3>One free document</h3><p>Verify email and a mobile number. After that, $1 each, 10 for $5, or 50 for $10.</p></article>
+          <article class="feat"><div class="icon">${sig}</div><h3>One free document</h3><p>${freeLine}</p></article>
         </div>
       </div>
     </div>
