@@ -40,17 +40,18 @@ export async function assertSignupAllowed(q, { ip, email, limits }) {
   return { ok: true }
 }
 
-export async function evaluateFree(q, profile, { localId, cookieId, ip, limit, allowMissingDevice }) {
+export async function evaluateFree(q, profile, { localId, cookieId, ip, limit, allowMissingDevice, phoneRequired = true }) {
   if (profile.free_claimed_at) return block('already_used')
   if (profile.free_block_reason && FREE_MESSAGES[profile.free_block_reason]) return block(profile.free_block_reason)
   if (!profile.email_verified_at) return block('email')
-  if (!profile.phone_verified_at) return block('phone')
-  if (isVoipLine(profile.phone_line_type)) return block('voip')
+  if (phoneRequired) {
+    if (!profile.phone_verified_at) return block('phone')
+    if (isVoipLine(profile.phone_line_type)) return block('voip')
+    const phone = await q(`select user_id from free_phone_claims where phone_e164=$1`, [profile.phone_e164])
+    if (phone.rows[0] && phone.rows[0].user_id !== profile.id) return block('phone_reuse')
+    if (phone.rows[0] && phone.rows[0].user_id === profile.id) return block('already_used')
+  }
   if (isDisposableEmail(profile.email)) return block('disposable')
-
-  const phone = await q(`select user_id from free_phone_claims where phone_e164=$1`, [profile.phone_e164])
-  if (phone.rows[0] && phone.rows[0].user_id !== profile.id) return block('phone_reuse')
-  if (phone.rows[0] && phone.rows[0].user_id === profile.id) return block('already_used')
 
   const canon = canonicalEmail(profile.email)
   const email = await q(`select user_id from free_email_claims where canonical_email=$1`, [canon])
@@ -96,7 +97,7 @@ export function deviceKeys(localId, cookieId) {
 }
 
 export async function recordFreeClaim(q, profile, { localId, cookieId, ip }) {
-  await q(`insert into free_phone_claims (phone_e164, user_id) values ($1,$2)`, [profile.phone_e164, profile.id])
+  if (profile.phone_e164) await q(`insert into free_phone_claims (phone_e164, user_id) values ($1,$2)`, [profile.phone_e164, profile.id])
   await q(`insert into free_email_claims (canonical_email, user_id) values ($1,$2)`, [canonicalEmail(profile.email), profile.id])
   for (const key of deviceKeys(localId, cookieId)) {
     await q(`insert into free_device_claims (device_key, user_id) values ($1,$2)`, [key, profile.id])

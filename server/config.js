@@ -6,9 +6,6 @@ const REQUIRED_IN_PRODUCTION = [
   'SUPABASE_SERVICE_ROLE_KEY',
   'RESEND_API_KEY',
   'EMAIL_FROM',
-  'TWILIO_ACCOUNT_SID',
-  'TWILIO_AUTH_TOKEN',
-  'TWILIO_VERIFY_SERVICE_SID',
   'STRIPE_SECRET_KEY',
   'STRIPE_WEBHOOK_SECRET',
   'STRIPE_PRICE_1DOC',
@@ -59,7 +56,13 @@ export function loadConfig(env = process.env) {
   }
   config.authMode = config.supabaseUrl && config.supabaseServiceKey ? 'supabase' : 'local'
   config.emailMode = config.resendKey ? 'resend' : 'dev'
-  config.smsMode = config.twilioSid && config.twilioToken && config.twilioVerifySid ? 'twilio' : 'dev'
+  const twilioReady = !!(config.twilioSid && config.twilioToken && config.twilioVerifySid)
+  const twilioParts = [config.twilioSid, config.twilioToken, config.twilioVerifySid].filter(Boolean).length
+  if (prod && twilioParts > 0 && !twilioReady) {
+    console.warn('Twilio SMS stays off until TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_VERIFY_SERVICE_SID are all set.')
+  }
+  // Production without Twilio does not fall back to the dev code logger.
+  config.smsMode = twilioReady ? 'twilio' : (prod ? 'off' : 'dev')
   config.stripeMode = config.stripeKey ? 'stripe' : 'dev'
   config.storageMode = config.supabaseUrl && config.supabaseServiceKey ? 'supabase' : 'disk'
 

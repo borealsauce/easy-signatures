@@ -22,7 +22,7 @@ Local mail and text messages are also at `http://localhost:3000/api/dev/mailbox`
 
 ## Product rules
 
-- 1 free document per account, only after the email is confirmed **and** a mobile number is verified.
+- 1 free document per account after the email is confirmed. When Twilio is configured, a verified mobile number is required too. Without Twilio, phone verification is hidden and email confirmation is enough.
 - One phone number can unlock one free document, ever.
 - The same device (cookie + local storage), a Gmail alias of an address that already used the free document, or a shared IP that has already claimed 3 free documents in 30 days does not get another free document.
 - A card fingerprint already used on another account blocks the free document once Stripe has seen the card. It cannot be known before the first payment.

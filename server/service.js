@@ -329,7 +329,12 @@ export async function userFromAuth(ctx, token) {
   return row.rows[0] || null
 }
 
+function phoneRequired(ctx) {
+  return ctx.config.smsMode !== 'off'
+}
+
 export async function startPhone(ctx, user, phoneRaw) {
+  if (!phoneRequired(ctx)) throw fail(404, 'sms_disabled', 'Phone verification is not enabled.')
   const phone = normalizePhone(phoneRaw)
   if (!phone) throw fail(400, 'phone', 'Enter a mobile number with country code, for example +1 415 555 0100.')
   const recent = await ctx.db.query(
@@ -355,6 +360,7 @@ export async function startPhone(ctx, user, phoneRaw) {
 }
 
 export async function checkPhone(ctx, user, phoneRaw, code) {
+  if (!phoneRequired(ctx)) throw fail(404, 'sms_disabled', 'Phone verification is not enabled.')
   const phone = normalizePhone(phoneRaw)
   if (!phone) throw fail(400, 'phone', 'Enter the same phone number you requested a code for.')
   const result = await ctx.sms.check({ userId: user.id, phone, code, db: ctx.db })
@@ -373,7 +379,8 @@ export async function usageFor(ctx, user, device) {
     localId: device?.localId || '',
     cookieId: device?.cookieId || '',
     ip: device?.ip || '',
-    limit: ctx.config.ipFreeLimit
+    limit: ctx.config.ipFreeLimit,
+    phoneRequired: phoneRequired(ctx)
   })
   return {
     freeAvailable: !!free.ok,
@@ -701,7 +708,8 @@ export async function sendDocument(ctx, user, id, device) {
           cookieId: device.cookieId,
           ip: device.ip,
           limit: ctx.config.ipFreeLimit,
-          allowMissingDevice: !!device.allowMissingDevice
+          allowMissingDevice: !!device.allowMissingDevice,
+          phoneRequired: phoneRequired(ctx)
         })
         if (free.ok) {
           await recordFreeClaim(q, profile, device)

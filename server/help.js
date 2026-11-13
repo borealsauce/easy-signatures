@@ -24,6 +24,9 @@ export async function streamHelp(ctx, rawMessages, res) {
     res.status(400).json({ error: 'invalid', message: 'Type a question first.' })
     return
   }
+  const smsNote = ctx.config.smsMode === 'off'
+    ? '\n\nPhone verification is not offered on this site. The free document unlocks after email confirmation. Do not tell anyone to verify a mobile number.'
+    : ''
   const upstream = await fetch(`${ctx.config.aiBaseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -34,7 +37,7 @@ export async function streamHelp(ctx, rawMessages, res) {
       model: ctx.config.aiModel,
       stream: true,
       temperature: 0.2,
-      messages: [{ role: 'system', content: SYSTEM }, ...messages]
+      messages: [{ role: 'system', content: SYSTEM + smsNote }, ...messages]
     })
   })
   if (!upstream.ok || !upstream.body) {
