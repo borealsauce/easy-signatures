@@ -366,12 +366,6 @@ export async function checkPhone(ctx, user, phoneRaw, code) {
   return { ok: true, phone, voip: isVoipLine(result.lineType) }
 }
 
-function subscriptionActive(ent) {
-  if (!ent || ent.subscription_status !== 'active') return false
-  if (ent.period_end && new Date(ent.period_end).getTime() < Date.now()) return false
-  return num(ent.docs_used_period) < num(ent.monthly_quota || 100)
-}
-
 export async function usageFor(ctx, user, device) {
   const entRow = await ctx.db.query(`select * from entitlements where user_id=$1`, [user.id])
   const ent = entRow.rows[0]
@@ -386,10 +380,6 @@ export async function usageFor(ctx, user, device) {
     freeReason: free.ok ? null : free.error,
     freeMessage: free.ok ? 'Your free document is ready to send.' : free.message,
     credits: num(ent?.credits),
-    subscriptionStatus: ent?.subscription_status || 'none',
-    docsUsedPeriod: num(ent?.docs_used_period),
-    monthlyQuota: num(ent?.monthly_quota || 100),
-    periodEnd: iso(ent?.period_end),
     emailVerified: !!user.email_verified_at,
     phoneVerified: !!user.phone_verified_at,
     phone: user.phone_e164 || '',
@@ -716,14 +706,17 @@ export async function sendDocument(ctx, user, id, device) {
         if (free.ok) {
           await recordFreeClaim(q, profile, device)
           source = 'free'
-        } else if (subscriptionActive(ent)) {
-          await q(`update entitlements set docs_used_period = docs_used_period + 1 where user_id=$1`, [user.id])
-          source = 'subscription'
         } else if (num(ent.credits) > 0) {
           await q(`update entitlements set credits = credits - 1 where user_id=$1 and credits > 0`, [user.id])
           source = 'credit'
         } else {
-          return { ok: false, status: 402, error: 'payment_required', reason: free.error, message: free.message }
+          return {
+            ok: false,
+            status: 402,
+            error: 'payment_required',
+            reason: free.error,
+            message: `${free.message} Buy 1 document for $1, 10 for $5, or 50 for $10.`
+          }
         }
       }
       const issued = []
@@ -1168,8 +1161,7 @@ export async function bulkSend(ctx, user, { templateId, recipients }, device) {
   if (people.length > 100) throw fail(400, 'recipients', 'Send at most 100 at a time.')
   if (people.some(p => !emailOk(p.email))) throw fail(400, 'email', 'Each recipient needs a valid email.')
   const usage = await usageFor(ctx, user, device)
-  let capacity = usage.credits + (usage.freeAvailable ? 1 : 0)
-  if (usage.subscriptionStatus === 'active') capacity += Math.max(0, usage.monthlyQuota - usage.docsUsedPeriod)
+  const capacity = usage.credits + (usage.freeAvailable ? 1 : 0)
   if (capacity < people.length) {
     return {
       ok: false,
@@ -1208,60 +1200,14 @@ export async function grantCheckout(ctx, session) {
     if (session.customer && typeof session.customer === 'string') {
       await q(`update profiles set stripe_customer_id=coalesce(stripe_customer_id,$2) where id=$1`, [userId, session.customer])
     }
-    if (kind === 'single' && meta.documentId) {
-      await q(
-        `update documents set billing_source='single', stripe_session_id=$2, updated_at=now()
-         where id=$1 and owner_id=$3 and billing_source is null`,
-        [meta.documentId, session.id, userId]
-      )
-    } else if (kind === 'pack10' || kind === 'pack25') {
-      await q(`update entitlements set credits = credits + $2 where user_id=$1`, [userId, PACKS[kind].credits])
-    } else if (kind === 'sub') {
-      const end = session.subscription?.current_period_end
-      const start = session.subscription?.current_period_start
-      await q(
-        `update entitlements set subscription_status='active', subscription_id=$2, period_start=$3, period_end=$4, docs_used_period=0, monthly_quota=100 where user_id=$1`,
-        [
-          userId,
-          session.subscription?.id || session.id,
-          start ? new Date(start * 1000).toISOString() : new Date().toISOString(),
-          end ? new Date(end * 1000).toISOString() : new Date(Date.now() + 30 * 864e5).toISOString()
-        ]
-      )
-    }
-    return { ok: true, userId, kind, documentId: meta.documentId || null, fresh: true }
+    await q(`update entitlements set credits = credits + $2 where user_id=$1`, [userId, PACKS[kind].credits])
+    return { ok: true, userId, kind, documentId: meta.documentId || null, fresh: true, credits: PACKS[kind].credits }
   })
-  if (applied.fresh && applied.kind === 'single' && applied.documentId) {
+  if (applied.fresh && applied.documentId) {
     const user = (await ctx.db.query(`select * from profiles where id=$1`, [applied.userId])).rows[0]
     if (user) await sendDocument(ctx, user, applied.documentId, { localId: '', cookieId: '', ip: '', ua: 'stripe-webhook' })
   }
   return applied
-}
-
-export async function syncSubscription(ctx, sub) {
-  const userId = sub.metadata?.userId
-  if (!userId) return
-  const status = sub.status === 'active' || sub.status === 'trialing' ? 'active' : (sub.status || 'canceled')
-  await ctx.db.query(
-    `update entitlements set subscription_status=$2, subscription_id=$3, period_end=$4 where user_id=$1`,
-    [userId, status, sub.id, sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null]
-  )
-}
-
-export async function renewInvoice(ctx, invoice) {
-  const customer = invoice.customer
-  if (!customer) return
-  const user = await ctx.db.query(`select id from profiles where stripe_customer_id=$1`, [customer])
-  if (!user.rows[0]) return
-  const period = invoice.lines?.data?.[0]?.period
-  if (!period?.start) return
-  const start = new Date(period.start * 1000).toISOString()
-  const end = new Date(period.end * 1000).toISOString()
-  await ctx.db.query(
-    `update entitlements set docs_used_period=0, period_start=$2, period_end=$3, subscription_status='active'
-     where user_id=$1 and (period_start is null or period_start <> $2::timestamptz)`,
-    [user.rows[0].id, start, end]
-  )
 }
 
 export async function runMaintenance(ctx) {

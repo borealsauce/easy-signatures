@@ -11,10 +11,10 @@ const REQUIRED_IN_PRODUCTION = [
   'TWILIO_VERIFY_SERVICE_SID',
   'STRIPE_SECRET_KEY',
   'STRIPE_WEBHOOK_SECRET',
-  'STRIPE_PRICE_SINGLE',
-  'STRIPE_PRICE_PACK10',
-  'STRIPE_PRICE_PACK25',
-  'STRIPE_PRICE_MONTHLY',
+  'STRIPE_PRICE_1DOC',
+  'STRIPE_PRICE_10DOC',
+  'STRIPE_PRICE_50DOC',
+  'SUPPORT_TO_EMAIL',
   'CRON_SECRET'
 ]
 
@@ -46,11 +46,14 @@ export function loadConfig(env = process.env) {
     stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET || '',
     stripePublishableKey: env.STRIPE_PUBLISHABLE_KEY || '',
     prices: {
-      single: env.STRIPE_PRICE_SINGLE || '',
-      pack10: env.STRIPE_PRICE_PACK10 || '',
-      pack25: env.STRIPE_PRICE_PACK25 || '',
-      sub: env.STRIPE_PRICE_MONTHLY || ''
+      doc1: env.STRIPE_PRICE_1DOC || '',
+      doc10: env.STRIPE_PRICE_10DOC || '',
+      doc50: env.STRIPE_PRICE_50DOC || ''
     },
+    supportTo: env.SUPPORT_TO_EMAIL || '',
+    aiKey: env.AI_API_KEY || '',
+    aiBaseUrl: (env.AI_BASE_URL || 'https://api.x.ai/v1').replace(/\/$/, ''),
+    aiModel: env.AI_MODEL || 'grok-3',
     cronSecret: env.CRON_SECRET || '',
     vercel: env.VERCEL === '1'
   }
@@ -72,8 +75,7 @@ export function loadConfig(env = process.env) {
 }
 
 export const PACKS = {
-  single: { credits: 1, cents: 100, label: '1 document', mode: 'payment' },
-  pack10: { credits: 10, cents: 1000, label: '10 documents', mode: 'payment' },
-  pack25: { credits: 25, cents: 2500, label: '25 documents', mode: 'payment' },
-  sub: { credits: 0, cents: 1000, label: '100 documents / month', mode: 'subscription' }
+  doc1: { credits: 1, cents: 100, label: '1 document' },
+  doc10: { credits: 10, cents: 500, label: '10 documents' },
+  doc50: { credits: 50, cents: 1000, label: '50 documents' }
 }

@@ -199,7 +199,7 @@ test('end to end: free document, payment, and abuse checks', { timeout: 120000 }
   assert.equal(paywall.json.error, 'payment_required')
   const checkout = await api('/api/billing/checkout', {
     method: 'POST', token: owner.auth, ip: owner.ip, device: owner.device,
-    body: { kind: 'single', documentId: second.id }
+    body: { kind: 'doc1', documentId: second.id }
   })
   assert.equal(checkout.status, 200, checkout.text)
   assert.match(checkout.json.url, /\/dev\/checkout/)
@@ -207,7 +207,8 @@ test('end to end: free document, payment, and abuse checks', { timeout: 120000 }
   assert.equal(paid.status, 200, paid.text)
   const afterPay = await api('/api/state', { token: owner.auth, ip: owner.ip, device: owner.device })
   assert.equal(afterPay.json.documents.find(d => d.id === second.id).status, 'sent')
-  assert.equal(afterPay.json.documents.find(d => d.id === second.id).billingSource, 'single')
+  assert.equal(afterPay.json.documents.find(d => d.id === second.id).billingSource, 'credit')
+  assert.equal(afterPay.json.usage.credits, 0)
 
   const again = await api('/api/billing/dev/complete', { method: 'POST', body: { sessionId: checkout.json.id } })
   assert.equal(again.json.already, true)
@@ -221,7 +222,7 @@ test('end to end: free document, payment, and abuse checks', { timeout: 120000 }
   assert.equal(blockedPhone.json.reason, 'phone_reuse')
   const twinCheckout = await api('/api/billing/checkout', {
     method: 'POST', token: twin.auth, ip: twin.ip, device: twin.device,
-    body: { kind: 'single', documentId: twinDoc.id }
+    body: { kind: 'doc1', documentId: twinDoc.id }
   })
   assert.equal(twinCheckout.status, 200, twinCheckout.text)
 
@@ -278,7 +279,7 @@ test('end to end: free document, payment, and abuse checks', { timeout: 120000 }
   assert.equal(blockedIp.json.reason, 'ip_threshold')
   const ipPay = await api('/api/billing/checkout', {
     method: 'POST', token: fourth.auth, ip: fourth.ip, device: fourth.device,
-    body: { kind: 'pack10' }
+    body: { kind: 'doc10' }
   })
   await api('/api/billing/dev/complete', { method: 'POST', body: { sessionId: ipPay.json.id } })
   const ipSent = await api('/api/documents/' + fourthDoc.id + '/send', { method: 'POST', token: fourth.auth, ip: fourth.ip, device: fourth.device })
@@ -286,10 +287,10 @@ test('end to end: free document, payment, and abuse checks', { timeout: 120000 }
   assert.equal(ipSent.json.billingSource, 'credit')
 
   const cardA = await verifiedUser({ email: 'carda@example.com', ip: '203.0.113.60', device: 'device-card-a-aaa', phone: '+15555553001' })
-  const packA = await api('/api/billing/checkout', { method: 'POST', token: cardA.auth, ip: cardA.ip, device: cardA.device, body: { kind: 'pack10' } })
+  const packA = await api('/api/billing/checkout', { method: 'POST', token: cardA.auth, ip: cardA.ip, device: cardA.device, body: { kind: 'doc10' } })
   await api('/api/billing/dev/complete', { method: 'POST', body: { sessionId: packA.json.id, cardFingerprint: 'card_fp_shared' } })
   const cardB = await verifiedUser({ email: 'cardb@example.com', ip: '203.0.113.61', device: 'device-card-b-aaa', phone: '+15555553002' })
-  const packB = await api('/api/billing/checkout', { method: 'POST', token: cardB.auth, ip: cardB.ip, device: cardB.device, body: { kind: 'pack10' } })
+  const packB = await api('/api/billing/checkout', { method: 'POST', token: cardB.auth, ip: cardB.ip, device: cardB.device, body: { kind: 'doc10' } })
   await api('/api/billing/dev/complete', { method: 'POST', body: { sessionId: packB.json.id, cardFingerprint: 'card_fp_shared' } })
   const cardDoc = await draftFor(cardB, 'Jules')
   const cardSent = await api('/api/documents/' + cardDoc.id + '/send', { method: 'POST', token: cardB.auth, ip: cardB.ip, device: cardB.device })
@@ -316,13 +317,18 @@ test('end to end: free document, payment, and abuse checks', { timeout: 120000 }
   }
   assert.equal(last, 429)
 
-  const subUser = await verifiedUser({ email: 'sub@example.com', ip: '203.0.113.90', device: 'device-sub-aaaaaa', phone: '+15555554001' })
-  const sub = await api('/api/billing/checkout', { method: 'POST', token: subUser.auth, ip: subUser.ip, device: subUser.device, body: { kind: 'sub' } })
-  await api('/api/billing/dev/complete', { method: 'POST', body: { sessionId: sub.json.id } })
-  const subDoc = await draftFor(subUser, 'Kai')
-  const subSent = await api('/api/documents/' + subDoc.id + '/send', { method: 'POST', token: subUser.auth, ip: subUser.ip, device: subUser.device })
-  assert.equal(subSent.json.billingSource, 'free')
-  const subUsage = await api('/api/me', { token: subUser.auth, ip: subUser.ip, device: subUser.device })
-  assert.equal(subUsage.json.usage.subscriptionStatus, 'active')
-  assert.equal(subUsage.json.usage.freeAvailable, false)
+  const packUser = await verifiedUser({ email: 'packs@example.com', ip: '203.0.113.90', device: 'device-pack-aaaaaa', phone: '+15555554001' })
+  const pack = await api('/api/billing/checkout', { method: 'POST', token: packUser.auth, ip: packUser.ip, device: packUser.device, body: { kind: 'doc10' } })
+  await api('/api/billing/dev/complete', { method: 'POST', body: { sessionId: pack.json.id } })
+  const before = await api('/api/me', { token: packUser.auth, ip: packUser.ip, device: packUser.device })
+  assert.equal(before.json.usage.credits, 10)
+  const packDoc = await draftFor(packUser, 'Kai')
+  const packSent = await api('/api/documents/' + packDoc.id + '/send', { method: 'POST', token: packUser.auth, ip: packUser.ip, device: packUser.device })
+  assert.equal(packSent.json.billingSource, 'free')
+  const againDoc = await draftFor(packUser, 'Lane')
+  const creditSent = await api('/api/documents/' + againDoc.id + '/send', { method: 'POST', token: packUser.auth, ip: packUser.ip, device: packUser.device })
+  assert.equal(creditSent.json.billingSource, 'credit')
+  const after = await api('/api/me', { token: packUser.auth, ip: packUser.ip, device: packUser.device })
+  assert.equal(after.json.usage.credits, 9)
+  assert.equal(after.json.usage.freeAvailable, false)
 })

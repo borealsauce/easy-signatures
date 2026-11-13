@@ -20,9 +20,9 @@ function remember(config, mailbox, entry) {
 export function createEmail(config, mailbox) {
   return {
     mode: config.emailMode,
-    async send({ to, subject, html, text, attachments }) {
+    async send({ to, subject, html, text, attachments, replyTo }) {
       if (!to) return
-      remember(config, mailbox, { type: 'email', to, subject, text: text || html?.replace(/<[^>]+>/g, ' ').slice(0, 500), url: (html || '').match(/https?:\/\/[^\s"<]+/)?.[0] || '' })
+      remember(config, mailbox, { type: 'email', to, subject, replyTo: replyTo || '', text: text || html?.replace(/<[^>]+>/g, ' ').slice(0, 500), url: (html || '').match(/https?:\/\/[^\s"<]+/)?.[0] || '' })
       if (config.emailMode !== 'resend') return
       const body = {
         from: config.emailFrom,
@@ -31,6 +31,7 @@ export function createEmail(config, mailbox) {
         html,
         text
       }
+      if (replyTo) body.reply_to = replyTo
       if (attachments?.length) body.attachments = attachments
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -134,7 +135,7 @@ export function createPayments(config) {
         const session = {
           id,
           paid: false,
-          mode: pack.mode,
+          mode: 'payment',
           amount_cents: pack.cents,
           customer_email: email,
           metadata: { userId, kind, documentId: documentId || '', credits: String(pack.credits) },
@@ -187,16 +188,15 @@ export function createPayments(config) {
       // for new accounts) and the buyer's device supports them. Hosted Checkout
       // runs on Stripe's domain, which is already verified for Apple Pay.
       const session = await s.checkout.sessions.create({
-        mode: pack.mode,
+        mode: 'payment',
         customer,
         client_reference_id: userId,
         line_items: [{ price, quantity: 1 }],
         success_url: `${config.appUrl}/?checkout=success&session_id={CHECKOUT_SESSION_ID}#/app`,
-        cancel_url: `${config.appUrl}/?checkout=cancel#/pricing`,
+        cancel_url: `${config.appUrl}/?checkout=cancel#/`,
         metadata: { userId, kind, documentId: documentId || '', credits: String(pack.credits) },
         payment_method_types: ['card'],
-        allow_promotion_codes: false,
-        ...(pack.mode === 'subscription' ? { subscription_data: { metadata: { userId, kind } } } : {})
+        allow_promotion_codes: false
       })
       return { id: session.id, url: session.url, customerId: customer }
     },

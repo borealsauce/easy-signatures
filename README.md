@@ -2,7 +2,7 @@
 
 A paid e-signature product. Senders create an account, place fields on a PDF, and email each signer a unique link. Signers finish in the browser without an account. The completed file is a flattened PDF with an audit certificate and a SHA-256 fingerprint.
 
-The current marketing homepage is unchanged. Three alternate front pages live at `/layouts/a`, `/layouts/b`, and `/layouts/c` until one is chosen.
+The homepage is the navy-and-teal page at `/`. Older layout experiments remain at `/layouts`.
 
 ## Stack
 
@@ -27,7 +27,7 @@ Local mail and text messages are also at `http://localhost:3000/api/dev/mailbox`
 - The same device (cookie + local storage), a Gmail alias of an address that already used the free document, or a shared IP that has already claimed 3 free documents in 30 days does not get another free document.
 - A card fingerprint already used on another account blocks the free document once Stripe has seen the card. It cannot be known before the first payment.
 - None of those checks block a paid send.
-- After the free document: **$1** when you click send, packs of **10 for $10** and **25 for $25**, or **$10/month for 100 documents**.
+- After the free document, each send spends one credit: **$1** for 1, **$5** for 10, or **$10** for 50. There is no subscription.
 - Stripe webhooks are the source of truth. The browser cannot grant itself a credit.
 
 See [DEPLOY.md](DEPLOY.md) for the accounts to create and [MANUAL_TEST.md](MANUAL_TEST.md) for a click-through. [LAYOUTS.md](LAYOUTS.md) explains the front-page previews.

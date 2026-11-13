@@ -52,40 +52,51 @@ Use an address on the verified domain. Confirmation mail, signing invitations, r
 
 Trial accounts can only text verified destination numbers. Upgrade the Twilio account before real customers sign up.
 
-## 4. Stripe (test mode)
+## 4. Stripe (one-time packs)
 
-Use **test mode** keys (`sk_test_...`, `pk_test_...`) until you deliberately switch. Apple Pay and Google Pay appear on Stripe’s hosted Checkout page when those wallets are enabled on the account. New Stripe accounts enable them by default. Hosted Checkout runs on Stripe’s domain, which is already registered for Apple Pay, so you do not host an Apple domain file for this integration.
+The first document is free and never creates a Stripe charge. After that, customers buy credits. Each send spends one credit. There is no subscription.
+
+Apple Pay and Google Pay appear on Stripe’s hosted Checkout page when those wallets are enabled. Hosted Checkout runs on Stripe’s domain, which is already registered for Apple Pay.
 
 1. **Settings → Payment methods.** Confirm **Cards**, **Apple Pay**, and **Google Pay** are on.
-2. **Settings → Billing → Customer portal.** Turn the portal on and allow cancellation. The in-app “Manage subscription” button opens it.
-3. Create four Prices (Product catalog → Add product). The amount is what the app charges; the price id is what the server looks up.
+2. **Settings → Billing → Customer portal.** Turn the portal on so Settings → Receipts can open past payments. Cancellation is optional because there is no subscription.
+3. The live prices already exist. Put these ids in the environment (they are price ids, not secret keys):
 
-| What the customer buys | Amount | Env var |
-|---|---|---|
-| 1 document, one time | $1 | `STRIPE_PRICE_SINGLE` |
-| 10 documents, one time | $10 | `STRIPE_PRICE_PACK10` |
-| 25 documents, one time | $25 | `STRIPE_PRICE_PACK25` |
-| Monthly subscription, 100 documents | $10 / month, recurring | `STRIPE_PRICE_MONTHLY` |
+| What the customer buys | Amount | Credits | Env var | Live price id |
+|---|---|---|---|---|
+| 1 document | $1 | 1 | `STRIPE_PRICE_1DOC` | `price_1UbOacBLGpe8m3IgCuYdvFMy` |
+| 10 documents | $5 | 10 | `STRIPE_PRICE_10DOC` | `price_1UbOZxBLGpe8m3IgmA5H99rB` |
+| 50 documents | $10 | 50 | `STRIPE_PRICE_50DOC` | `price_1UbOZzBLGpe8m3IghWSiKz9C` |
 
 4. **Developers → Webhooks → Add endpoint.**
 
 - URL: `https://easydigitalsignatures.com/api/billing/webhook`
-- Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`
+- Event: `checkout.session.completed` (this is the only event the app uses)
 - Copy the signing secret (`whsec_...`).
 
 | Variable | Where |
 |---|---|
-| `STRIPE_SECRET_KEY` | Developers → API keys → Secret key |
+| `STRIPE_SECRET_KEY` | Developers → API keys → Secret key. Use `sk_test_...` until you are ready to charge the live prices. |
 | `STRIPE_PUBLISHABLE_KEY` | Developers → API keys → Publishable key |
 | `STRIPE_WEBHOOK_SECRET` | The webhook signing secret |
-| `STRIPE_PRICE_SINGLE` | Price id `price_...` |
-| `STRIPE_PRICE_PACK10` | Price id |
-| `STRIPE_PRICE_PACK25` | Price id |
-| `STRIPE_PRICE_MONTHLY` | Price id |
+| `STRIPE_PRICE_1DOC` | `price_1UbOacBLGpe8m3IgCuYdvFMy` |
+| `STRIPE_PRICE_10DOC` | `price_1UbOZxBLGpe8m3IgmA5H99rB` |
+| `STRIPE_PRICE_50DOC` | `price_1UbOZzBLGpe8m3IghWSiKz9C` |
 
-Test card: `4242 4242 4242 4242`, any future expiry, any CVC. Use a browser that offers Apple Pay or Google Pay to see the wallet buttons; Stripe only shows a wallet the device can actually use.
+Test card, while the secret key is a test key: `4242 4242 4242 4242`. Wallet buttons show only on a device that can use Apple Pay or Google Pay.
 
-Credits are granted only after Stripe tells the server the session is paid (webhook, or the server retrieving the session). The return URL cannot grant a credit by itself.
+Credits are added only after Stripe tells the server the session is paid. The return URL cannot grant a credit by itself.
+
+## 4b. Contact form and help chat
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `SUPPORT_TO_EMAIL` | Yes in production | Inbox that receives contact-form messages. Reply-To is the customer’s address. |
+| `AI_API_KEY` | No | Turns on the help chat. If empty, the widget is hidden. |
+| `AI_BASE_URL` | No | OpenAI-compatible base URL. Default `https://api.x.ai/v1`. |
+| `AI_MODEL` | No | Chat model. Default `grok-3`. |
+
+The chat answers from `content/help-faq.md` only. It does not see customer documents.
 
 ## 5. The rest of the environment
 
@@ -95,6 +106,10 @@ Credits are granted only after Stripe tells the server the session is paid (webh
 | `APP_URL` | `https://easydigitalsignatures.com` (no trailing slash) |
 | `JWT_SECRET` | A long random string. `openssl rand -base64 48` |
 | `CRON_SECRET` | Another long random string. Vercel Cron sends it as `Authorization: Bearer ...` |
+| `SUPPORT_TO_EMAIL` | Inbox for the contact form, for example `help@easydigitalsignatures.com` |
+| `AI_API_KEY` | Optional. Help chat stays hidden without it. |
+| `AI_BASE_URL` | Optional. Default `https://api.x.ai/v1`. |
+| `AI_MODEL` | Optional. Default `grok-3`. |
 | `TRUST_PROXY` | `1` on Vercel |
 | `IP_FREE_LIMIT` | Optional. Default `3` free documents per IP per 30 days. Offices share an IP, so this is a threshold, not a hard block, and it never blocks a paid send. |
 | `SIGNUP_PER_HOUR` | Optional. Default `5`. |

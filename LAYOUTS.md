@@ -9,6 +9,6 @@ The live homepage is still the original page at `/`. Nothing in the app shell im
 | C Grove | `/layouts/c` | Forest hero, warm paper sections, product frame. PandaDoc / SignWell. |
 | Index | `/layouts` | Links to all three plus the current homepage. |
 
-Each file is self-contained (`layouts/a.html`, `b.html`, `c.html`) plus a shared preview bar in `layouts/preview.css` and `layouts/preview.js`. All three use a tinted page, a dark or deep hero, a sample “Signed vs out for signature” chart marked as sample data, line icons, and the real prices: 1 free document, $1 per document, $10/month for 100.
+The live homepage now follows the navy-and-teal mockup. These files are the earlier options and are not the prices in the app.
 
-When a direction is chosen, keep that file as the reference and restyle the homepage in `app.js` (`landing()`). Leave the editor, signer, and API alone.
+When you change the homepage again, edit `marketing.js` and `home.css`. Leave the editor, signer, and API alone.

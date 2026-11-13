@@ -1,5 +1,7 @@
 import { initialsOf } from '/shared/names.js'
 import { calc, visible, validate } from '/shared/fields.js'
+import { marketingHtml } from '/marketing.js'
+import { mountHelp } from '/help.js'
 
 const $ = (s, r = document) => r.querySelector(s)
 const $$ = (s, r = document) => [...r.querySelectorAll(s)]
@@ -135,56 +137,64 @@ function meter() {
   const u = S.usage
   if (!u) return ''
   const bits = []
-  if (u.subscriptionStatus === 'active') bits.push(`${u.docsUsedPeriod}/${u.monthlyQuota} this month`)
   if (u.credits) bits.push(`${u.credits} credit${u.credits === 1 ? '' : 's'}`)
   if (u.freeAvailable) bits.push('1 free document')
-  if (!bits.length) bits.push('No free document left')
+  if (!bits.length) bits.push('Buy documents')
   return `<a class="meter" href="#/pricing">${bits.join(' · ')}</a>`
 }
 function nav() {
   const h = location.hash || '#/'
   if (h.startsWith('#/sign/')) { $('#nav').innerHTML = '<span class="sp"></span><span style="font-size:13px;color:var(--mut)">Secure signing link</span>'; document.body.classList.remove('navopen'); return }
   if (!S.me) {
-    $('#nav').innerHTML = `<a href="#/pricing" class="${h.startsWith('#/pricing') ? 'on' : ''}">Pricing</a><span class="sp"></span><a href="#/login">Log in</a><a href="#/signup" class="btn p" style="color:#fff">Sign up</a>`
+    $('#nav').innerHTML = `<a href="#/pricing" class="${h.startsWith('#/pricing') ? 'on' : ''}">Pricing</a><a href="#/contact">Need help?</a><span class="sp"></span><a href="#/login">Log in</a><a href="#/signup" class="btn p" style="color:#fff">Sign up</a>`
   } else {
-    $('#nav').innerHTML = NAV.map(([u, l]) => `<a href="${u}" class="${h.startsWith(u) ? 'on' : ''}">${l}</a>`).join('') + `<span class="sp"></span>${meter()}<a href="#/new" class="btn p" style="color:#fff">+ New document</a><a href="#/settings">${esc(S.me.name.split(' ')[0])}</a>`
+    $('#nav').innerHTML = NAV.map(([u, l]) => `<a href="${u}" class="${h.startsWith(u) ? 'on' : ''}">${l}</a>`).join('') + `<a href="#/contact">Need help?</a><span class="sp"></span>${meter()}<a href="#/new" class="btn p" style="color:#fff">+ New document</a><a href="#/settings">${esc(S.me.name.split(' ')[0])}</a>`
   }
   document.body.classList.remove('navopen')
 }
 async function route() {
-  const [, r, a] = (location.hash || '#/').split('/')
-  const pub = ['', 'pricing', 'login', 'signup', 'sign', 'form', 'phone']
+  const hash = location.hash || '#/'
+  const pricingAnchor = hash === '#pricing'
+  const [, r, a] = (pricingAnchor ? '#/' : hash).split('/')
+  const pub = ['', 'pricing', 'login', 'signup', 'sign', 'form', 'phone', 'contact']
+  document.body.classList.toggle('marketing', (r || '') === '')
   if (S.me) { await flushNow(); activeId = null; if (r !== 'sign') await hydrate() }
   nav()
   window.scrollTo(0, 0)
   if (!S.me && !pub.includes(r || '')) { location.hash = '#/login'; return }
   const R = {
-    '': landing, pricing, login, signup, phone, app: dashboard, new: newDoc, edit: () => editor(a),
+    '': landing, pricing, login, signup, phone, contact, app: dashboard, new: newDoc, edit: () => editor(a),
     sign: () => signToken(a), cert: () => cert(a), templates, links, form: () => publicForm(a), bulk, proposal, settings
   }
   await (R[r] || landing)()
+  if (pricingAnchor) document.getElementById('pricing')?.scrollIntoView()
   afterRender()
 }
 window.onhashchange = () => { route().catch(e => toast(e.message || 'Something went wrong')) }
 
-function landing() {
-  const cta = S.me ? '#/new' : '#/signup'
-  V.innerHTML = `<section class="hero"><div><h1>Get it signed.<br><em>Without the paper chase.</em></h1><p>Easy Digital Signatures turns any PDF into a guided signing experience. Drop in fields, route to signers in order or all at once, and get a sealed PDF with a full audit trail.</p><div class="row"><a class="btn p lg" href="${cta}">${S.me ? 'New document' : 'Create your free account'}</a><a class="btn lg" href="#/pricing">See pricing</a></div><p style="font-size:13px">1 free document after email and phone verification · then $1 each, or $10/month for 100</p></div>
-<div class="mock"><b>Your document</b><div class="ln"></div><div class="ln" style="width:80%"></div><div class="ln"></div><div class="ln" style="width:60%"></div><div class="ln"></div><div class="sg">Alex Rivera</div><div class="row" style="margin-top:12px"><span class="pill s-completed">✓ Completed</span><span class="pill s-viewed">2 of 2 signed</span></div></div></section>
-<h2 class="sec">Everything a deal needs, start to finish</h2><div class="grid3">${[['🧩', 'Drag-and-drop fields', 'Signature, initials, date, text, checkbox, dropdown, formulas, payments and attachments.'], ['🔀', 'Smart routing', 'Sequential or parallel signing, plus approver and CC roles.'], ['🧭', 'Guided signing', 'Signers jump field to field and can draw, type or upload a signature on any device.'], ['🔗', 'Reusable links', 'Publish a template as a public link and every visit becomes its own signed copy.'], ['📨', 'Bulk send', 'Send one template to many recipients from a pasted list.'], ['🧾', 'Proposals & quotes', 'Build pricing tables with totals, then send them for signature.'], ['🔍', 'Audit certificate', 'Timeline, SHA-256 fingerprints and signer details are attached to every completed PDF.'], ['🪪', 'Access code', 'Optionally email each signer a code they must enter before finishing.'], ['⏰', 'Reminders & expiry', 'Automatic nudges and deadlines keep documents moving.']].map(([i, t, p]) => `<div class="card"><div class="ic">${i}</div><h3>${t}</h3><p>${p}</p></div>`).join('')}</div>
-<h2 class="sec">How it works</h2><div class="grid4">${['Upload a PDF or build your own template', 'Place fields and assign each signer a color', 'Send in order or all at once', 'Everyone gets the sealed PDF and certificate'].map((t, i) => `<div class="card"><div class="kpi"><div class="v">${i + 1}</div></div><p>${t}</p></div>`).join('')}</div>
-<footer>Easy Digital Signatures · <a href="/layouts">Layout previews</a> · © 2026</footer>`
-}
+function landing() { V.innerHTML = marketingHtml({ loggedIn: !!S.me }) }
 
-function pricing() {
-  const go = (kind, id) => S.me ? `buy('${kind}'${id ? `,'${id}'` : ''})` : "location.hash='#/signup'"
-  V.innerHTML = `<h2 class="sec">Simple pricing</h2><p style="text-align:center;color:var(--mut);margin-top:-12px">One free document after you verify your email and phone. Then pay only when you send, or subscribe.</p>
-<div class="grid3" style="margin-top:22px">
-  <div class="card price"><h3>Free</h3><div class="amt">$0</div><p>to try it</p><ul><li>1 document, ever, per verified phone</li><li>Email and mobile verification</li><li>Audit certificate and sealed PDF</li></ul><a class="btn" href="${S.me ? '#/new' : '#/signup'}">Create account</a></div>
-  <div class="card price hot"><h3>Pay as you go</h3><div class="amt">$1</div><p>per document, charged when you send</p><ul><li>$1 for a single document</li><li>10 documents for $10</li><li>25 documents for $25</li><li>Packs lower the card-network fixed fee</li></ul><button class="p" onclick="${go('pack10')}">Buy 10 for $10</button></div>
-  <div class="card price"><h3>Monthly</h3><div class="amt">$10</div><p>per month</p><ul><li>100 documents each month</li><li>After 100, $1 each or use credits</li><li>Cancel anytime in the billing portal</li></ul><button onclick="${go('sub')}">Subscribe</button></div>
-</div>
-${S.usage ? `<p style="text-align:center;margin-top:18px">${meter()}</p>` : ''}`
+function pricing() { location.hash = '#pricing' }
+
+function contact() {
+  const pre = sessionStorage.getItem('contact_prefill') || ''
+  sessionStorage.removeItem('contact_prefill')
+  V.innerHTML = `<div class="card contact-page"><h1>Contact</h1><p>Need help with a document or your account? We reply by email.</p>
+  <form id="cf">
+    <label class="f">Name</label><input name="name" required style="width:100%" value="${esc(S.me?.name || '')}">
+    <label class="f">Email</label><input name="email" type="email" required style="width:100%" value="${esc(S.me?.email || '')}">
+    <label class="f">Message</label><textarea name="message" required rows="5" style="width:100%">${esc(pre)}</textarea>
+    <label class="f">Document ID (optional)</label><input name="documentId" style="width:100%" placeholder="From the certificate, if you have one">
+    <label class="hp">Company website<input name="company_url" tabindex="-1" autocomplete="off"></label>
+    <br><button class="p" type="submit">Send message</button>
+  </form></div>`
+  $('#cf').onsubmit = async (e) => {
+    e.preventDefault()
+    const data = Object.fromEntries(new FormData(e.target))
+    const res = await api('/api/contact', { method: 'POST', body: data })
+    if (!res.ok) return toast(res.json?.message || 'Could not send')
+    V.innerHTML = `<div class="card contact-page"><h1>Message sent</h1><p>We emailed a confirmation to ${esc(data.email)}. You’ll hear back at that address.</p><a href="#/">Back home</a></div>`
+  }
 }
 
 function login() {
@@ -199,6 +209,7 @@ function login() {
     if (!res.ok) return toast(res.json?.message || 'Could not log in')
     setToken(res.json.token)
     await hydrate()
+    if (sessionStorage.getItem('eds_buy')) { await resumeBuy(); return }
     location.hash = S.usage?.phoneVerified ? '#/app' : '#/phone'
   }
 }
@@ -503,14 +514,26 @@ async function editor(id) {
 }
 
 function payModal(id, info) {
-  modal(`<h3>This send needs a payment</h3><p>${esc(info?.message || 'Choose how to pay.')}</p>
-  <div class="row" style="margin-top:10px">${id ? `<button class="p" onclick="buy('single','${id}')">Pay $1 for this document</button>` : ''}<button onclick="buy('pack10')">10 for $10</button><button onclick="buy('pack25')">25 for $25</button><button onclick="buy('sub')">$10/month · 100</button></div>
+  const extra = id ? `,'${id}'` : ''
+  modal(`<h3>This send needs a credit</h3><p>${esc(info?.message || 'Buy a pack, then send.')}</p>
+  <div class="row" style="margin-top:10px"><button class="p" onclick="buy('doc1'${extra})">1 document · $1</button><button onclick="buy('doc10'${extra})">10 documents · $5</button><button onclick="buy('doc50'${extra})">50 documents · $10</button></div>
   <p class="note">Apple Pay and Google Pay show on the secure checkout page when your device supports them. The free-document checks never block a paid send.</p>`)
 }
 async function buy(kind, documentId) {
-  const res = await api('/api/billing/checkout', { method: 'POST', body: { kind, documentId } })
+  if (!TOKEN) {
+    sessionStorage.setItem('eds_buy', JSON.stringify({ kind, documentId: documentId || '' }))
+    location.hash = '#/login'
+    return
+  }
+  const res = await api('/api/billing/checkout', { method: 'POST', body: { kind, documentId: documentId || undefined } })
   if (res.json?.url) location.href = res.json.url
   else toast(res.json?.message || 'Checkout could not start')
+}
+async function resumeBuy() {
+  const raw = sessionStorage.getItem('eds_buy')
+  if (!raw) return
+  sessionStorage.removeItem('eds_buy')
+  try { const { kind, documentId } = JSON.parse(raw); await buy(kind, documentId) } catch { toast('Checkout could not start') }
 }
 
 async function signToken(token) {
@@ -721,18 +744,33 @@ function settings() {
   <h3 style="margin-top:16px">Folders</h3><p>${S.folders.slice(1).map(esc).join(' · ') || 'None yet'}</p><button id="addf">+ Folder</button></div>
   <div class="card"><h3>Branding</h3><label class="f">Company name</label><input id="bc" value="${esc(S.brand.company || '')}" style="width:100%"><label class="f">Accent color</label><input id="bk" type="color" value="${S.brand.color || '#0f766e'}"><p class="note">Used on signer emails and the certificate.</p>
   <div class="card" style="border-top:5px solid ${S.brand.color || '#0f766e'};margin-top:10px"><b>${esc(S.brand.company || 'Your company')}</b> sent you a document</div>
-  <p style="margin-top:16px"><button id="portal">Manage subscription</button></p></div></div>`
+  <p style="margin-top:16px"><button id="portal">Receipts</button></p><p class="note">${esc(meterText())}</p></div></div>`
   $('#out').onclick = () => { setToken(''); S.me = null; location.hash = '#/' }
   $('#addf').onclick = async () => { const n = prompt('Folder name'); if (!n) return; S.folders.push(n); await api('/api/settings', { method: 'PUT', body: { brand: S.brand, folders: S.folders } }); route() }
   const saveBrand = async () => { S.brand = { company: $('#bc').value, color: $('#bk').value }; await api('/api/settings', { method: 'PUT', body: { brand: S.brand, folders: S.folders } }); route() }
   $('#bc').onchange = saveBrand; $('#bk').onchange = saveBrand
-  $('#portal').onclick = async () => { const r = await api('/api/billing/portal', { method: 'POST' }); if (r.json?.url) location.href = r.json.url; else toast(r.json?.message || 'Subscribe first, then you can manage billing.') }
+  $('#portal').onclick = async () => { const r = await api('/api/billing/portal', { method: 'POST' }); if (r.json?.url) location.href = r.json.url; else toast(r.json?.message || 'Receipts appear after your first purchase.') }
 }
 
 Object.assign(window, { closeModal, uploadFiles, fromTemplate, tplBuilder, saveTpl, editTpl, delTpl, remind, timeline, downloadDoc, mkLink, buy, addSigner: () => {} })
 
+function meterText() {
+  const u = S.usage
+  if (!u) return ''
+  if (u.freeAvailable && u.credits) return `1 free document, then ${u.credits} credits`
+  if (u.freeAvailable) return '1 free document ready'
+  return `${u.credits || 0} document credits`
+}
+function adoptPath() {
+  const map = { '/contact': '#/contact', '/signup': '#/signup', '/login': '#/login', '/pricing': '#pricing', '/app': '#/app' }
+  const params = new URLSearchParams(location.search)
+  if (params.get('message')) sessionStorage.setItem('contact_prefill', params.get('message'))
+  const next = map[location.pathname]
+  if (next) history.replaceState(null, '', '/' + next)
+}
 async function boot() {
   deviceLocal()
+  adoptPath()
   const params = new URLSearchParams(location.search)
   if (TOKEN) {
     const me = await api('/api/me')
@@ -746,4 +784,4 @@ async function boot() {
   if (params.get('checkout') === 'cancel') { toast('Checkout canceled'); history.replaceState({}, '', location.pathname) }
   await route()
 }
-Promise.all(['Caveat', 'Dancing Script', 'Great Vibes'].map(f => document.fonts.load(`64px '${f}'`))).catch(() => {}).finally(boot)
+Promise.all(['Caveat', 'Dancing Script', 'Great Vibes'].map(f => document.fonts.load(`64px '${f}'`))).catch(() => {}).finally(() => { mountHelp(); boot() })

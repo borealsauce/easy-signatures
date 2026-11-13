@@ -25,8 +25,8 @@ Open http://localhost:3000. Leave the terminal visible. Every email and SMS code
 ## Second document needs payment
 
 1. Back in the sender account, create and send a second document.
-2. The app must refuse and offer **$1 for this document**, **10 for $10**, **25 for $25**, and **$10/month**.
-3. Choose $1. The local checkout page is labeled test mode and does not charge a card. Complete it.
+2. The app must refuse and offer **1 document for $1**, **10 for $5**, and **50 for $10**.
+3. Choose $1. The local checkout page is labeled test mode and does not charge a card. Complete it. The document is sent and one credit is spent.
 4. The document status becomes **sent**, and the signer email appears in the terminal. Sending again does not charge a second time.
 
 ## Abuse checks block only the free document

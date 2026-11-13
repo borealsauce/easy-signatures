@@ -183,3 +183,10 @@ create table if not exists stripe_events (
   id text primary key,
   created_at timestamptz not null default now()
 );
+
+create table if not exists rate_limits (
+  id uuid primary key default gen_random_uuid(),
+  bucket text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists rate_limits_bucket_idx on rate_limits (bucket, created_at);

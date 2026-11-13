@@ -5,16 +5,17 @@ import { fileURLToPath } from 'node:url'
 import { loadConfig, PACKS } from './config.js'
 import { openDatabase } from './db.js'
 import { createStorage } from './storage.js'
-import { createEmail, createPayments, createSms } from './providers.js'
+import { createEmail, createPayments, createSms, htmlEmail } from './providers.js'
 import {
   bulkSend, checkPhone, commentAs, copyAsTemplate, createBlank, createLink, createUpload, instantiateTemplate,
   declineSign, deleteDocument, deviceFrom, fail, finishSign, grantCheckout, login,
-  ownerFile, publicStart, remind, renewInvoice, resendVerification, runMaintenance,
+  ownerFile, publicStart, remind, resendVerification, runMaintenance,
   saveDraft, saveSettings, saveSignFields, sendDocument, setLinkActive, signSession,
-  signerFile, signup, startPhone, stateFor, syncSubscription, userFromAuth, verificationRecord,
+  signerFile, signup, startPhone, stateFor, userFromAuth, verificationRecord,
   verifyEmailToken
 } from './service.js'
-
+import { allow } from './ratelimit.js'
+import { streamHelp } from './help.js'
 import { existsSync } from 'node:fs'
 
 function projectRoot() {
@@ -63,10 +64,6 @@ export async function createApp(env = process.env) {
     if (event.type === 'checkout.session.completed') {
       const full = await payments.retrieve(event.data.object.id)
       await grantCheckout(ctx, full)
-    } else if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
-      await syncSubscription(ctx, event.data.object)
-    } else if (event.type === 'invoice.paid') {
-      await renewInvoice(ctx, event.data.object)
     }
     res.json({ received: true })
   }))
@@ -102,7 +99,8 @@ export async function createApp(env = process.env) {
       emailMode: config.emailMode,
       appUrl: config.appUrl,
       publishableKey: config.stripePublishableKey || '',
-      prices: { single: 1, pack10: 10, pack25: 25, monthly: 10, monthlyDocs: 100 }
+      helpChat: !!config.aiKey,
+      prices: { doc1: 1, doc10: 5, doc50: 10, credits: { doc1: 1, doc10: 10, doc50: 50 } }
     })
   })
 
@@ -271,9 +269,8 @@ export async function createApp(env = process.env) {
 
   app.post('/api/billing/checkout', auth, asyncRoute(async (req, res) => {
     const kind = req.body.kind
-    if (!PACKS[kind]) return res.status(400).json({ error: 'kind', message: 'Choose a document, a pack, or the monthly plan.' })
-    if (kind === 'single') {
-      if (!req.body.documentId) return res.status(400).json({ error: 'document', message: 'Choose the document this payment is for.' })
+    if (!PACKS[kind]) return res.status(400).json({ error: 'kind', message: 'Choose 1, 10, or 50 documents.' })
+    if (req.body.documentId) {
       const owned = await db.query(`select id, status from documents where id=$1 and owner_id=$2`, [req.body.documentId, req.user.id])
       if (!owned.rows[0]) return res.status(404).json({ error: 'not_found', message: 'Document not found.' })
       if (owned.rows[0].status !== 'draft') return res.status(409).json({ error: 'status', message: 'That document has already been sent.' })
@@ -312,7 +309,7 @@ export async function createApp(env = process.env) {
 
   app.post('/api/billing/portal', auth, asyncRoute(async (req, res) => {
     if (payments.mode !== 'stripe' || !req.user.stripe_customer_id) {
-      return res.status(400).json({ error: 'stripe', message: 'The billing portal is available after a Stripe subscription is started.' })
+      return res.status(400).json({ error: 'stripe', message: 'Receipts are available after your first purchase.' })
     }
     res.json({ url: await payments.portal({ customerId: req.user.stripe_customer_id }) })
   }))
@@ -366,9 +363,65 @@ export async function createApp(env = process.env) {
       </script></body>`)
   })
 
+  app.post('/api/contact', asyncRoute(async (req, res) => {
+    if (req.body?.company_url) return res.json({ ok: true })
+    const name = String(req.body?.name || '').trim().slice(0, 120)
+    const email = String(req.body?.email || '').trim().toLowerCase()
+    const message = String(req.body?.message || '').trim().slice(0, 5000)
+    const documentId = String(req.body?.documentId || '').trim().slice(0, 80)
+    if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || message.length < 4) {
+      return res.status(400).json({ error: 'invalid', message: 'Enter your name, email, and a message.' })
+    }
+    const ok = await allow(db, `contact:${req.device.ip || 'unknown'}`, { limit: 5, windowMs: 60 * 60 * 1000 })
+    if (!ok) return res.status(429).json({ error: 'rate_limit', message: 'Too many messages from this network. Try again in an hour.' })
+    const to = config.supportTo || 'support@localhost'
+    const brand = { company: 'Easy Digital Signatures', color: '#0E6B62' }
+    await ctx.email.send({
+      to,
+      replyTo: email,
+      subject: `Help request from ${name}`,
+      text: `${name} <${email}>\nDocument: ${documentId || '—'}\n\n${message}`,
+      html: htmlEmail({
+        title: 'New help request',
+        intro: `<b>${escapeHtml(name)}</b> &lt;${escapeHtml(email)}&gt;<br>Document: ${escapeHtml(documentId || '—')}<br><br>${escapeHtml(message).replace(/\n/g, '<br>')}`,
+        brand
+      })
+    })
+    await ctx.email.send({
+      to: email,
+      subject: 'We received your message',
+      text: `Hi ${name}, we received your note and will reply to this email address.`,
+      html: htmlEmail({
+        title: 'We received your message',
+        intro: `Hi ${escapeHtml(name)}, thanks for writing. We’ll reply to ${escapeHtml(email)}.`,
+        brand
+      })
+    })
+    res.json({ ok: true })
+  }))
+
+  app.post('/api/help/chat', asyncRoute(async (req, res) => {
+    if (!config.aiKey) return res.status(404).json({ error: 'disabled', message: 'Help chat is not configured.' })
+    const ip = req.device.ip || 'unknown'
+    if (!await allow(db, `chatm:${ip}`, { limit: 8, windowMs: 60 * 1000 })) {
+      return res.status(429).json({ error: 'rate_limit', message: 'Too many questions. Use Contact support if you’re stuck.' })
+    }
+    if (!await allow(db, `chat:${ip}`, { limit: 30, windowMs: 60 * 60 * 1000 })) {
+      return res.status(429).json({ error: 'rate_limit', message: 'Too many questions. Use Contact support if you’re stuck.' })
+    }
+    await streamHelp(ctx, req.body?.messages, res)
+  }))
+
   app.get('/', (req, res) => res.sendFile(join(root, 'index.html')))
+  for (const page of ['/contact', '/signup', '/login', '/pricing', '/app']) {
+    app.get(page, (req, res) => res.sendFile(join(root, 'index.html')))
+  }
   app.get('/app.js', (req, res) => res.sendFile(join(root, 'app.js')))
   app.get('/app.css', (req, res) => res.sendFile(join(root, 'app.css')))
+  app.get('/home.css', (req, res) => res.sendFile(join(root, 'home.css')))
+  app.get('/help.css', (req, res) => res.sendFile(join(root, 'help.css')))
+  app.get('/help.js', (req, res) => res.sendFile(join(root, 'help.js')))
+  app.get('/marketing.js', (req, res) => res.sendFile(join(root, 'marketing.js')))
   app.use('/shared', express.static(join(root, 'shared')))
   app.get('/layouts', (req, res) => res.sendFile(join(root, 'layouts', 'index.html')))
   app.get('/layouts/:id', (req, res, next) => {
