@@ -1,0 +1,27 @@
+{
+  "name": "easy-digital-signatures",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test --test-concurrency=1 tests/*.test.js",
+    "screenshot": "node scripts/screenshot-layouts.js"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.3.14",
+    "@supabase/supabase-js": "^2.81.1",
+    "express": "^4.21.2",
+    "multer": "^2.5.0",
+    "pdf-lib": "^1.17.1",
+    "pg": "^8.16.3",
+    "stripe": "^17.7.0"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^24.15.0"
+  }
+}
