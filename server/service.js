@@ -11,6 +11,7 @@ import { num } from './db.js'
 import { FREE_MESSAGES, assertSignupAllowed, evaluateFree, noteCardFingerprint, recordFreeClaim } from './abuse.js'
 import { assertReadablePdf, blankPdf, imageToPdf, sealPdf } from './pdf.js'
 import { htmlEmail, isVoipLine } from './providers.js'
+import { appConfirmUrl } from './confirm-link.js'
 import { DISABLED_MESSAGE } from './admin.js'
 import { checkCode, consumePromo, normalizeCode, promoUsage, redeemCode } from './promo.js'
 import { fireWebhooks } from './webhooks.js'
@@ -281,7 +282,7 @@ export async function signup(ctx, { name, email, password, ip, promo, acceptTerm
     }
     await recordTermsAcceptance(ctx, data.user.id, ip)
     const promoResult = await signupPromo(ctx, data.user.id, promoCode)
-    const emailSent = await trySend(() => sendVerifyEmail(ctx, cleanEmail, cleanName, data.properties.action_link), ctx)
+    const emailSent = await trySend(() => sendVerifyEmail(ctx, cleanEmail, cleanName, appConfirmUrl(ctx.config.appUrl, data.properties, 'signup')), ctx)
     return { id: data.user.id, email: cleanEmail, emailSent, promo: promoResult }
   }
 
@@ -416,12 +417,14 @@ export async function resendByEmail(ctx, email) {
 }
 
 async function sendVerifyEmail(ctx, email, name, url) {
+  const preheader = 'Confirm this address so you can send documents.'
   await ctx.email.send({
     to: email,
     subject: 'Confirm your Easy Digital Signatures email',
-    text: `Hi ${name}, confirm your email: ${url}`,
+    text: `Hi ${name},\n\n${preheader}\n\nConfirm email: ${url}\n`,
     html: htmlEmail({
       title: 'Confirm your email',
+      preheader,
       intro: `Hi ${esc(name)}, confirm this address so you can send documents.`,
       button: 'Confirm email',
       href: url,
@@ -440,7 +443,7 @@ export async function resendVerification(ctx, user) {
       options: { redirectTo: `${ctx.config.appUrl}/auth/confirmed` }
     })
     if (error) throw fail(400, 'email', error.message)
-    await sendVerifyEmail(ctx, user.email, user.full_name, data.properties.action_link)
+    await sendVerifyEmail(ctx, user.email, user.full_name, appConfirmUrl(ctx.config.appUrl, data.properties, 'magiclink'))
     return { ok: true }
   }
   const token = randomToken(32)

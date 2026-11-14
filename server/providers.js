@@ -230,19 +230,24 @@ export function createPayments(config) {
   }
 }
 
-export function htmlEmail({ title, intro, button, href, note, brand }) {
+export function htmlEmail({ title, intro, button, href, note, brand, preheader }) {
   const color = brand?.color || '#0f766e'
   const company = brand?.company || 'Easy Digital Signatures'
   const logo = brand?.logoUrl ? `<img src="${escapeHtml(brand.logoUrl)}" alt="" height="32" style="height:32px;max-width:180px;vertical-align:middle;margin-right:10px;background:#fff;border-radius:6px;padding:3px 6px">` : ''
+  const safeHref = href ? escapeHtml(href) : ''
+  const preview = preheader
+    ? `<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#fff;opacity:0">${escapeHtml(preheader)}${'&zwnj;&nbsp;'.repeat(80)}</div>`
+    : ''
   return `<!doctype html><html><body style="margin:0;background:#f4f7fb;font-family:Inter,Arial,sans-serif;color:#14213d">
+  ${preview}
   <div style="max-width:560px;margin:0 auto;padding:28px 16px">
     <div style="background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e3e6ee">
       <div style="background:${color};color:#fff;padding:18px 22px;font-weight:700">${logo}${escapeHtml(company)}</div>
       <div style="padding:22px">
         <h1 style="font-size:20px;margin:0 0 12px">${escapeHtml(title)}</h1>
         <p style="line-height:1.5;color:#334155">${intro}</p>
-        ${href ? `<p><a href="${href}" style="display:inline-block;background:${color};color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:600">${escapeHtml(button || 'Open')}</a></p>
-        <p style="font-size:12px;color:#64748b;word-break:break-all">${href}</p>` : ''}
+        ${href ? `<p><a href="${safeHref}" style="display:inline-block;background:${color};color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:600">${escapeHtml(button || 'Open')}</a></p>
+        <p style="font-size:12px;color:#64748b;word-break:break-all">${safeHref}</p>` : ''}
         ${note ? `<p style="font-size:13px;color:#64748b">${note}</p>` : ''}
       </div>
     </div>

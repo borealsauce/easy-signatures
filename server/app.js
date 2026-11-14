@@ -15,6 +15,7 @@ import {
   verifyEmailToken, resendByEmail, requestPasswordReset, resetPassword, logout, remindAll, setDocReminders, resendFromLink
 } from './service.js'
 import { confirmedPageHtml } from './confirmed-page.js'
+import { confirmEmailLink } from './confirm-link.js'
 import {
   teamState, createTeam, renameTeam, transferCredits, inviteToTeam, revokeInvite,
   acceptInvite, acceptPendingById, removeMember, leaveTeam, setTemplateShare
@@ -175,6 +176,17 @@ export async function createApp(env = process.env) {
 
   app.get('/auth/verify', asyncRoute(async (req, res) => {
     const result = await verifyEmailToken(ctx, req.query.token)
+    if (result.ok) {
+      const q = new URLSearchParams({ verified: '1' })
+      if (result.email) q.set('email', result.email)
+      res.redirect('/auth/confirmed?' + q.toString())
+    } else {
+      res.redirect('/auth/confirmed?verified=0')
+    }
+  }))
+
+  app.get('/auth/confirm', asyncRoute(async (req, res) => {
+    const result = await confirmEmailLink(ctx, { tokenHash: req.query.token_hash, type: req.query.type })
     if (result.ok) {
       const q = new URLSearchParams({ verified: '1' })
       if (result.email) q.set('email', result.email)
