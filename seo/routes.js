@@ -45,7 +45,7 @@ const ROBOTS = `User-agent: *
 Allow: /
 Disallow: /api/
 Disallow: /admin
-Disallow: /app
+Disallow: /app$
 Disallow: /r/
 Disallow: /verify/
 Disallow: /dev/
