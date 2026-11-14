@@ -32,6 +32,7 @@ import {
   listWebhooks, createWebhook, updateWebhook, deleteWebhook, sendFromTemplate
 } from './developer.js'
 import { existsSync } from 'node:fs'
+import { verifySvix, forwardInbound } from './inbound.js'
 import { registerSeo } from '../seo/routes.js'
 import { notFoundPage } from '../seo/layout.js'
 
@@ -84,6 +85,20 @@ export async function createApp(env = process.env) {
       await grantCheckout(ctx, full)
     }
     res.json({ received: true })
+  }))
+
+  app.post('/api/inbound-email', express.raw({ type: '*/*', limit: '2mb' }), asyncRoute(async (req, res) => {
+    if (!config.resendWebhookSecret) return res.status(404).json({ error: 'not_found', message: 'Inbound email is not configured.' })
+    const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from('')
+    if (!verifySvix(config.resendWebhookSecret, req.headers, raw)) return res.status(401).json({ error: 'signature', message: 'Invalid webhook signature.' })
+    let event
+    try { event = JSON.parse(raw.toString('utf8')) } catch { return res.status(400).json({ error: 'json', message: 'Invalid JSON.' }) }
+    try {
+      res.json({ received: true, ...(await forwardInbound(config, event)) })
+    } catch (e) {
+      ctx.logError?.('inbound-email', String(e?.message || e).slice(0, 300))
+      res.status(500).json({ error: 'forward_failed', message: 'Could not forward email.' })
+    }
   }))
 
   app.use(express.json({ limit: '8mb' }))
