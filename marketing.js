@@ -32,7 +32,7 @@ export function marketingHtml({ loggedIn, smsEnabled = true }) {
       <h1>Send it. Get it signed.<br>Too Easy.</h1>
       <p class="sub">Place fields on any PDF, email a secure link, and finish with a flattened file plus an audit certificate. Signers never need an account.</p>
       <div class="cta-row">
-        <a class="btn-hero" href="${start}"><strong>Actually start free</strong><em>First document’s on the house</em></a>
+        <a class="btn-hero" href="${start}"><strong>Start Free! <span class="cta-actually">(Actually)</span></strong><em>First document’s on the house</em></a>
         <a class="btn btn-outline" href="#pricing">See pricing</a>
       </div>
     </div>
@@ -105,5 +105,5 @@ export function marketingHtml({ loggedIn, smsEnabled = true }) {
 }
 
 function logo() {
-  return `<svg width="26" height="26" viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect width="28" height="28" rx="7" fill="#14C4B0"/><path d="M6.5 16.2c2.6-1.1 4.4 1.4 6.5-.2 2.3-1.7 3.5-4.4 7.8-3.2" stroke="#042F2E" stroke-width="1.8" stroke-linecap="round"/><path d="M7.2 19.4h8.4" stroke="#042F2E" stroke-width="1.5" stroke-linecap="round" opacity="0.65"/></svg>`
+  return `<svg class="logo-mark" width="32" height="32" viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect width="28" height="28" rx="7" fill="#14C4B0"/><path d="M6.5 16.2c2.6-1.1 4.4 1.4 6.5-.2 2.3-1.7 3.5-4.4 7.8-3.2" stroke="#042F2E" stroke-width="1.8" stroke-linecap="round"/><path d="M7.2 19.4h8.4" stroke="#042F2E" stroke-width="1.5" stroke-linecap="round" opacity="0.65"/></svg>`
 }
