@@ -14,6 +14,7 @@ import {
   signerFile, signup, startPhone, stateFor, userFromAuth, verificationRecord,
   verifyEmailToken, resendByEmail, requestPasswordReset, resetPassword, logout, remindAll, setDocReminders, resendFromLink
 } from './service.js'
+import { confirmedPageHtml } from './confirmed-page.js'
 import { adminCreateCode, adminListCodes, adminSetActive, isAdmin, redeemCode } from './promo.js'
 import {
   DISABLED_MESSAGE, adminActivity, adminAdjustCredits, adminDeleteUser, adminHealth, adminIncome, adminListDocuments,
@@ -169,16 +170,20 @@ export async function createApp(env = process.env) {
   }))
 
   app.get('/auth/verify', asyncRoute(async (req, res) => {
-    const ok = await verifyEmailToken(ctx, req.query.token)
-    res.redirect(ok ? '/?verified=1#/login' : '/?verified=0#/login')
+    const result = await verifyEmailToken(ctx, req.query.token)
+    if (result.ok) {
+      const q = new URLSearchParams({ verified: '1' })
+      if (result.email) q.set('email', result.email)
+      res.redirect('/auth/confirmed?' + q.toString())
+    } else {
+      res.redirect('/auth/confirmed?verified=0')
+    }
   }))
 
   app.get('/auth/confirmed', (req, res) => {
-    res.type('html').send(`<!doctype html><meta charset="utf-8"><title>Email confirmed</title>
-      <body style="font-family:Inter,system-ui,sans-serif;background:#f4f7fb;color:#14213d;display:grid;place-items:center;min-height:100vh">
-      <div style="background:#fff;padding:28px;border-radius:16px;max-width:420px;text-align:center">
-      <h1>Email confirmed</h1><p>${config.smsMode === 'off' ? 'You can log in and send your free document.' : 'You can log in and verify a phone number to unlock your free document.'}</p>
-      <p><a href="/#/login">Continue to log in</a></p></div></body>`)
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow')
+    res.setHeader('Cache-Control', 'no-store')
+    res.type('html').send(confirmedPageHtml())
   })
 
   app.get('/api/me', auth, asyncRoute(async (req, res) => {

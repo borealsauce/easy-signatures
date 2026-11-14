@@ -437,12 +437,12 @@ export async function resendVerification(ctx, user) {
 }
 
 export async function verifyEmailToken(ctx, token) {
-  if (!token) return false
+  if (!token) return { ok: false }
   const hash = hashSecret(token, ctx.config.jwtSecret)
-  const row = await ctx.db.query(`select id from profiles where email_verify_token=$1`, [hash])
-  if (!row.rows[0]) return false
+  const row = await ctx.db.query(`select id, email from profiles where email_verify_token=$1`, [hash])
+  if (!row.rows[0]) return { ok: false }
   await ctx.db.query(`update profiles set email_verified_at=now(), email_verify_token=null where id=$1`, [row.rows[0].id])
-  return true
+  return { ok: true, email: row.rows[0].email }
 }
 
 export async function login(ctx, { email, password }) {
