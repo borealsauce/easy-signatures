@@ -181,6 +181,11 @@ export async function adminHealth(ctx) {
       out.email.domains = doms
       out.email.ok = r.ok && doms.some(d => d.status === 'verified')
       if (!r.ok) out.email.detail = j.message || ('HTTP ' + r.status)
+      if (!r.ok && /restricted/i.test(j.message || '')) {
+        const recent = (await ctx.db.query(`select count(*)::int n from error_log where source like 'email.%' and created_at > now() - interval '24 hours'`)).rows[0]
+        out.email.ok = num(recent?.n) === 0
+        out.email.detail = out.email.ok ? 'Sending normally (no email errors in the last 24 hours)' : `${num(recent.n)} email errors in the last 24 hours — see Recent errors`
+      }
     } catch (e) { out.email.ok = false; out.email.detail = String(e.message).slice(0, 200) }
   }
   out.stripe.mode = ctx.config.stripeMode
