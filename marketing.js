@@ -1,4 +1,9 @@
 const sig = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 11.5c2-1 3.4 1.1 5-.2 1.8-1.4 2.7-3.5 6-2.5"/><path d="M3 13.5h6.5"/></svg>`
+const initials = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><path d="M5.5 9.2c.7-.4 1.3.2 2-.2.8-.5 1.2-1.3 2.6-.9"/></svg>`
+const dateIcon = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M6 2.5v2M10 2.5v2"/></svg>`
+const nameIcon = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8" cy="6" r="2.2"/><path d="M3.5 13c.6-2.3 2.2-3.4 4.5-3.4S11.9 10.7 12.5 13"/></svg>`
+const textIcon = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 4.5h10M3 8h7M3 11.5h8.5"/></svg>`
+const cursor = `<svg class="cursor" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" stroke="#0F172A" stroke-width="1.3" stroke-linejoin="round" d="M5 2.8v17.2l4.4-4.2 3 6.6 2.5-1.1-3-6.5 5.8-.1z"/></svg>`
 
 export function marketingHtml({ loggedIn, smsEnabled = true }) {
   const start = loggedIn ? '#/new' : '#/signup'
@@ -28,32 +33,29 @@ export function marketingHtml({ loggedIn, smsEnabled = true }) {
         <a class="btn btn-outline" href="#pricing">See pricing</a>
       </div>
     </div>
-  </header>
-  <div class="shot-wrap">
-    <aside class="editor" aria-label="Signing editor preview">
-      <div class="ed-bar"><div class="dots"><span></span><span></span><span></span></div><div class="ed-title">Vendor MSA.pdf</div><span class="badge">Sample</span><a class="btn-send" href="${start}">Send for signature</a></div>
-      <div class="ed-body">
-        <div class="fields"><div class="fields-label">Fields</div>
-          <div class="chip ghost">${sig}Signature</div>
-          <div class="chip">${sig}Initials</div>
-          <div class="chip">${sig}Date</div>
-          <div class="chip">${sig}Name</div>
-          <div class="chip">${sig}Text</div>
-        </div>
-        <div class="page-wrap"><div class="paper">
-          <div class="paper-kicker">Vendor agreement</div>
-          <h3>Master Services Agreement</h3>
-          <p>This agreement is entered into by Acme Corp (“Client”) and Helio Labs (“Vendor”) as of the date of last signature below.</p>
-          <p>Vendor will provide the services described in Exhibit A. This agreement begins on the date it is fully signed and continues until completed or terminated in writing.</p>
-          <div class="sig-row">
-            <div><div class="party">Client — Acme Corp</div><div class="drop-zone">Drop Signature</div></div>
-            <div><div class="party">Vendor — Helio Labs</div><div class="placed"><span class="lbl">Signature</span><span class="sig-value">Jordan Hale</span></div><div class="placed date-box"><span class="lbl">Date</span><span class="date-value">Nov 13, 2026</span></div></div>
-          </div>
-          <div class="drag-float"><div class="drag-chip">${sig}Signature</div></div>
-        </div></div>
+    <div class="demo" aria-label="Signing editor preview">
+      <div class="fields">
+        <div class="fields-label">Fields</div>
+        <div class="chip ghost">${sig}Signature</div>
+        <div class="chip">${initials}Initials</div>
+        <div class="chip">${dateIcon}Date</div>
+        <div class="chip">${nameIcon}Name</div>
+        <div class="chip">${textIcon}Text</div>
       </div>
-    </aside>
-  </div>
+      <div class="paper">
+        <div class="paper-meta">Vendor MSA.pdf · Sample</div>
+        <div class="paper-kicker">Vendor agreement</div>
+        <h3>Master Services Agreement</h3>
+        <p>This agreement is entered into by Acme Corp (“Client”) and Helio Labs (“Vendor”) as of the date of last signature below.</p>
+        <p>Vendor will provide the services described in Exhibit A. This agreement begins on the date it is fully signed and continues until completed or terminated in writing.</p>
+        <div class="sig-row">
+          <div><div class="party">Client — Acme Corp</div><div class="drop-zone">Drop Signature</div></div>
+          <div><div class="party">Vendor — Helio Labs</div><div class="placed"><span class="lbl">Signature</span><span class="sig-value">Jordan Hale</span></div><div class="placed date-box"><span class="lbl">Date</span><span class="date-value">Nov 14, 2026</span></div></div>
+        </div>
+      </div>
+      <div class="drag-float"><div class="drag-chip">${sig}Signature</div>${cursor}</div>
+    </div>
+  </header>
   <section class="pricing" id="pricing">
     <div class="wrap">
       <h2>Pricing</h2>
