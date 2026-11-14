@@ -150,6 +150,8 @@ body.marketing main { max-width: none; margin: 0; padding: 0; }
   .mkt h1 { font-size: 34px; }
   .mkt .plan .amt { font-size: 36px; }
   .mkt .foot { flex-direction: column; align-items: flex-start; }
+  .mkt header nav { flex-wrap: wrap; }
+  .mkt header nav .nav-links { width: 100%; justify-content: flex-start; gap: 16px; }
   .mkt .logo { font-size: 23px; gap: 10px; }
   .mkt .logo-mark { width: 36px; height: 36px; }
 }
