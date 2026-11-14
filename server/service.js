@@ -127,6 +127,7 @@ function mapDoc(row, signers, events, secret, reveal) {
     hashContent: row.content_sha256,
     hashFinal: row.final_sha256,
     sent: iso(row.sent_at),
+    expiresAt: row.sent_at ? new Date(new Date(row.sent_at).getTime() + Number(row.expires_days) * 864e5).toISOString() : null,
     completed: iso(row.completed_at),
     billingSource: row.billing_source,
     fields: asJson(row.fields, []),
@@ -1442,14 +1443,133 @@ export async function grantCheckout(ctx, session) {
   return applied
 }
 
+
+function daysLeft(doc) {
+  const end = new Date(doc.sent_at).getTime() + Number(doc.expires_days) * 864e5
+  return Math.max(0, Math.ceil((end - Date.now()) / 864e5))
+}
+
+function pendingSigners(signers, doc) {
+  let pending = signers.filter(s => s.role !== 'cc' && !s.signed_at && !s.declined_at)
+  if (doc.ordered_sign) pending = pending.slice(0, 1)
+  return pending
+}
+
+async function sendExpiryWarnings(ctx) {
+  const soon = await ctx.db.query(
+    `select * from documents
+     where status in ('sent','waiting') and sent_at is not null and not is_template
+       and expiry_warned_at is null
+       and sent_at + interval '12 hours' < now()
+       and sent_at + make_interval(days => expires_days) > now()
+       and sent_at + make_interval(days => expires_days) - interval '2 days' <= now()
+     order by sent_at
+     limit 200`
+  )
+  let warned = 0
+  for (const doc of soon.rows) {
+    const owner = (await ctx.db.query(`select * from profiles where id=$1`, [doc.owner_id])).rows[0]
+    const signers = await loadSigners(ctx.db.query.bind(ctx.db), doc.id)
+    const pending = pendingSigners(signers, doc)
+    const left = daysLeft(doc)
+    const when = left <= 1 ? 'tomorrow' : `in ${left} days`
+    const waiting = pending.map(s => s.full_name || s.email).filter(Boolean).join(', ') || 'a signer'
+    for (const s of pending) {
+      if (!s.email || !s.token) continue
+      const token = unseal(s.token, ctx.config.jwtSecret)
+      const href = `${ctx.config.appUrl}/#/sign/${token}`
+      try {
+        await ctx.email.send({
+          to: s.email,
+          subject: `Your signing link for “${doc.name}” expires ${when}`,
+          text: `${owner?.full_name || 'Someone'} is still waiting for you to sign ${doc.name}. The link expires ${when}. ${href}`,
+          html: htmlEmail({
+            title: `${doc.name} expires ${when}`,
+            intro: `${esc(owner?.full_name || 'The sender')} is still waiting for your signature on <b>${esc(doc.name)}</b>. This link expires ${esc(when)}.`,
+            button: 'Review and sign',
+            href,
+            note: 'If you already signed, you can ignore this email.',
+            brand: brandOf(owner || {})
+          })
+        })
+      } catch (err) { await ctx.logError?.('email.expiry_warn', String(err?.message || err)) }
+    }
+    if (owner?.email) {
+      try {
+        await ctx.email.send({
+          to: owner.email,
+          subject: `“${doc.name}” expires ${when}`,
+          text: `${doc.name} expires ${when} and is still waiting on ${waiting}.`,
+          html: htmlEmail({
+            title: `Expires ${when}`,
+            intro: `<b>${esc(doc.name)}</b> expires ${esc(when)} and is still waiting on ${esc(waiting)}.`,
+            button: 'Open dashboard',
+            href: `${ctx.config.appUrl}/#/app`,
+            brand: brandOf(owner)
+          })
+        })
+      } catch (err) { await ctx.logError?.('email.expiry_warn_owner', String(err?.message || err)) }
+    }
+    await ctx.db.query(`update documents set expiry_warned_at=now() where id=$1`, [doc.id])
+    await audit(ctx.db.query.bind(ctx.db), doc.id, { type: `Expiry warning sent (${when})`, actor: 'System' })
+    warned++
+  }
+  return warned
+}
+
+async function expireDocument(ctx, id) {
+  const updated = await ctx.db.query(
+    `update documents set status='expired', updated_at=now() where id=$1 and status in ('sent','waiting') returning *`,
+    [id]
+  )
+  const doc = updated.rows[0]
+  if (!doc) return
+  await audit(ctx.db.query.bind(ctx.db), doc.id, { type: 'Expired', actor: 'System' })
+  const owner = (await ctx.db.query(`select * from profiles where id=$1`, [doc.owner_id])).rows[0]
+  const signers = await loadSigners(ctx.db.query.bind(ctx.db), doc.id)
+  const waiting = signers.filter(s => s.role !== 'cc' && !s.signed_at && !s.declined_at)
+  const names = waiting.map(s => s.full_name || s.email).filter(Boolean).join(', ') || 'a signer'
+  if (owner?.email) {
+    try {
+      await ctx.email.send({
+        to: owner.email,
+        subject: `“${doc.name}” expired before everyone signed`,
+        text: `${doc.name} expired. Still waiting on ${names}.`,
+        html: htmlEmail({
+          title: 'Document expired',
+          intro: `<b>${esc(doc.name)}</b> expired before everyone signed. It was still waiting on ${esc(names)}.`,
+          button: 'Open dashboard',
+          href: `${ctx.config.appUrl}/#/app`,
+          brand: brandOf(owner)
+        })
+      })
+    } catch (err) { await ctx.logError?.('email.expired_owner', String(err?.message || err)) }
+  }
+  for (const s of waiting) {
+    if (!s.email) continue
+    try {
+      await ctx.email.send({
+        to: s.email,
+        subject: `The signing link for “${doc.name}” has expired`,
+        text: `The signing link for ${doc.name} has expired. Contact ${owner?.full_name || 'the sender'} if you still need to sign.`,
+        html: htmlEmail({
+          title: 'This link has expired',
+          intro: `The signing link for <b>${esc(doc.name)}</b> has expired. Contact ${esc(owner?.full_name || 'the sender')} if you still need to sign.`,
+          brand: brandOf(owner || {})
+        })
+      })
+    } catch (err) { await ctx.logError?.('email.expired_signer', String(err?.message || err)) }
+  }
+}
+
 export async function runMaintenance(ctx) {
+  const warned = await sendExpiryWarnings(ctx)
   const expired = await ctx.db.query(
     `select id from documents where status in ('sent','waiting') and sent_at is not null
      and sent_at + make_interval(days => expires_days) < now()`
   )
   for (const row of expired.rows) {
-    await ctx.db.query(`update documents set status='expired', updated_at=now() where id=$1 and status in ('sent','waiting')`, [row.id])
-    await audit(ctx.db.query.bind(ctx.db), row.id, { type: 'Expired', actor: 'System' })
+    await expireDocument(ctx, row.id)
   }
   // Automatic signer reminders: cadence 2/3/7 days, at most 5, never within 24h of any reminder.
   const due = await ctx.db.query(
@@ -1472,7 +1592,7 @@ export async function runMaintenance(ctx) {
     } catch (err) { await ctx.logError?.('cron.reminder', err.message) }
   }
   const nudged = await senderNudges(ctx)
-  return { expired: expired.rows.length, reminded, signers, nudged }
+  return { expired: expired.rows.length, reminded, signers, nudged, warned }
 }
 
 function ago(date) {

@@ -249,3 +249,6 @@ alter table documents add column if not exists auto_reminders integer not null d
 alter table profiles add column if not exists default_remind_days integer not null default 3;
 alter table profiles add column if not exists sender_nudge_days integer not null default 0;
 alter table profiles add column if not exists last_nudged_at timestamptz;
+
+-- Expiry warnings: unsigned signers and the sender get an email 2 days before a link expires.
+alter table documents add column if not exists expiry_warned_at timestamptz;
