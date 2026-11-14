@@ -1,4 +1,5 @@
 import { initialsOf } from '/shared/names.js'
+import { parseBulkRecipients, bulkCostSummary, allowanceLabel } from '/shared/bulk.js'
 import { calc, visible, validate } from '/shared/fields.js'
 import { marketingHtml } from '/marketing.js'
 import { mountHelp } from '/help.js'
@@ -757,17 +758,76 @@ function publicForm(lid) {
   }
 }
 function bulk() {
-  V.innerHTML = `<h1>Bulk send</h1><p style="color:var(--mut)">Each person gets their own document and email. Every copy uses your allowance.</p><div class="card">${S.templates.length ? '' : '<p>Create a one-signer template first.</p>'}
-  <label class="f">Template</label><select id="bt">${S.templates.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select>
-  <label class="f">Recipients, one per line: name, email</label><textarea id="bl" rows="6" style="width:100%" placeholder="Jordan Avery, jordan@example.com"></textarea><br><br><button class="p" id="bs">Send to all</button></div>`
-  $('#bs').onclick = async () => {
-    const recipients = $('#bl').value.split('\n').map(r => r.split(',')).map(([name, email]) => ({ name: (name || '').trim(), email: (email || '').trim() })).filter(r => r.name)
-    const res = await api('/api/bulk', { method: 'POST', body: { templateId: $('#bt').value, recipients } })
-    if (res.status === 402) return payModal(null, res.json)
-    if (!res.ok) return toast(res.json?.message || 'Could not send')
-    toast(`Sent ${res.json.sent}`)
-    location.hash = '#/app'
+  const oneSigner = t => (t.signers || []).filter(s => s.role !== 'cc').length === 1
+  const usable = S.templates.filter(oneSigner)
+  const others = S.templates.length - usable.length
+  let recipients = []
+  let issues = []
+  const refresh = () => {
+    const cost = bulkCostSummary(recipients.length, S.usage)
+    const have = allowanceLabel(S.usage)
+    $('#berr').innerHTML = issues.map(e => `<p class="banner">${esc(e.message)}</p>`).join('')
+    if (!recipients.length) {
+      $('#bp').innerHTML = `<p class="note">Add people above or upload a CSV. Each copy uses 1 credit. You have ${esc(have)} (${cost.available} total).</p>`
+    } else {
+      $('#bp').innerHTML = table(['Name', 'Email'], recipients.map(r => `<tr><td>${esc(r.name)}</td><td>${esc(r.email)}</td></tr>`)) +
+        `<p class="note">${cost.copies} ${cost.copies === 1 ? 'copy' : 'copies'} · <b>${cost.creditsUsed} credit${cost.creditsUsed === 1 ? '' : 's'}</b>. You have ${esc(have)} (${cost.available} total).${cost.enough ? '' : ` You are ${cost.short} short.`}</p>`
+    }
+    const ready = usable.length && recipients.length && !issues.length
+    $('#bs').disabled = !ready
   }
+  const applyText = text => {
+    const parsed = parseBulkRecipients(text)
+    recipients = parsed.recipients
+    issues = parsed.errors
+    refresh()
+  }
+  V.innerHTML = `<h1>Bulk send</h1><p style="color:var(--mut)">Send one template to a list of people. Each person gets their own copy, and each copy uses 1 credit.</p>
+  <div class="card">${usable.length ? '' : '<p>Create a template with exactly one signer first. Public links and bulk send use a single signing role.</p>'}
+  ${others ? `<p class="note">${others} template${others === 1 ? '' : 's'} hidden because they have more than one signer.</p>` : ''}
+  <label class="f">Template</label><select id="bt">${usable.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select>
+  <label class="f">Recipients</label>
+  <textarea id="bl" rows="6" style="width:100%" placeholder="Jordan Avery, jordan@example.com"></textarea>
+  <p class="note">One person per line: name, email. Or upload a CSV with Name and Email columns.</p>
+  <label class="btn" style="margin-top:8px">Upload CSV<input id="csv" type="file" accept=".csv,text/csv,text/plain,.txt" hidden></label>
+  <div id="berr"></div>
+  <div id="bp" style="margin-top:12px"></div>
+  <p style="margin-top:16px"><button class="p" id="bs" disabled>Review and send</button></p></div>`
+  $('#bl').oninput = () => applyText($('#bl').value)
+  $('#csv').onchange = e => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => { $('#bl').value = String(reader.result || ''); applyText($('#bl').value) }
+    reader.readAsText(file)
+  }
+  $('#bs').onclick = () => {
+    if (!recipients.length || issues.length) return
+    const cost = bulkCostSummary(recipients.length, S.usage)
+    const have = allowanceLabel(S.usage)
+    const after = cost.enough ? ` After this send you’ll have ${Math.max(0, cost.remaining)} left.` : ` You need ${cost.short} more before you can send this list.`
+    modal(`<h3>Send ${cost.copies} ${cost.copies === 1 ? 'document' : 'documents'}?</h3>
+      <p>Each copy uses <b>1 credit</b>. This will use <b>${cost.creditsUsed} credit${cost.creditsUsed === 1 ? '' : 's'}</b>.</p>
+      <p>You currently have ${esc(have)} (${cost.available} total).${after}</p>
+      <div class="row" style="margin-top:14px">${cost.enough
+        ? `<button class="p" id="bcf">Send ${cost.copies} ${cost.copies === 1 ? 'document' : 'documents'}</button>`
+        : `<button class="p" id="bbuy">Buy a pack</button>`}<button id="bcx">Cancel</button></div>`)
+    $('#bcx').onclick = closeModal
+    const buyBtn = $('#bbuy')
+    if (buyBtn) buyBtn.onclick = () => { closeModal(); payModal(null, { message: `You can send ${cost.available} more document${cost.available === 1 ? '' : 's'} right now, and this list has ${cost.copies}.` }) }
+    const go = $('#bcf')
+    if (!go) return
+    go.onclick = async () => {
+      go.disabled = true
+      const res = await api('/api/bulk', { method: 'POST', body: { templateId: $('#bt').value, recipients: recipients.map(r => ({ name: r.name, email: r.email })) } })
+      if (res.status === 402) { closeModal(); return payModal(null, res.json) }
+      if (!res.ok) { go.disabled = false; return toast(res.json?.message || 'Could not send') }
+      closeModal()
+      toast(`Sent ${res.json.sent} ${res.json.sent === 1 ? 'document' : 'documents'} · ${res.json.cost?.creditsUsed || res.json.sent} credit${(res.json.cost?.creditsUsed || res.json.sent) === 1 ? '' : 's'} used`)
+      location.hash = '#/app'
+    }
+  }
+  refresh()
 }
 function proposal() {
   const P = S.prop || (S.prop = { title: 'Proposal', client: '', intro: '', items: [['Service', 1, 0]], disc: 0, tax: 0 })

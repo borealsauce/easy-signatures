@@ -1395,23 +1395,27 @@ export async function bulkSend(ctx, user, { templateId, recipients }, device) {
   if (people.some(p => !emailOk(p.email))) throw fail(400, 'email', 'Each recipient needs a valid email.')
   const usage = await usageFor(ctx, user, device)
   const capacity = usage.credits + (usage.promoCredits || 0) + (usage.freeAvailable ? 1 : 0)
+  const cost = { copies: people.length, creditsEach: 1, creditsUsed: people.length, available: capacity, need: Math.max(0, people.length - capacity) }
   if (capacity < people.length) {
     return {
       ok: false,
       status: 402,
       error: 'payment_required',
-      message: `You can send ${capacity} more document${capacity === 1 ? '' : 's'} right now, and this list has ${people.length}. Buy a pack or remove recipients.`,
-      need: people.length - capacity
+      message: `You can send ${capacity} more document${capacity === 1 ? '' : 's'} right now, and this list has ${people.length}. Each copy uses 1 credit. Buy a pack or remove recipients.`,
+      need: cost.need,
+      cost
     }
   }
   const links = []
   for (const person of people) {
     const cloned = await cloneFromTemplate(ctx, template, person)
     const sent = await sendDocument(ctx, user, cloned.id, device)
-    if (!sent.ok) return { ...sent, sent: links.length, links }
+    if (!sent.ok) return { ...sent, sent: links.length, links, cost: { ...cost, creditsUsed: links.length } }
     links.push({ name: person.name, email: person.email, url: sent.links?.[0]?.url })
   }
-  return { ok: true, sent: links.length, links }
+  const after = await usageFor(ctx, user, device)
+  const remaining = (after.credits || 0) + (after.promoCredits || 0) + (after.freeAvailable ? 1 : 0)
+  return { ok: true, sent: links.length, links, cost: { ...cost, remaining } }
 }
 
 export async function grantCheckout(ctx, session) {
