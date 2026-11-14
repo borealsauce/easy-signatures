@@ -82,7 +82,7 @@ async function verifiedUser({ email, password = 'correct-horse', name = 'Pat Own
   ip ||= `198.51.100.${(n % 200) + 1}`
   device ||= `device-tpl-${String(n).padStart(4, '0')}aa`
   phone ||= `+1555100${String(1000 + n)}`
-  const signup = await api('/api/auth/signup', { method: 'POST', body: { name, email, password }, ip, device })
+  const signup = await api('/api/auth/signup', { method: 'POST', body: { name, email, password, acceptTerms: true }, ip, device })
   assert.equal(signup.status, 201, signup.text)
   const confirm = mailTo(email, m => String(m.subject || '').includes('Confirm'))
   assert.ok(confirm?.url, 'verification email')

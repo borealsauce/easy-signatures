@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import { FIELD_TYPES, ROLES, visible, validate } from '../shared/fields.js'
 import { CONSENT_TEXT, CONSENT_VERSION } from '../shared/consent.js'
+import { TERMS_VERSION } from '../shared/terms.js'
 import { PACKS } from './config.js'
 import {
   canonicalEmail, clientIp, hashPassword, hashSecret, normalizePhone, randomToken,
@@ -222,12 +223,13 @@ export async function createProfile(ctx, { id, email, name, passwordHash, ip }) 
   await ctx.db.query(`insert into entitlements (user_id) values ($1)`, [id])
 }
 
-export async function signup(ctx, { name, email, password, ip, promo }) {
+export async function signup(ctx, { name, email, password, ip, promo, acceptTerms }) {
   const cleanEmail = String(email || '').trim().toLowerCase()
   const cleanName = String(name || '').trim().slice(0, 120)
   if (!cleanName) throw fail(400, 'name', 'Enter your name.')
   if (!emailOk(cleanEmail)) throw fail(400, 'email', 'Enter a valid email address.')
   if (String(password || '').length < 8) throw fail(400, 'password', 'Use at least 8 characters.')
+  if (!acceptTerms) throw fail(400, 'terms', 'Please agree to the Terms and Privacy Policy to create your account.')
   const promoCode = normalizeCode(promo)
   if (promoCode) await checkCode(ctx.db.query.bind(ctx.db), promoCode)
 
@@ -277,6 +279,7 @@ export async function signup(ctx, { name, email, password, ip, promo }) {
       if (constraintReason(err) || /duplicate|unique/i.test(err.message || '')) throw fail(409, 'exists', 'An account with that email already exists. Log in instead.')
       throw err
     }
+    await recordTermsAcceptance(ctx, data.user.id, ip)
     const promoResult = await signupPromo(ctx, data.user.id, promoCode)
     const emailSent = await trySend(() => sendVerifyEmail(ctx, cleanEmail, cleanName, data.properties.action_link), ctx)
     return { id: data.user.id, email: cleanEmail, emailSent, promo: promoResult }
@@ -286,9 +289,15 @@ export async function signup(ctx, { name, email, password, ip, promo }) {
   const token = randomToken(32)
   await createProfile(ctx, { id, email: cleanEmail, name: cleanName, passwordHash: hashPassword(password), ip })
   await ctx.db.query(`update profiles set email_verify_token=$2 where id=$1`, [id, hashSecret(token, ctx.config.jwtSecret)])
+  await recordTermsAcceptance(ctx, id, ip)
   const promoResult = await signupPromo(ctx, id, promoCode)
   const emailSent = await trySend(() => sendVerifyEmail(ctx, cleanEmail, cleanName, `${ctx.config.appUrl}/auth/verify?token=${token}`), ctx)
   return { id, email: cleanEmail, emailSent, promo: promoResult }
+}
+
+// Clickwrap evidence: when, from where, and which Terms version the account accepted.
+async function recordTermsAcceptance(ctx, id, ip) {
+  await ctx.db.query(`update profiles set terms_accepted_at=now(), terms_version=$2, terms_accepted_ip=$3 where id=$1`, [id, TERMS_VERSION, ip || null])
 }
 
 async function findAuthUserByEmail(admin, email) {

@@ -23,7 +23,7 @@ test('promo codes, admin toggle, block and delete', { timeout: 60000 }, async ()
     return { status: res.status, json: await res.json().catch(() => null) }
   }
   const make = async (email, promo, ip) => {
-    const r = await call('/api/auth/signup', { method: 'POST', ip, body: { name: 'User ' + email, email, password: 'correct-horse', promo } })
+    const r = await call('/api/auth/signup', { method: 'POST', ip, body: { name: 'User ' + email, email, password: 'correct-horse', acceptTerms: true, promo } })
     assert.equal(r.status, 201, JSON.stringify(r.json))
     await ctx.db.query(`update profiles set email_verified_at=now() where email=$1`, [email])
     const l = await call('/api/auth/login', { method: 'POST', ip, body: { email, password: 'correct-horse' } })
@@ -38,7 +38,7 @@ test('promo codes, admin toggle, block and delete', { timeout: 60000 }, async ()
   try {
     const owner = await make('owner@example.com', '', '198.51.100.1')
     // seeded codes
-    const bad = await call('/api/auth/signup', { method: 'POST', body: { name: 'X', email: 'x@example.com', password: 'correct-horse', promo: 'NOPE' } })
+    const bad = await call('/api/auth/signup', { method: 'POST', body: { name: 'X', email: 'x@example.com', password: 'correct-horse', acceptTerms: true, promo: 'NOPE' } })
     assert.equal(bad.status, 404)
     assert.match(bad.json.message, /isn’t valid/)
     const u = await make('vip@example.com', 'vip100', '198.51.100.2')
@@ -111,7 +111,7 @@ test('promo codes, admin toggle, block and delete', { timeout: 60000 }, async ()
     assert.equal((await call('/api/me', { token: u.token })).status, 200)
     assert.equal((await call('/api/admin/users/' + vip.id, { method: 'DELETE', token: owner.token })).status, 200)
     assert.equal((await ctx.db.query(`select count(*)::int n from profiles where email='vip@example.com'`)).rows[0].n, 0)
-    const fresh = await call('/api/auth/signup', { method: 'POST', ip: '198.51.100.2', body: { name: 'Vip Again', email: 'vip@example.com', password: 'correct-horse' } })
+    const fresh = await call('/api/auth/signup', { method: 'POST', ip: '198.51.100.2', body: { name: 'Vip Again', email: 'vip@example.com', password: 'correct-horse', acceptTerms: true } })
     assert.equal(fresh.status, 201)
   } finally {
     await new Promise(resolve => server.close(resolve))
@@ -127,10 +127,10 @@ test('signup still succeeds when the verification email fails', async () => {
   ctx.app.locals.ctx.email.send = async () => { throw new Error('domain not verified') }
   const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.88' }, body: JSON.stringify(body) }).then(async r => ({ status: r.status, json: await r.json() }))
   try {
-    const r = await post('/api/auth/signup', { name: 'Mail Fail', email: 'mf@example.com', password: 'correct-horse' })
+    const r = await post('/api/auth/signup', { name: 'Mail Fail', email: 'mf@example.com', password: 'correct-horse', acceptTerms: true })
     assert.equal(r.status, 201)
     assert.equal(r.json.emailSent, false)
-    const again = await post('/api/auth/signup', { name: 'Mail Fail', email: 'mf@example.com', password: 'correct-horse' })
+    const again = await post('/api/auth/signup', { name: 'Mail Fail', email: 'mf@example.com', password: 'correct-horse', acceptTerms: true })
     assert.equal(again.status, 409)
     assert.equal(again.json.error, 'exists_unverified')
     ctx.app.locals.ctx.email.send = realSend
@@ -148,7 +148,7 @@ test('password reset, logout and wrong password (local mode)', async () => {
   const base = `http://127.0.0.1:${server.address().port}`
   const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.99' }, body: JSON.stringify(body) }).then(async r => ({ status: r.status, json: await r.json() }))
   try {
-    assert.equal((await post('/api/auth/signup', { name: 'Rae Set', email: 'rae@example.com', password: 'first-pass-1' })).status, 201)
+    assert.equal((await post('/api/auth/signup', { name: 'Rae Set', email: 'rae@example.com', password: 'first-pass-1', acceptTerms: true })).status, 201)
     await ctx.db.query(`update profiles set email_verified_at=now() where email='rae@example.com'`)
     const wrong = await post('/api/auth/login', { email: 'rae@example.com', password: 'nope-nope-1' })
     assert.equal(wrong.status, 401)
@@ -179,7 +179,7 @@ test('reminders: manual resend, resend all, 24h limit, cron auto reminders, send
     return { status: res.status, json: await res.json().catch(() => null) }
   }
   try {
-    await call('/api/auth/signup', { method: 'POST', body: { name: 'Sam Sender', email: 'sam@example.com', password: 'correct-horse', promo: 'VIP10' } })
+    await call('/api/auth/signup', { method: 'POST', body: { name: 'Sam Sender', email: 'sam@example.com', password: 'correct-horse', acceptTerms: true, promo: 'VIP10' } })
     await ctx.db.query(`update profiles set email_verified_at=now() where email='sam@example.com'`)
     const token = (await call('/api/auth/login', { method: 'POST', body: { email: 'sam@example.com', password: 'correct-horse' } })).json.token
     const settings = await call('/api/settings', { method: 'PUT', token, body: { reminderDefault: 2, senderNudgeDays: 3 } })

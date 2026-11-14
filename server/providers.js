@@ -196,7 +196,8 @@ export function createPayments(config) {
         cancel_url: `${config.appUrl}/?checkout=cancel#/`,
         metadata: { userId, kind, documentId: documentId || '', credits: String(pack.credits) },
         payment_method_types: ['card'],
-        allow_promotion_codes: false
+        allow_promotion_codes: false,
+        custom_text: { submit: { message: `By paying, you agree to the Terms of Service at ${config.appUrl}/terms. Credits are non-refundable once used.` } }
       })
       return { id: session.id, url: session.url, customerId: customer }
     },

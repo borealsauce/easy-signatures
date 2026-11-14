@@ -129,7 +129,7 @@ export async function createApp(env = process.env) {
   })
 
   app.post('/api/auth/signup', asyncRoute(async (req, res) => {
-    const user = await signup(ctx, { name: req.body.name, email: req.body.email, password: req.body.password, ip: req.device.ip, promo: req.body.promo })
+    const user = await signup(ctx, { name: req.body.name, email: req.body.email, password: req.body.password, ip: req.device.ip, promo: req.body.promo, acceptTerms: req.body.acceptTerms === true })
     res.status(201).json({ ok: true, email: user.email, emailSent: user.emailSent !== false, promo: user.promo || null })
   }))
 

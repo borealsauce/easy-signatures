@@ -1,4 +1,5 @@
 import { initialsOf } from '/shared/names.js'
+import { TERMS_VERSION } from '/shared/terms.js'
 import { parseBulkRecipients, bulkCostSummary, allowanceLabel } from '/shared/bulk.js'
 import { calc, visible, validate } from '/shared/fields.js'
 import { marketingHtml } from '/marketing.js'
@@ -268,10 +269,12 @@ function signup() {
   <label class="f">Email</label><input id="em" type="email" autocomplete="email" style="width:100%">
   <label class="f">Password</label><input id="pw" type="password" autocomplete="new-password" style="width:100%">
   <label class="f">Promo code (optional)</label><input id="pc" autocomplete="off" style="width:100%;text-transform:uppercase" placeholder="Enter code">
-  <br><br><button class="p" id="go">Create account</button><div id="smsg"></div>
+  <label class="row" style="margin-top:14px;align-items:flex-start;gap:8px"><input type="checkbox" id="tos" style="margin-top:3px"> <span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a></span></label>
+  <br><button class="p" id="go">Create account</button><div id="smsg"></div>
   <p><a href="#/login">I already have an account</a></p></div>`
   $('#go').onclick = async () => {
-    const res = await api('/api/auth/signup', { method: 'POST', body: { name: $('#nm').value, email: $('#em').value, password: $('#pw').value, promo: $('#pc').value } })
+    if (!$('#tos').checked) { $('#smsg').innerHTML = '<p class="banner">Please agree to the Terms and Privacy Policy to create your account.</p>'; return }
+    const res = await api('/api/auth/signup', { method: 'POST', body: { name: $('#nm').value, email: $('#em').value, password: $('#pw').value, promo: $('#pc').value, acceptTerms: true, termsVersion: TERMS_VERSION } })
     if (!res.ok) { $('#smsg').innerHTML = `<p class="banner">${esc(res.json?.message || 'Could not sign up')}</p>`; return }
     const em = esc($('#em').value)
     const promo = res.json.promo
@@ -605,7 +608,8 @@ function payModal(id, info) {
   modal(`<h3>This send needs a credit</h3><p>${esc(info?.message || 'Buy a pack, then send.')}</p>
   <div class="row" style="margin-top:10px"><button class="p" onclick="buy('doc1'${extra})">1 document · $1</button><button onclick="buy('doc10'${extra})">10 documents · $5</button><button onclick="buy('doc50'${extra})">50 documents · $10</button></div>
   <p class="note">Have a promo code? <a href="#/settings" onclick="closeModal()">Enter it in Settings</a>.</p>
-  <p class="note">Apple Pay and Google Pay show on the secure checkout page when your device supports them. The free-document checks never block a paid send.</p>`)
+  <p class="note">Apple Pay and Google Pay show on the secure checkout page when your device supports them. The free-document checks never block a paid send.</p>
+  <p class="note">By purchasing, you agree to our <a href="/terms" target="_blank" rel="noopener">Terms</a>. Credits are non-refundable once used.</p>`)
 }
 async function buy(kind, documentId) {
   if (!TOKEN) {
@@ -670,7 +674,7 @@ async function signToken(token) {
   const approver = s.role === 'approver'
   const brand = session.brand || {}
   V.innerHTML = `<div class="signbar" style="border-top:4px solid ${esc(brand.color || 'var(--brand2)')}">${brand.logoUrl ? `<img src="${esc(brand.logoUrl)}" alt="" style="height:28px;max-width:140px;object-fit:contain">` : ''}<b>${esc(brand.company ? brand.company + ' · ' : '')}${esc(d.name)}</b><span>· ${esc(s.name)}${s.role === 'in-person' ? ' · signing in person' : ''}</span><span class="sp"></span><span id="prog"></span>${approver ? '' : '<button id="nx" style="background:var(--acc)">Next field</button>'}<button id="fin" class="p" style="background:var(--brand2)">${approver ? 'Approve' : 'Finish'}</button><button id="dec" style="background:#fee2e2">Decline</button><button id="cm">Comments (${d.comments.length})</button></div>
-  <div class="card" id="consent" style="margin-bottom:12px">${session.accessCodeRequired ? `<label class="f">Access code from your email</label><input id="acode" maxlength="6" style="max-width:160px;letter-spacing:3px">` : ''}<label class="row"><input type="checkbox" id="ok"> ${esc(session.consentText)}</label></div><div class="pages" id="pages"></div>`
+  <div class="card" id="consent" style="margin-bottom:12px">${session.accessCodeRequired ? `<label class="f">Access code from your email</label><input id="acode" maxlength="6" style="max-width:160px;letter-spacing:3px">` : ''}<label class="row"><input type="checkbox" id="ok"> ${esc(session.consentText).replace('Terms of Use', '<a href="/terms" target="_blank" rel="noopener">Terms of Use</a>')}</label></div><div class="pages" id="pages"></div>`
   await renderPages($('#pages'), d)
   const mine = () => d.fields.filter(f => f.signer === s.id && visible(d.fields, f) && f.type !== 'formula')
   const draw = () => {

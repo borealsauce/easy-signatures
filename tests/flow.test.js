@@ -94,7 +94,7 @@ async function verifiedUser({ email, password = 'correct-horse', name = 'Ada Lov
   ip ||= `203.0.113.${(n % 200) + 1}`
   device ||= `device-${String(n).padStart(4, '0')}-aaaa`
   phone ||= `+1555555${String(1000 + n)}`
-  const signup = await api('/api/auth/signup', { method: 'POST', body: { name, email, password }, ip, device })
+  const signup = await api('/api/auth/signup', { method: 'POST', body: { name, email, password, acceptTerms: true }, ip, device })
   assert.equal(signup.status, 201, signup.text)
   const confirm = mailTo(email, m => m.subject?.includes('Confirm'))
   assert.ok(confirm?.url, 'verification email')
@@ -245,7 +245,7 @@ test('end to end: free document, payment, and abuse checks', { timeout: 120000 }
 
   const voip = await api('/api/auth/signup', {
     method: 'POST', ip: '203.0.113.30', device: 'device-voip-aaaa',
-    body: { name: 'Voip User', email: 'voip@example.com', password: 'correct-horse' }
+    body: { name: 'Voip User', email: 'voip@example.com', password: 'correct-horse', acceptTerms: true }
   })
   assert.equal(voip.status, 201)
   const voipToken = new URL(mailTo('voip@example.com').url).searchParams.get('token')
@@ -302,7 +302,7 @@ test('end to end: free document, payment, and abuse checks', { timeout: 120000 }
 
   const disposable = await api('/api/auth/signup', {
     method: 'POST', ip: '203.0.113.70', device: 'device-disp-aaaa',
-    body: { name: 'Temp', email: 'me@mailinator.com', password: 'correct-horse' }
+    body: { name: 'Temp', email: 'me@mailinator.com', password: 'correct-horse', acceptTerms: true }
   })
   assert.equal(disposable.status, 400)
   assert.equal(disposable.json.error, 'disposable')
@@ -311,7 +311,7 @@ test('end to end: free document, payment, and abuse checks', { timeout: 120000 }
   for (let i = 0; i < 6; i++) {
     const res = await api('/api/auth/signup', {
       method: 'POST', ip: '203.0.113.80', device: `device-rate-${i}-aaa`,
-      body: { name: 'Rate ' + i, email: `rate${i}@example.com`, password: 'correct-horse' }
+      body: { name: 'Rate ' + i, email: `rate${i}@example.com`, password: 'correct-horse', acceptTerms: true }
     })
     last = res.status
   }

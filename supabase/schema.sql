@@ -310,3 +310,8 @@ create table if not exists team_invites (
 create index if not exists team_invites_email_idx on team_invites (email, accepted_at);
 alter table documents add column if not exists team_id uuid references teams(id) on delete set null;
 create index if not exists documents_team_idx on documents (team_id) where team_id is not null;
+
+-- Clickwrap acceptance of the Terms at signup.
+alter table profiles add column if not exists terms_accepted_at timestamptz;
+alter table profiles add column if not exists terms_version text;
+alter table profiles add column if not exists terms_accepted_ip text;

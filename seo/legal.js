@@ -63,7 +63,10 @@ export const TERMS = {
   eyebrow: 'Legal', crumb: 'Terms of service', h1: 'Terms of service',
   lede: UPDATED,
   compactHero: true, noHeroCta: true, noBottomCta: true,
-  body: doc(`<p>These terms govern your use of Easy Digital Signatures at easydigitalsignatures.com (“the service”), operated by the owner of this website (“we”, “us”). By creating an account, sending a document, or signing a document, you agree to these terms and to our <a href="/privacy">privacy policy</a>.</p>
+  body: doc(`<p>These terms govern your use of Easy Digital Signatures at easydigitalsignatures.com (“the service”), operated by the owner of this website (“we”, “us”). These terms apply together with our <a href="/privacy">privacy policy</a>.</p>
+<div class="note" id="acceptance" role="note"><h2 style="margin-top:0">Acceptance of Terms</h2>
+<p><b>By accessing or using this website or any of our services in any way, whether free or paid, you accept these Terms, including the disclaimers, limitation of liability, time limit for claims, and indemnity below.</b> This includes simply visiting the site; using the free signature generator or any other free tool; sending a free document; using an account with free, trial, or promotional credits; signing, reviewing, or declining a document as a signer, even if you never create an account; using our API, webhooks, or other developer features; and buying or using paid credits.</p>
+<p style="margin-bottom:0">If you don’t agree, don’t access or use the site or services. If you use the services on behalf of a business or other organization, you accept these Terms for it and confirm you have authority to do so.</p></div>
 <h2>1. The service</h2>
 <p>The service lets account holders upload documents, place fields, send them to others for electronic signature, and download completed PDFs with an audit certificate. Signers don’t need an account. We may change, add, or remove features over time.</p>
 <h2>2. Consent to do business electronically</h2>
@@ -95,15 +98,19 @@ export const TERMS = {
 <h2>8. Availability</h2>
 <p>We work to keep the service available, but it may be interrupted for maintenance, outages, or reasons beyond our control. Download and keep copies of your completed documents.</p>
 <h2>9. Disclaimer of warranties</h2>
-<p>The service is provided “as is” and “as available”, without warranties of any kind, express or implied, including merchantability, fitness for a particular purpose, and non-infringement, to the fullest extent the law allows. We don’t warrant that any document signed through the service will be enforceable in every situation.</p>
+<p>This section applies to everyone who uses the site or services, including free, trial, promotional, signer, and API use. The service is provided “as is” and “as available”, without warranties of any kind, express or implied, including merchantability, fitness for a particular purpose, and non-infringement, to the fullest extent the law allows. We don’t warrant that any document signed through the service will be enforceable in every situation.</p>
 <h2>10. Limitation of liability</h2>
-<p>To the fullest extent the law allows, we won’t be liable for any indirect, incidental, special, consequential, or punitive damages, or for lost profits, revenue, data, or business opportunities, arising from your use of the service. Our total liability for any claim relating to the service is limited to the amount you paid us in the 12 months before the claim, or $50 if you paid nothing. Some places don’t allow these limits, so they may not apply to you.</p>
+<p>This section applies to every user and every kind of use, whether free or paid, including visitors, users of free tools, free-document and promotional-credit users, signers without an account, and API users. To the fullest extent the law allows, we won’t be liable for any indirect, incidental, special, consequential, or punitive damages, or for lost profits, revenue, data, or business opportunities, arising from your use of the service. Our total liability for all claims relating to the site or services, combined, is limited to the greater of (a) $50 or (b) the amount you paid us in the 12 months before the event giving rise to the claim. If you paid nothing, including if you used only free or promotional features, our total liability is limited to $50. Some places don’t allow these limits, so they may not apply to you.</p>
 <h2>11. Indemnity</h2>
-<p>You agree to defend and hold us harmless from claims arising from documents you send, your violation of these terms, or your violation of anyone else’s rights.</p>
+<p>This section applies to every user, whether free or paid. You agree to defend, indemnify, and hold us harmless from claims, losses, and expenses (including reasonable attorneys’ fees) arising from documents you send, your violation of these terms, or your violation of anyone else’s rights.</p>
 <h2>12. Termination</h2>
 <p>You can stop using the service and ask us to close your account at any time. We may suspend or end access for violations of these terms or to protect the service. Sections that by their nature should survive termination, including payments, disclaimers, limitation of liability, and indemnity, will survive.</p>
-<h2>13. Changes</h2>
+<h2>13. Time limit to bring claims</h2>
+<p>To the fullest extent permitted by law, any claim or cause of action arising out of or relating to the site, the services, or these Terms must be filed within six (6) months after the claim or cause of action arises, or it is permanently barred. If this six-month period is held unenforceable for a particular claim, the claim must be filed within the shortest period permitted by applicable law.</p>
+<h2>14. Severability</h2>
+<p>If any part of these Terms is held invalid or unenforceable, that part will be enforced to the maximum extent permitted and modified only as much as needed to make it enforceable, and the rest of these Terms will remain in full effect.</p>
+<h2>15. Changes</h2>
 <p>We may update these terms. We’ll change the “Last updated” date and, for significant changes, notify account holders. Continuing to use the service after changes take effect means you accept them.</p>
-<h2>14. Contact</h2>
+<h2>16. Contact</h2>
 <p>Questions about these terms? Use our <a href="/contact">contact form</a>.</p>`)
 }

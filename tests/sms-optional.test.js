@@ -68,7 +68,7 @@ test('email signing works when SMS is off', async () => {
   try {
     const cfg = await call('/api/config').then(r => r.json())
     assert.equal(cfg.smsEnabled, false)
-    const signup = await call('/api/auth/signup', { method: 'POST', body: { name: 'Ada Lovelace', email: 'ada-sms-off@example.com', password: 'correct-horse' } })
+    const signup = await call('/api/auth/signup', { method: 'POST', body: { name: 'Ada Lovelace', email: 'ada-sms-off@example.com', password: 'correct-horse', acceptTerms: true } })
     assert.equal(signup.status, 201)
     await ctx.db.query(`update profiles set email_verified_at=now() where email=$1`, ['ada-sms-off@example.com'])
     const login = await call('/api/auth/login', { method: 'POST', body: { email: 'ada-sms-off@example.com', password: 'correct-horse' } }).then(r => r.json())

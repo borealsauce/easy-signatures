@@ -46,6 +46,7 @@ export const TOOL_PAGE = {
 <div class="sg-row" style="margin-top:10px"><button type="button" class="mini" id="sg-undo">Undo</button><button type="button" class="mini" id="sg-clear">Clear</button><label for="sg-width" style="margin:0 0 0 8px">Pen</label><input id="sg-width" type="range" min="1.5" max="6" step="0.5" value="3"></div></div>
 <div class="sg-row"><span style="font-weight:600;font-size:14px">Ink</span><div class="sg-colors"><button type="button" class="sg-color" data-color="#0F172A" aria-pressed="true" aria-label="Black" style="background:#0F172A"></button><button type="button" class="sg-color" data-color="#1E3A8A" aria-pressed="false" aria-label="Blue" style="background:#1E3A8A"></button><button type="button" class="sg-color" data-color="#115E59" aria-pressed="false" aria-label="Teal" style="background:#115E59"></button></div></div>
 <div class="sg-row"><button type="button" class="s-btn big" id="sg-download">Download PNG</button></div>
+<p class="src" style="margin:0">By using this tool you agree to our <a href="/terms">Terms</a>.</p>
 <p id="sg-msg" role="status"></p>
 <div class="sg-next" id="sg-next" hidden><b>Need someone else to sign?</b> Upload a PDF, place the fields, and send a signing link. Your first document is free. <a href="/#/signup" data-cta="generator">Create a free account</a></div>
 </div></section>

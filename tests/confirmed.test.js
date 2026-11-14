@@ -61,7 +61,7 @@ test('email confirmation lands on a celebratory page', async (t) => {
   const signup = await fetch(base + '/api/auth/signup', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.88', 'x-device-local': 'device-confirm-aaaa' },
-    body: JSON.stringify({ name: 'Casey Confirm', email, password: 'correct-horse' })
+    body: JSON.stringify({ name: 'Casey Confirm', email, password: 'correct-horse', acceptTerms: true })
   })
   assert.equal(signup.status, 201, await signup.text())
   const confirm = mailTo(email)
