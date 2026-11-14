@@ -1,7 +1,7 @@
 import { initialsOf } from '/shared/names.js'
 import { TERMS_VERSION } from '/shared/terms.js'
 import { parseBulkRecipients, bulkCostSummary, allowanceLabel } from '/shared/bulk.js'
-import { calc, visible, validate, ROLE_OPTIONS, ROLE_LABELS, roleLabel } from '/shared/fields.js'
+import { calc, visible, validate, ROLE_OPTIONS, ROLE_LABELS, roleLabel, ME_ID, ME_COLOR, FIELD_LIBRARY, fieldMeta, FT, MIN, INPUT_TYPES, US_STATES, isSensitive, formatField, DEFAULT_FAVORITES } from '/shared/fields.js'
 import { marketingHtml } from '/marketing.js'
 import { logoMarkSvg } from '/shared/logo.js'
 import { mountHelp } from '/help.js'
@@ -11,8 +11,6 @@ const $ = (s, r = document) => r.querySelector(s)
 const $$ = (s, r = document) => [...r.querySelectorAll(s)]
 const V = $('#view')
 const COLORS = ['#2563eb', '#db2777', '#16a34a', '#ea580c', '#7c3aed', '#0891b2']
-const MIN = { signature: [120, 36], initials: [48, 28], date: [70, 22], name: [70, 22], text: [70, 22], number: [50, 22], checkbox: [16, 16], dropdown: [70, 22], formula: [60, 22], payment: [100, 30], attachment: [90, 26] }
-const FT = { signature: ['✍️', 'Signature', .26, .06], initials: ['🔤', 'Initials', .09, .05], date: ['📅', 'Date signed', .16, .035], name: ['👤', 'Full name', .24, .035], text: ['📝', 'Text', .24, .035], number: ['#️⃣', 'Number', .12, .035], checkbox: ['☑️', 'Checkbox', .03, .023], dropdown: ['🔽', 'Dropdown', .18, .035], formula: ['🧮', 'Formula', .14, .035], payment: ['💳', 'Payment', .2, .045], attachment: ['📎', 'Attachment', .2, .04] }
 const SIGFONTS = ['Caveat', 'Dancing Script', 'Great Vibes']
 const uid = () => crypto.randomUUID()
 function closeRoleMenus() {
@@ -171,6 +169,79 @@ async function renderPages(el, d) {
   }
 }
 function sigOf(d, id) { return d.signers.find(s => s.id === id) }
+function partyOf(d, id) {
+  if (id === ME_ID) return { id: ME_ID, name: 'Me (Fill out now)', color: ME_COLOR, role: 'sender' }
+  return sigOf(d, id) || d.signers[0] || { id, name: 'Signer', color: '#64748b' }
+}
+function fieldCount(d, id) { return (d.fields || []).filter(f => f.signer === id).length }
+function stateOptions(val) {
+  const cur = String(val || '')
+  return `<option value="">State…</option>` + US_STATES.map(([c, n]) => `<option value="${c}" ${cur === c || cur === n ? 'selected' : ''}>${c} — ${n}</option>`).join('')
+}
+function pickImageFile(cb) {
+  const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/png,image/jpeg'
+  i.onchange = () => {
+    const file = i.files[0]; if (!file) return
+    if (file.size > 10 * 1024 * 1024) return toast('That image is too large (max 10 MB)')
+    const r = new FileReader()
+    r.onload = () => cb(r.result)
+    r.readAsDataURL(file)
+  }
+  i.click()
+}
+function editorFieldFace(f, v, meta, canFill) {
+  if (f.type === 'formula') return esc('= ' + (v ?? ''))
+  if (v && String(v).startsWith('data:')) return `<img src="${v}">`
+  if (v === true) return '✔'
+  if (!canFill) return v ? esc(formatField(f, v)) : `${meta.icon} ${esc(f.label)}${f.required ? '*' : ''}`
+  const ph = esc(f.placeholder || f.label || '') + (f.required ? '*' : '')
+  if (f.type === 'state') return `<select class="me-fill">${stateOptions(v)}</select>`
+  if (f.type === 'dropdown') return `<select class="me-fill"><option value="">${ph}</option>${(f.options || []).map(o => `<option ${o === v ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`
+  if (f.type === 'radio') return `<div class="radios">${(f.options || []).map(o => `<label><input type="radio" name="r-${f.id}" value="${esc(o)}" ${v === o ? 'checked' : ''}> ${esc(o)}</label>`).join('')}</div>`
+  if (f.type === 'datetime') return `<input class="me-fill" type="${f.format === 'date' ? 'date' : 'datetime-local'}" value="${esc(v || '')}">`
+  if (f.type === 'date') return `<input class="me-fill" type="date" value="${esc(v || '')}">`
+  if (INPUT_TYPES.includes(f.type)) return `<input class="me-fill" type="text" autocomplete="off" placeholder="${ph}" value="${esc(v || '')}">`
+  if (f.type === 'checkbox') return v === true ? '✔' : ''
+  if ((f.type === 'stamp' || f.type === 'attachment' || f.type === 'signature' || f.type === 'initials' || f.type === 'payment') && v) return esc(formatField(f, v))
+  return `${meta.icon} ${esc(f.label)}${f.required ? '*' : ''}`
+}
+function bindEditorFill(el, f, d, after) {
+  const bump = () => { after() }
+  const inp = $('input.me-fill,select.me-fill', el)
+  if (inp) {
+    inp.onchange = () => {
+      let val = inp.value || null
+      if (val && !validate(f, val)) { toast(`${f.label} doesn’t look valid.`); return }
+      if (isSensitive(f.type) && val) val = formatField(f, val)
+      if (f.type === 'currency' && val) val = formatField(f, val)
+      f.value = val
+      bump()
+    }
+    return
+  }
+  $$('.radios input', el).forEach(r => { r.onchange = () => { f.value = r.value; bump() } })
+  if (['signature', 'initials', 'stamp', 'attachment', 'checkbox', 'payment'].includes(f.type)) {
+    el.addEventListener('click', e => {
+      if (e.target.classList.contains('x') || e.target.classList.contains('h')) return
+      if (f.type === 'signature' || f.type === 'initials') {
+        const me = { name: S.me?.name || 'Me', sigImg: null, iniImg: null }
+        sigModal(f.type, me, d, () => { f.value = f.type === 'signature' ? me.sigImg : me.iniImg; bump() })
+      } else if (f.type === 'stamp') {
+        pickImageFile(data => { f.value = data; bump() })
+      } else if (f.type === 'attachment') {
+        const i = document.createElement('input'); i.type = 'file'
+        i.onchange = () => { if (i.files[0]?.size > 10 * 1024 * 1024) return toast('Attachment too large (max 10 MB)'); f.value = '📎 ' + i.files[0].name; bump() }
+        i.click()
+      } else if (f.type === 'checkbox') { f.value = f.value === true ? false : true; bump() }
+      else if (f.type === 'payment') {
+        modal(`<h3>Acknowledge $${f.amount}</h3><p>This records the amount on the document. Easy Digital Signatures does not collect this payment.</p><button class="p" id="pay">Acknowledge $${f.amount}</button>`)
+        $('#pay').onclick = () => { f.value = `Acknowledged $${f.amount}`; closeModal(); bump() }
+      }
+    })
+  }
+}
+
+
 async function sha256(b) { const h = await crypto.subtle.digest('SHA-256', b); return [...new Uint8Array(h)].map(x => x.toString(16).padStart(2, '0')).join('') }
 
 function sortable(t) {
@@ -698,7 +769,7 @@ async function editor(id) {
   V.innerHTML = `<div class="row" style="margin-bottom:12px"><input id="dn" value="${esc(d.name)}" style="font-size:20px;font-weight:700;flex:1;min-width:200px" ${locked ? 'disabled' : ''}><span class="pill s-${d.status}">${d.status}</span>
   ${d.tpl ? `<span class="pill s-draft">template builder</span><a class="btn" href="#/templates">Done</a><button class="p" onclick="saveTpl('${d.id}')">Save template</button>` : locked ? `<button onclick="timeline('${d.id}')">Timeline</button>` : `<button onclick="saveTpl('${d.id}')">Save as template</button><button class="p" id="send">Send</button>`}</div>
   ${d.tpl ? '<div class="card" style="margin-bottom:12px;padding:10px 14px;font-size:13px"><b>Template builder.</b> Recipients here are roles. Real names and emails are filled in each time you use the template.</div>' : ''}
-  <div class="editor"><div class="panel"><h4>Fields — drag onto page</h4><div class="ftools">${Object.entries(FT).map(([k, [i, l]]) => `<div class="ftool" data-t="${k}">${i} ${l}</div>`).join('')}</div><p style="font-size:12px;color:var(--mut)">Click a field, then click the page. Shift+click keeps placing. Esc cancels.</p></div>
+  <div class="editor"><div class="panel fpanel" id="fpanel"></div>
   <div class="pages" id="pages"></div>
   <div class="panel"><h4 class="rcph">${d.tpl ? 'Roles' : 'Who needs to sign?'}${d.tpl || locked ? '' : '<button class="rcpedit" onclick="editRecipients()">Edit</button>'}</h4><label class="row" style="font-size:13px"><input type="checkbox" id="ord" ${d.ordered ? 'checked' : ''}> Sign in order — one after another</label><div id="sg"></div>${locked ? '' : '<button onclick="addSigner()" style="width:100%">+ Add recipient</button>'}
   <h4 style="margin-top:16px">Field properties</h4><div id="props"><p style="font-size:13px;color:var(--mut)">Select a field.</p></div>
@@ -710,7 +781,7 @@ async function editor(id) {
   const drawS = () => {
     $('#sg').innerHTML = d.signers.map((s, i) => `<div style="border:1px solid ${s.id === cur ? s.color : 'var(--line)'};border-radius:8px;padding:6px;margin-bottom:6px" data-s="${s.id}"><div class="signer"><span class="rav sm" style="background:${s.color}">${esc(s.name.trim() ? initialsOf(s.name) : '?')}</span><b style="font-size:12px">${d.ordered ? i + 1 + '.' : ''}</b><input value="${esc(s.name)}" data-k="name" placeholder="${d.tpl ? 'Role name' : 'Full name'}" ${locked ? 'disabled' : ''}>${i > 0 && !locked ? `<span style="cursor:pointer" data-up="${i}">↑</span><span style="cursor:pointer" data-del="${i}">✕</span>` : ''}</div><div class="signer"><input value="${esc(s.email || '')}" data-k="email" placeholder="${s.role === 'in-person' ? 'Email optional' : 'email@example.com'}" ${locked ? 'disabled' : ''}><div class="role-dd"><button type="button" class="role-dd-btn" data-k="role" data-role="${s.role}" ${locked ? 'disabled' : ''} aria-haspopup="listbox" aria-expanded="false" title="${esc((ROLE_LABELS.find(o => o.value === s.role) || ROLE_OPTIONS[0]).hint)}">${esc(roleLabel(s.role))}<span class="caret">▾</span></button></div></div>${s.role === 'in-person' ? '<p class="note">No email needed — you’ll hand them this device after you send.</p>' : s.role === 'approver' ? '<p class="note">Approves or declines with a reason. No signature fields needed.</p>' : s.role === 'cc' ? '<p class="note">Gets a copy of the finished document. They don’t sign.</p>' : ''}${d.tpl || s.role === 'cc' || s.role === 'approver' ? '' : `<div class="asig"><img data-ps="sig" src="${s.name.trim() ? typedSig(s.name) : ''}"><img data-ps="ini" src="${s.name.trim() ? typedSig(initialsOf(s.name)) : ''}"><small data-ps="txt">${s.name.trim() ? initialsOf(s.name) : ''}</small></div>`}</div>`).join('')
     $$('[data-s]').forEach(el => {
-      el.onclick = e => { if (e.target.closest('input,select,button,.role-dd')) return; cur = el.dataset.s; drawS() }
+      el.onclick = e => { if (e.target.closest('input,select,button,.role-dd')) return; cur = el.dataset.s; drawS(); if (typeof drawPanel === 'function') drawPanel() }
       const nm = $('[data-k=name]', el)
       if (nm) nm.oninput = () => { const v = nm.value.trim(), a = $('[data-ps=sig]', el); if (!a) return; a.src = v ? typedSig(v) : ''; $('[data-ps=ini]', el).src = v ? typedSig(initialsOf(v)) : ''; $('[data-ps=txt]', el).textContent = v ? initialsOf(v) : '' }
       $$('input[data-k]', el).forEach(inp => inp.onchange = () => { const s = sigOf(d, el.dataset.s); s[inp.dataset.k] = inp.value; save(); drawF() })
@@ -721,24 +792,29 @@ async function editor(id) {
         openRoleMenu(roleBtn, s.role, role => { s.role = role; save(); drawS(); drawF() })
       }
     })
-    $$('[data-del]').forEach(x => x.onclick = () => { const s = d.signers.splice(+x.dataset.del, 1)[0]; d.fields = d.fields.filter(f => f.signer !== s.id); save(); drawS(); drawF() })
+    $$('[data-del]').forEach(x => x.onclick = () => { const s = d.signers.splice(+x.dataset.del, 1)[0]; d.fields = d.fields.filter(f => f.signer !== s.id); save(); drawS(); drawF(); if (typeof drawPanel === 'function') drawPanel() })
     $$('[data-up]').forEach(x => x.onclick = () => { const i = +x.dataset.up; [d.signers[i - 1], d.signers[i]] = [d.signers[i], d.signers[i - 1]]; save(); drawS() })
   }
   const drawF = () => {
     $$('.fld').forEach(x => x.remove())
     d.fields.forEach(f => {
       const pg = $(`.page[data-page="${f.page}"]`); if (!pg) return
-      const s = sigOf(d, f.signer) || d.signers[0]
+      const s = partyOf(d, f.signer)
       const el = document.createElement('div'); el.className = 'fld ed' + (sel === f.id ? ' sel' : ''); el.dataset.id = f.id
       Object.assign(el.style, { left: f.x * 100 + '%', top: f.y * 100 + '%', width: f.w * 100 + '%', height: f.h * 100 + '%', borderColor: s.color, color: s.color, background: s.color + '22' })
       const v = f.type === 'formula' ? '= ' + calc(d.fields, f) : f.value
-      el.innerHTML = '<span class="fc">' + (v && String(v).startsWith('data:') ? `<img src="${v}">` : v === true ? '✔' : v ? esc(v) : `${FT[f.type][0]} ${esc(f.label)}${f.required ? '*' : ''}`) + '</span>' + (locked ? '' : '<span class="x" role="button" aria-label="Delete field" title="Delete field (Delete key)">✕</span>' + (sel === f.id ? '<span class="h hl"></span><span class="h hr"></span><span class="h ht"></span>' : ''))
+      const meta = fieldMeta(f.type)
+      const canFill = !locked && f.signer === ME_ID
+      const face = editorFieldFace(f, v, meta, canFill)
+      el.innerHTML = (canFill ? face : '<span class="fc">' + face + '</span>') + (locked ? '' : '<span class="x" role="button" aria-label="Delete field" title="Delete field (Delete key)">✕</span>' + (sel === f.id ? '<span class="h hl"></span><span class="h hr"></span><span class="h ht"></span>' : ''))
       pg.appendChild(el)
+      if (canFill) bindEditorFill(el, f, d, () => { save(); drawF(); if (typeof drawPanel === 'function') drawPanel() })
       if (locked) return
       if (el.offsetWidth < 56 || el.offsetHeight < 20) el.classList.add('tiny')
       el.onpointerdown = e => {
         if (e.target.closest('.x')) { e.preventDefault(); e.stopPropagation(); delField(f.id); return }
-        const was = sel === f.id; sel = f.id; props(); if (!was) { el.classList.add('sel'); el.insertAdjacentHTML('beforeend', '<span class="h hl"></span><span class="h hr"></span><span class="h ht"></span>') }
+        if (e.target.closest('input,select,textarea,label,.me-fill,.radios')) { sel = f.id; props(); return }
+        const was = sel === f.id; sel = f.id; props(); if (!was) { el.classList.add('sel'); if (!$('.h', el)) el.insertAdjacentHTML('beforeend', '<span class="h hl"></span><span class="h hr"></span><span class="h ht"></span>') }
         const cl = e.target.classList, mode = cl.contains('hl') ? 'l' : cl.contains('hr') ? 'r' : cl.contains('ht') ? 't' : 'm'
         const r = pg.getBoundingClientRect(); const PW = +pg.dataset.pw || 612, PH = +pg.dataset.ph || 792, [mw, mh] = MIN[f.type] || [30, 16], minW = mw / PW, minH = mh / PH
         const sx = e.clientX, sy = e.clientY, o = { ...f }; el.setPointerCapture(e.pointerId)
@@ -758,47 +834,111 @@ async function editor(id) {
   const props = () => {
     const f = d.fields.find(x => x.id === sel); if (!f) { $('#props').innerHTML = '<p style="font-size:13px;color:var(--mut)">Select a field.</p>'; return }
     $$('.fld').forEach(x => x.classList.toggle('sel', x.dataset.id === sel))
-    $('#props').innerHTML = `<label class="f">Type</label><b>${FT[f.type][1]}</b><label class="f">Assigned to</label><select id="pa" style="width:100%">${d.signers.filter(s => s.role !== 'cc').map(s => `<option value="${s.id}" ${s.id === f.signer ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select>
-    <label class="f">Label</label><input id="pl" value="${esc(f.label)}" style="width:100%"><label class="row" style="font-size:13px;margin-top:6px"><input type="checkbox" id="pr" ${f.required ? 'checked' : ''}> Required</label>
+    const assigners = [`<option value="${ME_ID}" ${f.signer === ME_ID ? 'selected' : ''}>Me (Fill out now)</option>`].concat(d.signers.filter(s => s.role !== 'cc').map(s => `<option value="${s.id}" ${s.id === f.signer ? 'selected' : ''}>${esc(s.name)}</option>`))
+    $('#props').innerHTML = `<label class="f">Type</label><b>${esc(fieldMeta(f.type).label)}</b><label class="f">Assigned to</label><select id="pa" style="width:100%">${assigners.join('')}</select>
+    <label class="f">Label</label><input id="pl" value="${esc(f.label)}" style="width:100%">
+    <label class="f">Placeholder</label><input id="ph" value="${esc(f.placeholder || '')}" style="width:100%">
+    <label class="row" style="font-size:13px;margin-top:6px"><input type="checkbox" id="pr" ${f.required ? 'checked' : ''}> Required</label>
     ${['text', 'name'].includes(f.type) ? `<label class="f">Validation</label><select id="pv" style="width:100%">${['none', 'email', 'number', 'zip', 'phone'].map(v => `<option ${f.valid === v ? 'selected' : ''}>${v}</option>`).join('')}</select>` : ''}
-    ${f.type === 'dropdown' ? `<label class="f">Options (comma separated)</label><input id="po" value="${esc((f.options || ['Option A', 'Option B']).join(', '))}" style="width:100%">` : ''}
+    ${f.type === 'dropdown' || f.type === 'radio' ? `<label class="f">Options (comma separated)</label><input id="po" value="${esc((f.options || []).join(', '))}" style="width:100%">` : ''}
     ${f.type === 'formula' ? `<label class="f">Formula — use {Label} of number fields</label><input id="pf" value="${esc(f.formula || '')}" placeholder="{Qty}*{Price}" style="width:100%">` : ''}
     ${f.type === 'payment' ? `<label class="f">Amount ($)</label><input id="pm" type="number" value="${f.amount || 100}" style="width:100%">` : ''}
+    ${f.type === 'currency' ? `<label class="f">Currency</label><input id="pcu" value="${esc(f.currency || 'USD')}" maxlength="3" style="width:100%">` : ''}
+    ${f.type === 'datetime' ? `<label class="f">Format</label><select id="pfmt" style="width:100%"><option value="datetime" ${f.format !== 'date' ? 'selected' : ''}>Date and time</option><option value="date" ${f.format === 'date' ? 'selected' : ''}>Date only</option></select>` : ''}
     <label class="f">Show only when checkbox is checked</label><select id="pc" style="width:100%"><option value="">Always show</option>${d.fields.filter(x => x.type === 'checkbox' && x.id !== f.id).map(x => `<option value="${x.id}" ${f.cond === x.id ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select>`
-    const on = (i, fn) => { const e = $(i); if (e) e.onchange = () => { fn(e); save(); drawF() } }
-    on('#pa', e => f.signer = e.value); on('#pl', e => f.label = e.value); on('#pr', e => f.required = e.checked); on('#pv', e => f.valid = e.value)
+    const on = (i, fn) => { const e = $(i); if (e) e.onchange = () => { fn(e); save(); drawF(); if (typeof drawPanel === 'function') drawPanel() } }
+    on('#pa', e => f.signer = e.value); on('#pl', e => f.label = e.value); on('#ph', e => f.placeholder = e.value); on('#pr', e => f.required = e.checked); on('#pv', e => f.valid = e.value)
     on('#po', e => f.options = e.value.split(',').map(s => s.trim()).filter(Boolean)); on('#pf', e => f.formula = e.value); on('#pm', e => f.amount = +e.value); on('#pc', e => f.cond = e.value || null)
+    on('#pcu', e => f.currency = e.value.toUpperCase().slice(0, 3)); on('#pfmt', e => f.format = e.value)
   }
-  const delField = id => { d.fields = d.fields.filter(x => x.id !== id); if (sel === id) sel = null; save(); drawF(); props() }
-  drawS(); await renderPages($('#pages'), d); drawF(); if (locked) return
+  const delField = id => { d.fields = d.fields.filter(x => x.id !== id); if (sel === id) sel = null; save(); drawF(); props(); if (typeof drawPanel === 'function') drawPanel() }
+  let fieldTab = 'all'
+  let fieldQ = ''
+  let fav = new Set(Array.isArray(S.me?.favoriteFields) && S.me.favoriteFields.length ? S.me.favoriteFields : DEFAULT_FAVORITES)
+  let drawPanel = () => {}
+  drawS(); await renderPages($('#pages'), d); drawF()
   const addAt = (t, pg, fx, fy) => {
-    let [, l, w, h] = FT[t]; const PW = +pg.dataset.pw || 612, PH = +pg.dataset.ph || 792
-    w = Math.max(w, MIN[t][0] / PW); h = Math.max(h, MIN[t][1] / PH); if (t === 'checkbox') h = w * PW / PH
-    const f = { id: uid(), page: +pg.dataset.page, type: t, signer: cur, x: Math.max(0, Math.min(1 - w, fx - w / 2)), y: Math.max(0, Math.min(1 - h, fy - h / 2)), w, h, required: t !== 'checkbox', label: l, value: null }
-    if (t === 'dropdown') f.options = ['Option A', 'Option B']; if (t === 'payment') f.amount = 100
-    d.fields.push(f); sel = f.id; save(); drawF(); props()
+    const meta = fieldMeta(t); let w = meta.w, h = meta.h, l = meta.label
+    const PW = +pg.dataset.pw || 612, PH = +pg.dataset.ph || 792
+    const min = MIN[t] || [70, 22]
+    w = Math.max(w, min[0] / PW); h = Math.max(h, min[1] / PH); if (t === 'checkbox') h = w * PW / PH
+    const f = { id: uid(), page: +pg.dataset.page, type: t, signer: cur, x: Math.max(0, Math.min(1 - w, fx - w / 2)), y: Math.max(0, Math.min(1 - h, fy - h / 2)), w, h, required: t !== 'checkbox' && t !== 'radio', label: l, value: null }
+    if (meta.placeholder) f.placeholder = meta.placeholder
+    if (t === 'dropdown') f.options = ['Option A', 'Option B']
+    if (t === 'radio') f.options = ['Yes', 'No']
+    if (t === 'payment') f.amount = 100
+    if (t === 'currency') f.currency = 'USD'
+    if (t === 'datetime') f.format = 'datetime'
+    if (meta.valid) f.valid = meta.valid
+    d.fields.push(f); sel = f.id; save(); drawF(); props(); if (typeof drawPanel === 'function') drawPanel()
   }
   let armed = null
-  $$('.ftool').forEach(tl => {
-    tl.onpointerdown = e => {
-      e.preventDefault(); const t = tl.dataset.t
-      const g = document.createElement('div'); g.className = 'fld'; const s = sigOf(d, cur) || d.signers[0]
-      Object.assign(g.style, { position: 'fixed', width: '120px', height: '30px', borderColor: s.color, color: s.color, background: s.color + '33', pointerEvents: 'none', zIndex: 99, left: e.clientX - 60 + 'px', top: e.clientY - 15 + 'px' })
-      g.textContent = FT[t][1]; document.body.appendChild(g); let moved = false
-      const mv = m => { moved = true; g.style.left = m.clientX - 60 + 'px'; g.style.top = m.clientY - 15 + 'px' }
-      const up = u => {
-        removeEventListener('pointermove', mv); removeEventListener('pointerup', up); g.remove()
-        const pg = document.elementFromPoint(u.clientX, u.clientY)?.closest('.page')
-        if (pg && moved) { const r = pg.getBoundingClientRect(); addAt(t, pg, (u.clientX - r.left) / r.width, (u.clientY - r.top) / r.height) }
-        else if (!moved) arm(t, tl)
-      }
-      addEventListener('pointermove', mv); addEventListener('pointerup', up)
-    }
-  })
   let ghost = null; const hint = document.createElement('div'); hint.id = 'hint'; hint.textContent = 'Click to place · Shift+click to repeat · Esc to cancel'
-  const disarm = () => { armed = null; ghost && ghost.remove(); ghost = null; hint.remove(); $('#pages')?.classList.remove('placing'); $$('.ftool').forEach(x => x.style.borderColor = '') }
-  function arm(t, tl) { disarm(); armed = t; tl.style.borderColor = 'var(--brand)'; $('#pages').classList.add('placing'); document.body.appendChild(hint); const s = sigOf(d, cur) || d.signers[0]; ghost = document.createElement('div'); ghost.className = 'fld ghost'; Object.assign(ghost.style, { borderColor: s.color, color: s.color, background: s.color + '33', display: 'none' }); ghost.textContent = FT[t][0] + ' ' + FT[t][1] }
-  const pos = (e, pg) => { const r = pg.getBoundingClientRect(), PW = +pg.dataset.pw || 612, PH = +pg.dataset.ph || 792; let [, , w, h] = FT[armed]; w = Math.max(w, MIN[armed][0] / PW); h = Math.max(h, MIN[armed][1] / PH); if (armed === 'checkbox') h = w * PW / PH; return { x: Math.max(0, Math.min(1 - w, (e.clientX - r.left) / r.width - w / 2)), y: Math.max(0, Math.min(1 - h, (e.clientY - r.top) / r.height - h / 2)), w, h } }
+  const disarm = () => { armed = null; ghost && ghost.remove(); ghost = null; hint.remove(); $('#pages')?.classList.remove('placing'); $$('.ftile').forEach(x => x.style.outline = '') }
+  function arm(t, tl) { disarm(); armed = t; if (tl) tl.style.outline = '2px solid var(--brand)'; $('#pages').classList.add('placing'); document.body.appendChild(hint); const s = partyOf(d, cur); ghost = document.createElement('div'); ghost.className = 'fld ghost'; const meta = fieldMeta(t); Object.assign(ghost.style, { borderColor: s.color, color: s.color, background: s.color + '33', display: 'none' }); ghost.textContent = meta.icon + ' ' + meta.label }
+  const pos = (e, pg) => { const r = pg.getBoundingClientRect(), PW = +pg.dataset.pw || 612, PH = +pg.dataset.ph || 792; const meta = fieldMeta(armed); let w = meta.w, h = meta.h; const min = MIN[armed] || [70, 22]; w = Math.max(w, min[0] / PW); h = Math.max(h, min[1] / PH); if (armed === 'checkbox') h = w * PW / PH; return { x: Math.max(0, Math.min(1 - w, (e.clientX - r.left) / r.width - w / 2)), y: Math.max(0, Math.min(1 - h, (e.clientY - r.top) / r.height - h / 2)), w, h } }
+  const bindTools = () => {
+    $$('#fpanel .ftile[data-t]').forEach(tl => {
+      tl.onpointerdown = e => {
+        if (e.target.closest('.star') || locked) return
+        e.preventDefault(); const t = tl.dataset.t
+        const g = document.createElement('div'); g.className = 'fld'; const s = partyOf(d, cur)
+        Object.assign(g.style, { position: 'fixed', width: '120px', height: '30px', borderColor: s.color, color: s.color, background: s.color + '33', pointerEvents: 'none', zIndex: 99, left: e.clientX - 60 + 'px', top: e.clientY - 15 + 'px' })
+        g.textContent = fieldMeta(t).label; document.body.appendChild(g); let moved = false
+        const mv = m => { moved = true; g.style.left = m.clientX - 60 + 'px'; g.style.top = m.clientY - 15 + 'px' }
+        const up = u => {
+          removeEventListener('pointermove', mv); removeEventListener('pointerup', up); g.remove()
+          const pg = document.elementFromPoint(u.clientX, u.clientY)?.closest('.page')
+          if (pg && moved) { const r = pg.getBoundingClientRect(); addAt(t, pg, (u.clientX - r.left) / r.width, (u.clientY - r.top) / r.height) }
+          else if (!moved) arm(t, tl)
+        }
+        addEventListener('pointermove', mv); addEventListener('pointerup', up)
+      }
+    })
+  }
+  drawPanel = () => {
+    const panel = $('#fpanel'); if (!panel) return
+    const q = fieldQ.trim().toLowerCase()
+    const people = [
+      { id: ME_ID, name: 'Me (Fill out now)', color: ME_COLOR, note: true },
+      ...d.signers.filter(s => s.role !== 'cc').map((s, i) => ({ id: s.id, name: (d.ordered ? (i + 1) + '. ' : '') + (s.name || 'Recipient'), color: s.color }))
+    ]
+    const who = people.map(p => `<button type="button" class="rwho ${cur === p.id ? 'on' : ''}" data-who="${p.id}" style="--who:${p.color}"><span class="dot" style="background:${p.color}"></span><span class="sp">${esc(p.name)}</span><small>${fieldCount(d, p.id)} field${fieldCount(d, p.id) === 1 ? '' : 's'}</small></button>`).join('')
+    const sections = FIELD_LIBRARY.map(sec => {
+      let items = sec.items.filter(it => fieldTab !== 'fav' || fav.has(it.type))
+      if (q) items = items.filter(it => (it.label + ' ' + it.type).toLowerCase().includes(q))
+      if (!items.length) return ''
+      return `<div class="fsec">${esc(sec.section)}</div><div class="fgrid">${items.map(it => `<button type="button" class="ftile" data-t="${it.type}" ${locked ? 'disabled' : ''}><span>${esc(it.label)}</span><span class="ic">${it.icon}</span><span class="star ${fav.has(it.type) ? 'on' : ''}" data-fav="${it.type}" title="Favorite">★</span></button>`).join('')}</div>`
+    }).join('')
+    const empty = !sections ? `<p class="note">${fieldTab === 'fav' ? 'Star fields you use often.' : 'No fields match that search.'}</p>` : ''
+    panel.innerHTML = `<div class="rhint">Select a recipient for whom you need to add fields</div>
+      <div class="rpick">${who}</div>
+      ${cur === ME_ID && !locked ? '<p class="note">Fill these fields now — they will already be complete when you send.</p>' : ''}
+      <div class="rhint">Add fields for this recipient by placing them on the document</div>
+      <div class="ftabs"><button type="button" data-tab="fav" class="${fieldTab === 'fav' ? 'on' : ''}">♥ Favorites</button><button type="button" data-tab="all" class="${fieldTab === 'all' ? 'on' : ''}">All Fields</button></div>
+      <input class="fsearch" id="fsearch" placeholder="Search fields" value="${esc(fieldQ)}">
+      ${sections}${empty}
+      <p class="note">Click a field, then click the page. Shift+click keeps placing. Esc cancels.</p>`
+    $$('#fpanel .rwho').forEach(btn => { btn.onclick = () => { cur = btn.dataset.who; drawS(); drawPanel() } })
+    $$('#fpanel [data-tab]').forEach(btn => { btn.onclick = () => { fieldTab = btn.dataset.tab; drawPanel() } })
+    $$('#fpanel [data-fav]').forEach(btn => {
+      btn.onclick = e => {
+        e.preventDefault(); e.stopPropagation()
+        const typ = btn.dataset.fav
+        if (fav.has(typ)) fav.delete(typ); else fav.add(typ)
+        if (S.me) S.me.favoriteFields = [...fav]
+        drawPanel()
+        api('/api/me/favorites', { method: 'PATCH', body: { types: [...fav] } })
+      }
+    })
+    const search = $('#fsearch')
+    if (search) {
+      search.oninput = () => { fieldQ = search.value; drawPanel(); const again = $('#fsearch'); if (again) { again.focus(); again.setSelectionRange(fieldQ.length, fieldQ.length) } }
+    }
+    if (!locked) bindTools()
+  }
+  drawPanel()
+  if (locked) return
   $('#pages').onpointermove = e => { if (!armed || !ghost) return; const pg = e.target.closest('.page'); if (!pg) { ghost.style.display = 'none'; return } if (ghost.parentNode !== pg) pg.appendChild(ghost); const p = pos(e, pg); Object.assign(ghost.style, { display: 'flex', left: p.x * 100 + '%', top: p.y * 100 + '%', width: p.w * 100 + '%', height: p.h * 100 + '%' }) }
   $('#pages').onpointerleave = () => { if (ghost) ghost.style.display = 'none' }
   $('#pages').onclick = e => { if (!armed || (e.target.closest('.fld') && !e.target.closest('.ghost'))) return; const pg = e.target.closest('.page'); if (!pg) return; const r = pg.getBoundingClientRect(); addAt(armed, pg, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); if (!e.shiftKey) disarm() }
@@ -810,7 +950,7 @@ async function editor(id) {
   }
   addEventListener('keydown', onKey)
   addEventListener('hashchange', () => { removeEventListener('keydown', onKey); disarm(); $('.rcp')?.remove() }, { once: true })
-  window.editRecipients = () => recipientsStep(d, () => { cur = d.signers.find(s => s.role !== 'cc')?.id || d.signers[0]?.id; drawS(); drawF(); props() })
+  window.editRecipients = () => recipientsStep(d, () => { cur = d.signers.find(s => s.role !== 'cc')?.id || d.signers[0]?.id; drawS(); drawF(); props(); if (typeof drawPanel === 'function') drawPanel() })
   if (!d.tpl && needsRecipients(d)) window.editRecipients()
   $('#dn').onchange = e => { d.name = e.target.value; save() }
   $('#ord').onchange = e => { d.ordered = e.target.checked; save(); drawS() }
@@ -918,33 +1058,47 @@ async function signToken(token) {
     d.fields.forEach(f => {
       if (!visible(d.fields, f)) return
       const pg = $(`.page[data-page="${f.page}"]`); if (!pg) return
-      const o = sigOf(d, f.signer) || s; const me = f.signer === s.id
+      const o = partyOf(d, f.signer); const me = f.signer === s.id
       const el = document.createElement('div'); el.className = 'fld' + (me ? ' fill' : '') + (f.value != null && f.value !== '' ? ' done' : ''); el.dataset.id = f.id
       Object.assign(el.style, { left: f.x * 100 + '%', top: f.y * 100 + '%', width: f.w * 100 + '%', height: f.h * 100 + '%', borderColor: me ? o.color : '#cbd5e1', color: me ? o.color : '#94a3b8', background: me ? o.color + '22' : '#f8fafc88', borderStyle: me ? 'solid' : 'dashed' })
       let v = f.type === 'formula' ? calc(d.fields, f) : f.value
-      if (me && ['text', 'name', 'number'].includes(f.type)) {
-        el.innerHTML = `<input type="text" placeholder="${esc(f.label)}${f.required ? '*' : ''}" value="${esc(v || '')}">`
-        $('input', el).onchange = () => { const ok = validate(f, $('input', el).value); if (!ok) { toast(`${f.label}: invalid ${f.valid}`); $('input', el).value = ''; f.value = null } else f.value = $('input', el).value; push(); prog(); draw() }
-      } else if (me && f.type === 'dropdown') {
-        el.innerHTML = `<select style="width:100%;height:100%;border:0;background:transparent;font-size:11px"><option value="">${esc(f.label)}…</option>${(f.options || []).map(o => `<option ${o === v ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`
+      const meta = fieldMeta(f.type)
+      const ph = `${esc(f.placeholder || f.label)}${f.required ? '*' : ''}`
+      if (me && f.type === 'state') {
+        el.innerHTML = `<select style="width:100%;height:100%;border:0;background:transparent;font-size:11px">${stateOptions(v)}</select>`
         $('select', el).onchange = e => { f.value = e.target.value || null; push(); prog() }
-      } else el.innerHTML = v && String(v).startsWith('data:') ? `<img src="${v}">` : v === true ? '✔' : v ? esc(v) : f.type === 'checkbox' ? '' : (me ? FT[f.type][0] + ' ' + esc(f.label) : esc(o.name))
+      } else if (me && f.type === 'dropdown') {
+        el.innerHTML = `<select style="width:100%;height:100%;border:0;background:transparent;font-size:11px"><option value="">${ph}</option>${(f.options || []).map(o => `<option ${o === v ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`
+        $('select', el).onchange = e => { f.value = e.target.value || null; push(); prog() }
+      } else if (me && f.type === 'radio') {
+        el.innerHTML = `<div class="radios">${(f.options || []).map(opt => `<label><input type="radio" name="r-${f.id}" value="${esc(opt)}" ${v === opt ? 'checked' : ''}> ${esc(opt)}</label>`).join('')}</div>`
+        $$('input', el).forEach(r => { r.onchange = () => { f.value = r.value; push(); prog() } })
+      } else if (me && (f.type === 'datetime' || f.type === 'date')) {
+        el.innerHTML = `<input type="${f.type === 'date' || f.format === 'date' ? 'date' : 'datetime-local'}" value="${esc(v || '')}">`
+        $('input', el).onchange = e => { f.value = e.target.value || null; push(); prog(); draw() }
+      } else if (me && INPUT_TYPES.includes(f.type)) {
+        el.innerHTML = `<input type="text" autocomplete="off" placeholder="${ph}" value="${esc(v || '')}">`
+        $('input', el).onchange = () => { const val = $('input', el).value; if (val && !validate(f, val)) { toast(`${f.label} doesn’t look valid.`); return } f.value = isSensitive(f.type) || f.type === 'currency' || f.type === 'phone' || f.type === 'zip' ? formatField(f, val) : (val || null); push(); prog(); draw() }
+      } else el.innerHTML = v && String(v).startsWith('data:') ? `<img src="${v}">` : v === true ? '✔' : v ? esc(formatField(f, v)) : f.type === 'checkbox' ? '' : (me ? meta.icon + ' ' + esc(f.label) : (o?.name ? esc(o.name) : 'Filled'))
       if (me && f.type === 'attachment' && !f.value) el.innerHTML = '📎 Drop file or tap'
-      if (me) el.onclick = e => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return; fill(f) }
+      if (me && f.type === 'stamp' && !f.value) el.innerHTML = '🏷️ Upload stamp'
+      if (me) el.onclick = e => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'LABEL') return; fill(f) }
       pg.appendChild(el)
     })
   }
   const prog = () => { const m = mine(); $('#prog').textContent = `${m.filter(f => f.value != null && f.value !== '').length}/${m.length} fields` }
   const fill = f => {
     if (f.type === 'signature' || f.type === 'initials') return sigModal(f.type, s, d, () => { d.fields.filter(x => x.signer === s.id).forEach(x => { if (x.type === 'signature' && s.sigImg) x.value = s.sigImg; if (x.type === 'initials' && s.iniImg) x.value = s.iniImg }); push(); draw(); prog() })
-    if (f.type === 'date') f.value = new Date().toLocaleDateString()
+    if (f.type === 'stamp') return pickImageFile(data => { f.value = data; push(); draw(); prog() })
+    if (f.type === 'date' && !f.value) f.value = new Date().toISOString().slice(0, 10)
     else if (f.type === 'checkbox') f.value = f.value === true ? false : true
     else if (f.type === 'payment') return modal(`<h3>Acknowledge $${f.amount}</h3><p>This records the amount on the document. Easy Digital Signatures does not collect this payment.</p><button class="p" id="pay">Acknowledge $${f.amount}</button>`), $('#pay').onclick = () => { f.value = `Acknowledged $${f.amount}`; push(); closeModal(); draw(); prog() }
     else if (f.type === 'attachment') { const i = document.createElement('input'); i.type = 'file'; i.onchange = () => { if (i.files[0].size > 10 * 1024 * 1024) return toast('Attachment too large (max 10 MB)'); f.value = '📎 ' + i.files[0].name; push(); draw(); prog() }; i.click(); return }
+    else return
     push(); draw(); prog()
   }
   draw(); prog()
-  const nx = $('#nx'); if (nx) nx.onclick = () => { const f = mine().find(f => f.value == null || f.value === ''); $$('.fld').forEach(x => x.classList.remove('cur')); if (!f) return toast('All your fields are filled — click Finish'); const el = $(`.fld[data-id="${f.id}"]`); el.classList.add('cur'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (!['text', 'name', 'number', 'dropdown'].includes(f.type)) setTimeout(() => fill(f), 400); else $('input,select', el)?.focus() }
+  const nx = $('#nx'); if (nx) nx.onclick = () => { const f = mine().find(f => f.value == null || f.value === ''); $$('.fld').forEach(x => x.classList.remove('cur')); if (!f) return toast('All your fields are filled — click Finish'); const el = $(`.fld[data-id="${f.id}"]`); el.classList.add('cur'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (![...INPUT_TYPES, 'dropdown', 'radio'].includes(f.type)) setTimeout(() => fill(f), 400); else $('input,select', el)?.focus() }
   $('#dec').onclick = () => {
     modal(`<h3>Decline this document?</h3>
       <p>The sender will be emailed your reason. This cannot be undone.</p>

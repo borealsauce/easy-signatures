@@ -1,5 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
-import { calc, visible } from '../shared/fields.js'
+import { calc, visible, formatField } from '../shared/fields.js'
 import { sha256 } from './crypto.js'
 
 const INK = rgb(0.08, 0.13, 0.22)
@@ -48,6 +48,9 @@ export async function imageToPdf(bytes, kind) {
 
 function fieldValue(fields, f) {
   if (f.type === 'formula') return calc(fields, f)
+  if (f.type === 'currency' || f.type === 'ssn' || f.type === 'rtn' || f.type === 'phone' || f.type === 'zip') {
+    return formatField(f, f.value)
+  }
   return f.value
 }
 
@@ -74,6 +77,17 @@ async function stampFields(pd, fields) {
       page.drawImage(embedded, { x, y, width: embedded.width * s, height: embedded.height * s })
     } else if (f.type === 'checkbox') {
       if (v === true) page.drawText('X', { x: x + 1, y: y + 1, size: Math.max(8, h * 0.8), font: bold, color: INK })
+    } else if (f.type === 'radio') {
+      const opts = Array.isArray(f.options) && f.options.length ? f.options : [String(v)]
+      const lineH = h / Math.max(1, opts.length)
+      opts.forEach((opt, i) => {
+        const cy = y + h - (i + 0.5) * lineH
+        const r = Math.max(2.5, Math.min(5, lineH * 0.28))
+        page.drawCircle({ x: x + r + 2, y: cy, size: r, borderColor: INK, borderWidth: 0.8, color: rgb(1, 1, 1) })
+        if (String(v) === String(opt)) page.drawCircle({ x: x + r + 2, y: cy, size: r * 0.5, color: INK })
+        const size = Math.min(10, Math.max(6, lineH * 0.45))
+        page.drawText(latin(opt).slice(0, 80), { x: x + r * 2 + 8, y: cy - size * 0.35, size, font, color: INK })
+      })
     } else {
       page.drawText(latin(v).slice(0, 500), {
         x: x + 2,

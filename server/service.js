@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
-import { FIELD_TYPES, ROLES, visible, validate } from '../shared/fields.js'
+import { FIELD_TYPES, ROLES, visible, validate, ME_ID, isSensitive, looksMasked, normalizeSensitive, INPUT_TYPES, US_STATES } from '../shared/fields.js'
+import { encryptValue, decryptValue, isEncrypted, storeSensitive, revealFields, decryptAllFields } from './sensitive.js'
 import { CONSENT_TEXT, CONSENT_VERSION } from '../shared/consent.js'
 import { TERMS_VERSION } from '../shared/terms.js'
 import { PACKS } from './config.js'
@@ -113,6 +114,18 @@ function mapSigner(row, secret, reveal) {
   }
 }
 
+
+function presentDocFields(row, secret, revealSigner) {
+  const raw = asJson(row.fields, [])
+  const draft = row.status === 'draft' || row.is_template
+  const signerId = typeof revealSigner === 'string' && revealSigner.length > 8 ? revealSigner : null
+  return revealFields(raw, secret, {
+    revealMe: draft,
+    revealSignerId: signerId,
+    maskOthers: true
+  })
+}
+
 function mapDoc(row, signers, events, secret, reveal) {
   return {
     id: row.id,
@@ -138,7 +151,7 @@ function mapDoc(row, signers, events, secret, reveal) {
     ownerId: row.owner_id,
     teamId: row.team_id || null,
     shared: !!row.team_id,
-    fields: asJson(row.fields, []),
+    fields: presentDocFields(row, secret, reveal),
     comments: asJson(row.comments, []),
     signers: signers.map(s => mapSigner(s, secret, reveal)),
     events: (events || []).map(e => ({
@@ -171,9 +184,10 @@ function cleanSigners(list) {
   }))
 }
 
-function cleanFields(list, signerIds) {
+function cleanFields(list, signerIds, { previous = [], secret } = {}) {
   if (!Array.isArray(list) || list.length > 300) return null
   const fallback = [...signerIds][0]
+  const prevById = new Map((previous || []).map(f => [f.id, f]))
   return list.map(f => {
     const type = FIELD_TYPES.includes(f.type) ? f.type : 'text'
     const clamp = (v, d) => {
@@ -181,21 +195,32 @@ function cleanFields(list, signerIds) {
       if (!Number.isFinite(n)) return d
       return Math.min(1, Math.max(0, n))
     }
+    const signer = f.signer === ME_ID || signerIds.has(f.signer) ? f.signer : fallback
+    const prev = prevById.get(f.id)
+    let value = null
+    if (signer === ME_ID) {
+      value = cleanIncomingValue({ type, options: f.options }, f.value)
+      if (isSensitive(type)) value = storeSensitive(type, value, prev?.value ?? null, secret)
+    }
+    const opts = (Array.isArray(f.options) ? f.options : type === 'radio' ? ['Yes', 'No'] : ['Option A', 'Option B']).map(o => String(o).slice(0, 80)).filter(Boolean).slice(0, 30)
     return {
       id: /^[0-9a-f-]{36}$/i.test(f.id || '') ? f.id : crypto.randomUUID(),
       page: Math.max(0, Math.min(40, Number(f.page) || 0)),
       type,
-      signer: signerIds.has(f.signer) ? f.signer : fallback,
+      signer,
       x: clamp(f.x, 0.1),
       y: clamp(f.y, 0.1),
       w: Math.max(0.02, clamp(f.w, 0.2)),
       h: Math.max(0.015, clamp(f.h, 0.04)),
-      required: type === 'checkbox' ? !!f.required : f.required !== false,
+      required: type === 'checkbox' || type === 'radio' ? !!f.required : f.required !== false,
       label: String(f.label || type).slice(0, 80),
-      value: null,
-      ...(type === 'dropdown' ? { options: (Array.isArray(f.options) ? f.options : ['Option A', 'Option B']).map(o => String(o).slice(0, 80)).slice(0, 30) } : {}),
+      value,
+      ...(f.placeholder ? { placeholder: String(f.placeholder).slice(0, 80) } : {}),
+      ...((type === 'dropdown' || type === 'radio') ? { options: opts.length ? opts : ['Option A', 'Option B'] } : {}),
       ...(type === 'formula' ? { formula: String(f.formula || '').slice(0, 200) } : {}),
       ...(type === 'payment' ? { amount: Math.max(0, Math.min(1000000, Number(f.amount) || 0)) } : {}),
+      ...(type === 'currency' ? { currency: /^[A-Z]{3}$/.test(f.currency || '') ? f.currency : 'USD' } : {}),
+      ...(type === 'datetime' ? { format: f.format === 'date' ? 'date' : 'datetime' } : {}),
       ...(f.cond ? { cond: String(f.cond).slice(0, 40) } : {}),
       ...(['none', 'email', 'number', 'zip', 'phone'].includes(f.valid) ? { valid: f.valid } : {})
     }
@@ -597,7 +622,8 @@ function publicUser(user) {
     folders: asJson(user.folders, ['All', 'Sales', 'HR', 'Real Estate', 'Legal']),
     proposal: asJson(user.proposal, null),
     reminderDefault: cadence(user.default_remind_days, 3),
-    senderNudgeDays: cadence(user.sender_nudge_days, 0)
+    senderNudgeDays: cadence(user.sender_nudge_days, 0),
+    favoriteFields: Array.isArray(asJson(user.favorite_fields, null)) ? asJson(user.favorite_fields, []) : ['signature', 'initials']
   }
 }
 
@@ -669,6 +695,14 @@ export async function stateFor(ctx, user, device) {
       created: iso(l.created_at)
     }))
   }
+}
+
+export async function saveFavorites(ctx, user, types) {
+  const allowed = new Set(FIELD_TYPES)
+  const fav = [...new Set((Array.isArray(types) ? types : []).filter(t => allowed.has(t)))].slice(0, 40)
+  await ctx.db.query(`update profiles set favorite_fields=$2::jsonb where id=$1`, [user.id, JSON.stringify(fav)])
+  const next = await ctx.db.query(`select * from profiles where id=$1`, [user.id])
+  return publicUser(next.rows[0])
 }
 
 export async function saveSettings(ctx, user, body) {
@@ -860,7 +894,7 @@ export async function saveDraft(ctx, user, id, body) {
   if (doc.status !== 'draft') throw fail(409, 'locked', 'This document has already been sent.')
   const signers = cleanSigners(body.signers || [])
   if (!signers) throw fail(400, 'signers', 'Add between 1 and 20 recipients.')
-  const fields = cleanFields(body.fields || [], new Set(signers.map(s => s.id)))
+  const fields = cleanFields(body.fields || [], new Set(signers.map(s => s.id)), { previous: asJson(doc.fields, []), secret: ctx.config.jwtSecret })
   if (!fields) throw fail(400, 'fields', 'Too many fields.')
   const name = String(body.name || doc.name).slice(0, 160)
   const folder = String(body.folder || doc.folder || 'Sales').slice(0, 40)
@@ -939,7 +973,7 @@ export async function copyAsTemplate(ctx, user, id, name) {
   const fields = asJson(doc.fields, []).map(f => ({
     ...f,
     id: crypto.randomUUID(),
-    signer: idMap.get(f.signer) || created.signers[0]?.id,
+    signer: f.signer === ME_ID ? ME_ID : (idMap.get(f.signer) || created.signers[0]?.id),
     value: null
   }))
   await ctx.db.query(`update documents set fields=$2::jsonb, ordered_sign=$3, expires_days=$4, remind_days=$5, message=$6, idv=$7 where id=$1`, [
@@ -956,7 +990,7 @@ export async function deleteDocument(ctx, user, id) {
   return { ok: true }
 }
 
-function readyErrors(signers, fields) {
+function readyErrors(signers, fields, secret) {
   if (!fields.length) return 'Add at least one field first.'
   const need = signers.filter(s => s.role !== 'cc' && s.role !== 'approver' && !fields.some(f => f.signer === s.id))
   if (need.length) return `${need[0].name || 'A recipient'} has no fields.`
@@ -967,6 +1001,13 @@ function readyErrors(signers, fields) {
     }
     if (!s.name.trim()) return 'Each recipient needs a name.'
     if (!emailOk(s.email)) return `Enter an email for ${s.name}.`
+  }
+  const revealed = decryptAllFields(fields, secret)
+  for (const f of revealed.filter(x => x.signer === ME_ID && visible(revealed, x))) {
+    if (f.type === 'formula') continue
+    const empty = f.value == null || f.value === '' || f.value === false
+    if (f.required && empty) return `Fill your “${f.label || f.type}” field before sending.`
+    if (f.value && !validate(f, f.value)) return `Your “${f.label || f.type}” field doesn’t look valid.`
   }
   return null
 }
@@ -1018,7 +1059,7 @@ export async function sendDocument(ctx, user, id, device) {
       const signers = await loadSigners(q, id)
       const fields = asJson(doc.fields, [])
       const clientSigners = signers.map(s => ({ ...s, name: s.full_name }))
-      const problem = readyErrors(clientSigners, fields)
+      const problem = readyErrors(clientSigners, fields, ctx.config.jwtSecret)
       if (problem) throw fail(400, 'invalid', problem)
       const profile = (await q(`select * from profiles where id=$1 for update`, [user.id])).rows[0]
       if (profile.blocked_at) throw fail(403, 'account_disabled', DISABLED_MESSAGE)
@@ -1249,6 +1290,7 @@ export async function signSession(ctx, token, device, { markView }) {
   const freshSigners = await loadSigners(ctx.db.query.bind(ctx.db), doc.id)
   const events = await loadEvents(ctx.db.query.bind(ctx.db), [doc.id])
   const mapped = mapDoc(fresh, freshSigners, events, ctx.config.jwtSecret, false)
+  mapped.fields = presentDocFields(fresh, ctx.config.jwtSecret, signer.id)
   const me = freshSigners.find(s => s.id === signer.id)
   const owner = (await ctx.db.query(`select * from profiles where id=$1`, [fresh.owner_id])).rows[0]
   return {
@@ -1265,11 +1307,21 @@ export async function signSession(ctx, token, device, { markView }) {
 function cleanIncomingValue(f, value) {
   if (value == null || value === '') return null
   if (f.type === 'checkbox') return value === true || value === 'true'
-  if (f.type === 'signature' || f.type === 'initials') {
+  if (f.type === 'signature' || f.type === 'initials' || f.type === 'stamp') {
     const s = String(value)
     if (!/^data:image\/(png|jpeg|jpg);base64,[a-z0-9+/=\r\n]+$/i.test(s)) return null
-    if (s.length > 600000) throw fail(413, 'too_large', 'That signature image is too large.')
+    if (s.length > 600000) throw fail(413, 'too_large', 'That image is too large.')
     return s
+  }
+  if (f.type === 'radio' || f.type === 'dropdown') {
+    const opts = Array.isArray(f.options) ? f.options.map(String) : []
+    const s = String(value)
+    return opts.includes(s) ? s : null
+  }
+  if (f.type === 'age') {
+    const n = Number(value)
+    if (!Number.isInteger(n) || n < 0 || n > 150) return null
+    return String(n)
   }
   return String(value).slice(0, 2000)
 }
@@ -1279,11 +1331,14 @@ export async function saveSignFields(ctx, token, body, device) {
   if (session.me?.done) return session
   if (session.status !== 'sent' && session.status !== 'waiting') throw fail(409, 'status', 'This document is not open for signing.')
   const doc = session.document
-  const mine = new Map(doc.fields.filter(f => f.signer === session.me.id).map(f => [f.id, f]))
-  const next = doc.fields.map(f => {
+  const raw = asJson((await ctx.db.query(`select fields from documents where id=$1`, [doc.id])).rows[0].fields, [])
+  const mine = new Set(raw.filter(f => f.signer === session.me.id).map(f => f.id))
+  const next = raw.map(f => {
     const incoming = (body.fields || []).find(x => x.id === f.id)
     if (!incoming || !mine.has(f.id)) return f
-    return { ...f, value: cleanIncomingValue(f, incoming.value) }
+    let value = cleanIncomingValue(f, incoming.value)
+    if (isSensitive(f.type)) value = storeSensitive(f.type, value, f.value, ctx.config.jwtSecret)
+    return { ...f, value }
   })
   if (body.name && String(body.name).trim() && String(body.name).trim() !== session.me.name) {
     const name = String(body.name).trim().slice(0, 120)
@@ -1319,12 +1374,12 @@ export async function finishSign(ctx, token, body, device) {
       throw fail(400, 'access_code', 'Enter the access code from your email.')
     }
   }
-  const fields = asJson((await ctx.db.query(`select fields from documents where id=$1`, [doc.id])).rows[0].fields, [])
+  const fields = decryptAllFields(asJson((await ctx.db.query(`select fields from documents where id=$1`, [doc.id])).rows[0].fields, []), ctx.config.jwtSecret)
   const approver = me.role === 'approver'
   if (!approver) {
     const mine = fields.filter(f => f.signer === me.id && visible(fields, f))
     for (const f of mine) {
-      if (f.type === 'text' || f.type === 'name' || f.type === 'number') {
+      if (INPUT_TYPES.includes(f.type) || f.type === 'dropdown' || f.type === 'radio') {
         if (f.value && !validate(f, f.value)) throw fail(400, 'field', `${f.label || 'A field'} doesn’t look valid.`)
       }
       const empty = f.value == null || f.value === '' || f.value === false
@@ -1430,7 +1485,7 @@ export async function completeDocument(ctx, id) {
       hashOrig: doc.original_sha256 || sha256(original),
       completed: completedAt,
       consentVersion: CONSENT_VERSION,
-      fields: asJson(doc.fields, []),
+      fields: decryptAllFields(asJson(doc.fields, []), ctx.config.jwtSecret),
       signers: mappedSigners,
       events: events.map(e => ({ t: e.event_type, ts: iso(e.created_at), who: e.actor, ip: e.ip || '' }))
     }

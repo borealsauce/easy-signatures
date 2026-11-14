@@ -10,7 +10,7 @@ import {
   bulkSend, checkPhone, commentAs, copyAsTemplate, createBlank, createLink, createUpload, finishDirectUpload, instantiateTemplate, startDirectUpload,
   declineSign, deleteDocument, deviceFrom, fail, finishSign, grantCheckout, login,
   ownerFile, publicStart, remind, resendVerification, runMaintenance,
-  saveDraft, saveSettings, saveLogo, removeLogo, brandLogo, saveSignFields, sendDocument, setLinkActive, signSession,
+  saveDraft, saveSettings, saveFavorites, saveLogo, removeLogo, brandLogo, saveSignFields, sendDocument, setLinkActive, signSession,
   signerFile, signup, startPhone, stateFor, userFromAuth, verificationRecord,
   verifyEmailToken, resendByEmail, requestPasswordReset, resetPassword, logout, remindAll, setDocReminders, resendFromLink
 } from './service.js'
@@ -220,6 +220,9 @@ export async function createApp(env = process.env) {
   app.get('/api/me', auth, asyncRoute(async (req, res) => {
     const state = await stateFor(ctx, req.user, req.device)
     res.json({ me: { ...state.me, isAdmin: isAdmin(config, req.user) }, usage: state.usage })
+  }))
+  app.patch('/api/me/favorites', auth, asyncRoute(async (req, res) => {
+    res.json(await saveFavorites(ctx, req.user, req.body?.types))
   }))
 
   app.post('/api/promo/redeem', auth, asyncRoute(async (req, res) => {

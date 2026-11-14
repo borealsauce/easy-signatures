@@ -315,3 +315,6 @@ create index if not exists documents_team_idx on documents (team_id) where team_
 alter table profiles add column if not exists terms_accepted_at timestamptz;
 alter table profiles add column if not exists terms_version text;
 alter table profiles add column if not exists terms_accepted_ip text;
+
+-- Per-user favorite field types in the editor library.
+alter table profiles add column if not exists favorite_fields jsonb not null default '["signature","initials"]'::jsonb;
