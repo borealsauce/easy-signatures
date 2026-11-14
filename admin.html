@@ -1,0 +1,216 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Admin · Easy Digital Signatures</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#0b1f3a;--navy2:#13294b;--teal:#0E6B62;--teal2:#14b8a6;--ink:#14213d;--mut:#64748b;--line:#e2e8f0;--bg:#f3f6fa;--red:#b91c1c}
+*{box-sizing:border-box}body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);margin:0}
+header{background:var(--navy);color:#fff;padding:0 24px;display:flex;align-items:center;gap:14px;height:60px}
+.mark{background:linear-gradient(135deg,var(--teal),var(--teal2));width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-weight:800}
+header b{font-size:15px}header .tag{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9fe3d9;border:1px solid #2b4a6f;border-radius:99px;padding:3px 9px}
+header a{color:#cbd5e1;text-decoration:none;font-size:14px}.sp{flex:1}
+nav.tabs{background:var(--navy2);display:flex;gap:2px;padding:0 16px;overflow-x:auto}
+nav.tabs button{background:none;border:0;color:#cbd5e1;padding:13px 16px;font:inherit;font-size:14px;font-weight:600;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}
+nav.tabs button.on{color:#fff;border-bottom-color:var(--teal2)}nav.tabs button:hover{color:#fff}
+main{max-width:1180px;margin:22px auto;padding:0 16px}
+.card{background:#fff;border-radius:14px;padding:20px;margin-bottom:16px;box-shadow:0 1px 2px rgba(15,23,42,.06);border:1px solid var(--line)}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:17px;margin:0}h3{font-size:14px;margin:0 0 8px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.muted{color:var(--mut);font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:16px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px}.stat .k{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}.stat .v{font-size:28px;font-weight:800;margin-top:4px;color:var(--navy)}
+input,select{font:inherit;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff}
+button.b{font:inherit;font-size:13px;padding:6px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;color:var(--ink)}
+button.b:hover{border-color:var(--teal)}button.p{background:var(--teal);color:#fff;border-color:var(--teal)}button.danger{color:var(--red);border-color:#fecaca}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+.pill{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:700;background:#e2e8f0;color:#334155}
+.on-p{background:#dcfce7;color:#166534}.off-p{background:#fee2e2;color:#991b1b}.warn-p{background:#fef3c7;color:#92400e}.teal-p{background:#ccfbf1;color:#115e59}
+.switch{position:relative;width:46px;height:26px;display:inline-block}.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;inset:0;background:#cbd5e1;border-radius:99px;transition:.15s;cursor:pointer}
+.slider:before{content:"";position:absolute;width:20px;height:20px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.15s}
+.switch input:checked+.slider{background:var(--teal)}.switch input:checked+.slider:before{transform:translateX(20px)}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;transition:.2s;pointer-events:none}#toast.show{opacity:1}#toast.err{background:var(--red)}
+.bars{display:flex;align-items:flex-end;gap:3px;height:110px;margin-top:10px}.bars div{flex:1;background:var(--teal2);border-radius:3px 3px 0 0;min-height:2px;position:relative}.bars div:hover{background:var(--teal)}
+.modal{position:fixed;inset:0;background:rgba(11,31,58,.5);display:grid;place-items:center;z-index:10}.modal .box{background:#fff;border-radius:14px;max-width:760px;width:92vw;max-height:85vh;overflow:auto;padding:22px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}.ok{background:#16a34a}.bad{background:#dc2626}
+.msg{white-space:pre-wrap;max-width:560px}
+a{color:var(--teal)}
+</style></head><body>
+<header><span class="mark">E</span><b>Easy Digital Signatures</b><span class="tag">Owner admin</span><span class="sp"></span><a href="/#/app">Back to app</a></header>
+<nav class="tabs" id="tabs"></nav>
+<main id="root"><div class="card">Loading…</div></main>
+<div id="toast"></div>
+<script>
+const root = document.getElementById('root')
+const token = localStorage.getItem('eds_token') || ''
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+const fmt = d => d ? new Date(d).toLocaleString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' PT' : '—'
+const day = d => d ? new Date(d).toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', year: 'numeric' }) : '—'
+const money = n => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const TABS = [['income', 'Income'], ['users', 'Users'], ['promo', 'Promo codes'], ['documents', 'Documents'], ['activity', 'Activity'], ['support', 'Support'], ['health', 'Health']]
+let tab = (location.hash || '').slice(1) || 'users'
+let cache = {}
+function toast(m, bad) { const t = document.getElementById('toast'); t.textContent = m; t.className = 'show' + (bad ? ' err' : ''); clearTimeout(t._t); t._t = setTimeout(() => t.className = '', 3200) }
+async function api(path, opt) {
+  opt = opt || {}
+  const res = await fetch(path, { method: opt.method || 'GET', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: opt.body ? JSON.stringify(opt.body) : undefined })
+  return { ok: res.ok, status: res.status, json: await res.json().catch(() => ({})) }
+}
+function table(heads, rows, empty) { return rows.length ? '<div class="tw"><table><thead><tr>' + heads.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>' + rows.join('') + '</tbody></table></div>' : '<p class="muted">' + (empty || 'Nothing here yet.') + '</p>' }
+function pill(text, cls) { return '<span class="pill ' + (cls || '') + '">' + esc(text) + '</span>' }
+function statusPill(s) { return pill(s, { completed: 'on-p', active: 'on-p', signed: 'on-p', blocked: 'off-p', declined: 'off-p', voided: 'off-p', expired: 'warn-p', unconfirmed: 'warn-p', waiting: 'teal-p', sent: 'teal-p', viewed: 'teal-p' }[s] || '') }
+function modal(html) { const m = document.createElement('div'); m.className = 'modal'; m.innerHTML = '<div class="box">' + html + '<p style="margin-top:16px"><button class="b" data-close>Close</button></p></div>'; m.onclick = e => { if (e.target === m || e.target.hasAttribute('data-close')) m.remove() }; document.body.appendChild(m); return m }
+function navTabs() { document.getElementById('tabs').innerHTML = TABS.map(t => '<button data-tab="' + t[0] + '" class="' + (t[0] === tab ? 'on' : '') + '">' + t[1] + '</button>').join(''); document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; location.hash = tab; show() }) }
+async function gate() {
+  if (!token) { root.innerHTML = '<div class="card"><h1>Owner admin</h1><p>Log in first, then come back to this page.</p><p><a href="/#/login">Log in</a></p></div>'; return false }
+  const r = await api('/api/admin/promo')
+  if (r.status === 401) { root.innerHTML = '<div class="card"><h1>Owner admin</h1><p>Your session expired. <a href="/#/login">Log in again</a>, then reopen /admin.</p></div>'; return false }
+  if (!r.ok) { root.innerHTML = '<div class="card"><h1>Not available</h1><p>' + esc(r.json.message || 'This page is only for the site owner.') + '</p></div>'; return false }
+  cache.promo = r.json.codes
+  return true
+}
+async function show() { navTabs(); root.innerHTML = '<div class="card muted">Loading…</div>'; try { await VIEWS[tab]() } catch (e) { root.innerHTML = '<div class="card">Something went wrong: ' + esc(e.message) + '</div>' } }
+
+const VIEWS = {
+  async income() {
+    const r = await api('/api/admin/income')
+    if (!r.ok) { root.innerHTML = '<div class="card"><h1>Income</h1><p>' + esc(r.json.message || 'Could not load Stripe data.') + '</p></div>'; return }
+    const d = r.json, t = d.totals
+    const rowP = p => '<tr><td>' + fmt(p.created) + '</td><td>' + esc(p.email || '—') + '</td><td>' + esc(p.pack || '—') + '</td><td>' + money(p.amount) + (p.refunded ? ' <span class="muted">(' + money(p.refunded) + ' refunded)</span>' : '') + '</td><td><a href="' + esc(p.link) + '" target="_blank" rel="noopener">Stripe ↗</a></td></tr>'
+    root.innerHTML = '<div class="stats"><div class="stat"><div class="k">Today</div><div class="v">' + money(t.today) + '</div></div><div class="stat"><div class="k">This month</div><div class="v">' + money(t.month) + '</div></div><div class="stat"><div class="k">All time</div><div class="v">' + money(t.all) + '</div></div><div class="stat"><div class="k">Refunded</div><div class="v">' + money(t.refunded) + '</div></div></div>'
+      + '<div class="card"><div class="row"><h2>Purchases</h2><span class="muted">' + d.purchases.length + ' shown · ' + (d.live ? 'live mode' : 'test mode') + ' · net of refunds, before Stripe fees · times in PT</span></div>' + table(['Date', 'Buyer', 'Pack', 'Amount', ''], d.purchases.map(rowP), 'No purchases yet.') + '</div>'
+      + '<div class="card"><h2>Refunds</h2>' + table(['Date', 'Buyer', 'Pack', 'Amount', ''], d.refunds.map(rowP), 'No refunds.') + '</div>'
+      + '<div class="card"><h2>Failed payments</h2>' + table(['Date', 'Buyer', 'Amount', 'Reason', ''], d.failed.map(f => '<tr><td>' + fmt(f.created) + '</td><td>' + esc(f.email || '—') + '</td><td>' + money(f.amount) + '</td><td>' + esc(f.reason || '—') + '</td><td><a href="' + esc(f.link) + '" target="_blank" rel="noopener">Stripe ↗</a></td></tr>'), 'No failed payments.') + '</div>'
+  },
+  async users() {
+    const r = await api('/api/admin/users')
+    if (!r.ok) throw new Error(r.json.message || 'Could not load users')
+    const users = r.json.users || []
+    root.innerHTML = '<div class="card"><div class="row"><h2>Users</h2><span class="muted">' + users.length + ' total · ' + users.filter(x => x.blocked).length + ' blocked</span><span class="sp"></span><input id="uq" placeholder="Search name or email" style="width:260px"></div><div id="ut"></div></div>'
+    const draw = () => {
+      const q = document.getElementById('uq').value.trim().toLowerCase()
+      const list = users.filter(x => !q || (x.name + ' ' + x.email).toLowerCase().includes(q))
+      const btn = (x, label, act, cls) => '<button class="b ' + (cls || '') + '" data-act="' + act + '" data-id="' + esc(x.id) + '" data-email="' + esc(x.email) + '">' + label + '</button>'
+      document.getElementById('ut').innerHTML = table(['Name', 'Email', 'Signed up', 'Verified', 'Docs sent', 'Credits', 'Promo code', 'Status', ''], list.map(x => '<tr><td>' + esc(x.name || '—') + '</td><td>' + esc(x.email) + '</td><td>' + day(x.created) + '</td><td>' + (x.verified ? 'Yes' : 'No') + '</td><td>' + x.docsSent + '</td><td>' + x.credits + '</td><td>' + esc(x.promo || '—') + '</td><td>' + statusPill(x.status) + '</td><td style="white-space:nowrap">'
+        + btn(x, 'View', 'view') + ' ' + btn(x, 'Credits', 'credits') + ' '
+        + (x.protected ? '<span class="muted">Owner</span>' : (x.blocked ? btn(x, 'Unblock', 'unblock') : btn(x, 'Block', 'block')) + ' ' + btn(x, 'Delete', 'delete', 'danger'))
+        + '</td></tr>'), 'No users match.')
+      document.querySelectorAll('#ut [data-act]').forEach(b => b.onclick = () => userAction(b.dataset))
+    }
+    document.getElementById('uq').oninput = draw
+    draw()
+  },
+  async promo() {
+    const r = await api('/api/admin/promo')
+    const codes = r.json.codes || []
+    root.innerHTML = '<div class="card"><h1>Promo codes</h1><p class="muted">Each account can redeem a code once. Promo documents are used before paid credits. Turning a code off blocks new redemptions and any unused documents from it right away; turning it back on restores them.</p>'
+      + '<div class="row" style="margin-top:12px"><input id="nc" placeholder="CODE" style="text-transform:uppercase;width:160px"><input id="nd" type="number" min="1" value="100" style="width:110px"><span class="muted">free docs per account</span><button class="b p" id="add">Create code</button></div></div>'
+      + codes.map(c => '<div class="card"><div class="row"><h2>' + esc(c.code) + '</h2>' + pill(c.active ? 'On' : 'Off', c.active ? 'on-p' : 'off-p') + '<span class="muted">' + c.freeDocs + ' free docs per account · ' + c.redemptions + ' redeemed · ' + c.docsUsed + ' docs used · created ' + day(c.created) + '</span><span class="sp"></span>'
+        + '<label class="switch" title="Turn ' + esc(c.code) + ' on or off"><input type="checkbox" data-code="' + esc(c.code) + '"' + (c.active ? ' checked' : '') + '><span class="slider"></span></label></div>'
+        + table(['Name', 'Email', 'Redeemed', 'Docs used', 'Last activity'], c.redeemers.map(u => '<tr><td>' + esc(u.name || '—') + '</td><td>' + esc(u.email) + '</td><td>' + fmt(u.redeemed) + '</td><td>' + u.used + ' of ' + u.granted + '</td><td>' + fmt(u.lastActivity) + '</td></tr>'), 'No one has redeemed this code yet.')
+        + '</div>').join('')
+    document.getElementById('add').onclick = async () => {
+      const r = await api('/api/admin/promo', { method: 'POST', body: { code: document.getElementById('nc').value, freeDocs: document.getElementById('nd').value } })
+      if (!r.ok) return toast(r.json.message || 'Could not create code', true)
+      toast(r.json.code + ' created and turned on.'); show()
+    }
+    document.querySelectorAll('input[data-code]').forEach(el => el.onchange = async () => {
+      const r = await api('/api/admin/promo/' + encodeURIComponent(el.dataset.code), { method: 'PATCH', body: { active: el.checked } })
+      if (!r.ok) { el.checked = !el.checked; return toast(r.json.message || 'Could not update code', true) }
+      toast(r.json.code + ' is now ' + (r.json.active ? 'on' : 'off') + '.'); show()
+    })
+  },
+  async documents() {
+    root.innerHTML = '<div class="card"><div class="row"><h2>Documents</h2><span class="muted">Status, sender and recipients only. Document contents are never shown here.</span><span class="sp"></span><input id="dq" placeholder="Search name or sender email" style="width:240px"><select id="ds"><option value="">All statuses</option><option>draft</option><option>sent</option><option>waiting</option><option>completed</option><option>declined</option><option>expired</option><option>voided</option></select></div><div id="dt" class="muted">Loading…</div></div>'
+    const load = async () => {
+      const r = await api('/api/admin/documents?q=' + encodeURIComponent(document.getElementById('dq').value) + '&status=' + encodeURIComponent(document.getElementById('ds').value))
+      const docs = r.json.documents || []
+      document.getElementById('dt').innerHTML = table(['Document', 'Status', 'Sender', 'Recipients', 'Sent', 'Paid with', ''], docs.map(d => '<tr><td>' + esc(d.name) + '<div class="muted">' + day(d.created) + '</div></td><td>' + statusPill(d.status) + '</td><td>' + esc(d.owner.name) + '<div class="muted">' + esc(d.owner.email) + '</div></td><td>' + (d.recipients.map(s => esc(s.name || s.email) + ' ' + (s.role === 'cc' ? '<span class="muted">cc</span>' : statusPill(s.state))).join('<br>') || '—') + '</td><td>' + fmt(d.sent) + '</td><td>' + esc(d.billing || '—') + '</td><td style="white-space:nowrap">'
+        + (['sent', 'waiting'].includes(d.status) ? '<button class="b" data-dact="resend" data-id="' + d.id + '">Resend link</button> ' : '')
+        + (['sent', 'waiting', 'draft'].includes(d.status) ? '<button class="b danger" data-dact="void" data-id="' + d.id + '" data-name="' + esc(d.name) + '">Void</button>' : '')
+        + '</td></tr>'), 'No documents match.')
+      document.querySelectorAll('[data-dact]').forEach(b => b.onclick = async () => {
+        if (b.dataset.dact === 'void' && !confirm('Void “' + b.dataset.name + '”? Open signing links stop working. This can’t be undone.')) return
+        b.disabled = true
+        const r = await api('/api/admin/documents/' + b.dataset.id + '/' + b.dataset.dact, { method: 'POST' })
+        if (!r.ok) { b.disabled = false; return toast(r.json.message || 'Could not update document', true) }
+        toast(r.json.message || 'Document voided.'); load()
+      })
+    }
+    let t
+    document.getElementById('dq').oninput = () => { clearTimeout(t); t = setTimeout(load, 300) }
+    document.getElementById('ds').onchange = load
+    load()
+  },
+  async activity() {
+    const r = await api('/api/admin/activity')
+    const a = r.json
+    const chart = (rows, label) => {
+      const days = []; const map = Object.fromEntries(rows.map(x => [x.day, x.n]))
+      for (let i = 29; i >= 0; i--) { const d = new Date(Date.now() - i * 864e5).toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' }); days.push([d, map[d] || 0]) }
+      const max = Math.max(1, ...days.map(x => x[1]))
+      return '<div class="card"><div class="row"><h2>' + label + '</h2><span class="muted">last 30 days · ' + days.reduce((s, x) => s + x[1], 0) + ' total</span></div><div class="bars">' + days.map(x => '<div title="' + x[0] + ': ' + x[1] + '" style="height:' + Math.round(x[1] / max * 100) + '%"></div>').join('') + '</div></div>'
+    }
+    const f = a.flags
+    root.innerHTML = '<div class="stats"><div class="stat"><div class="k">Users</div><div class="v">' + a.totals.users + '</div></div><div class="stat"><div class="k">Documents sent</div><div class="v">' + a.totals.sent + '</div></div><div class="stat"><div class="k">Completed</div><div class="v">' + a.totals.completed + '</div></div></div>'
+      + chart(a.signups, 'Signups per day') + chart(a.sent, 'Documents sent per day')
+      + '<div class="card"><h2>Flags</h2><p class="muted">Possible abuse to review. Nothing is blocked automatically.</p>'
+      + '<h3 style="margin-top:14px">3+ accounts from one IP</h3>' + table(['IP', 'Accounts', 'Emails'], f.ipFlags.map(x => '<tr><td>' + esc(x.ip) + '</td><td>' + x.accounts + '</td><td>' + esc(x.emails) + '</td></tr>'), 'None.')
+      + '<h3 style="margin-top:14px">20+ documents sent in 24 hours</h3>' + table(['User', 'Email', 'Sent'], f.bulkFlags.map(x => '<tr><td>' + esc(x.name) + '</td><td>' + esc(x.email) + '</td><td>' + x.sent + '</td></tr>'), 'None.')
+      + '<h3 style="margin-top:14px">5+ signup attempts from one IP in 24 hours</h3>' + table(['IP', 'Attempts'], f.signupBursts.map(x => '<tr><td>' + esc(x.ip) + '</td><td>' + x.n + '</td></tr>'), 'None.') + '</div>'
+  },
+  async support() {
+    const r = await api('/api/admin/support')
+    const m = r.json.messages || []
+    const contact = m.filter(x => x.kind === 'contact'), chat = m.filter(x => x.kind === 'chat')
+    root.innerHTML = '<div class="card"><div class="row"><h2>Contact form</h2><span class="muted">' + contact.length + ' messages · replies go to the sender’s email</span></div>' + table(['Received', 'From', 'Document', 'Message'], contact.map(x => '<tr><td style="white-space:nowrap">' + fmt(x.created) + '</td><td>' + esc(x.name) + '<div class="muted"><a href="mailto:' + esc(x.email) + '">' + esc(x.email) + '</a></div></td><td>' + esc(x.documentId || '—') + '</td><td class="msg">' + esc(x.message) + '</td></tr>'), 'No contact messages yet.') + '</div>'
+      + '<div class="card"><div class="row"><h2>AI Help questions</h2><span class="muted">' + chat.length + ' questions · shows what confuses people</span></div>' + table(['Asked', 'Question'], chat.map(x => '<tr><td style="white-space:nowrap">' + fmt(x.created) + '</td><td class="msg">' + esc(x.message) + '</td></tr>'), 'No questions yet.') + '</div>'
+  },
+  async health() {
+    const r = await api('/api/admin/health')
+    const h = r.json
+    const line = (name, ok, detail) => '<tr><td><span class="dot ' + (ok ? 'ok' : 'bad') + '"></span><b>' + name + '</b></td><td>' + (ok ? 'Working' : 'Problem') + '</td><td class="muted">' + detail + '</td></tr>'
+    const em = h.email || {}, st = h.stripe || {}, sg = h.storage || {}
+    root.innerHTML = '<div class="card"><h2>System status</h2>' + table(['Service', 'Status', 'Details'], [
+      line('Database', h.database.ok, esc(h.database.detail || 'Connected')),
+      line('Email (Resend)', !!em.ok, esc(em.detail || (em.domains || []).map(d => d.name + ': ' + d.status).join(', ') || em.mode)),
+      line('Payments (Stripe)', !!st.ok, esc(st.detail || ((st.live ? 'Live mode' : 'Test mode') + ' · available ' + (st.available || []).map(b => money(b.amount) + ' ' + b.currency.toUpperCase()).join(', ') + ' · pending ' + (st.pending || []).map(b => money(b.amount) + ' ' + b.currency.toUpperCase()).join(', ')))),
+      line('File storage', !!sg.ok, esc(sg.detail || (sg.mode + (sg.public === false ? ' · private bucket' : sg.public ? ' · WARNING: bucket is public' : '')))),
+      line('Phone verification', true, esc(h.sms.mode === 'off' ? 'Off (email only)' : h.sms.mode))
+    ]) + '</div>'
+      + '<div class="card"><h2>Recent errors</h2>' + table(['When', 'Where', 'Error'], h.errors.map(e => '<tr><td style="white-space:nowrap">' + fmt(e.created) + '</td><td>' + esc(e.source) + '</td><td class="msg">' + esc(e.message) + '</td></tr>'), 'No errors logged.') + '</div>'
+      + '<div class="card"><h2>Failed signer emails</h2>' + table(['When', 'Document', 'To', 'Error'], h.emailFailures.map(e => '<tr><td style="white-space:nowrap">' + fmt(e.created) + '</td><td>' + esc(e.document) + '</td><td>' + esc(e.email) + '</td><td class="msg">' + esc(e.detail) + '</td></tr>'), 'None.') + '</div>'
+  }
+}
+
+async function userAction(ds) {
+  const { act, id, email } = ds
+  if (act === 'view') {
+    const r = await api('/api/admin/users/' + encodeURIComponent(id))
+    if (!r.ok) return toast(r.json.message || 'Could not load user', true)
+    const u = r.json
+    modal('<h2>' + esc(u.name || u.email) + '</h2><p class="muted">' + esc(u.email) + ' · signed up ' + fmt(u.created) + ' · ' + (u.verified ? 'verified' : 'not verified') + (u.blocked ? ' · <b style="color:#b91c1c">blocked</b>' : '') + '</p>'
+      + '<p>Credits: <b>' + u.credits + '</b> · Free document ' + (u.freeUsed ? 'used' : 'not used') + (u.createdIp ? ' · Signup IP ' + esc(u.createdIp) : '') + (u.stripeCustomer ? ' · Stripe customer ' + esc(u.stripeCustomer) : '') + '</p>'
+      + '<h3 style="margin-top:14px">Promo codes</h3>' + table(['Code', 'Used', 'Redeemed', 'Last used'], u.promos.map(p => '<tr><td>' + esc(p.code) + '</td><td>' + p.used + ' of ' + p.granted + '</td><td>' + fmt(p.redeemed) + '</td><td>' + fmt(p.lastUsed) + '</td></tr>'), 'None.')
+      + '<h3 style="margin-top:14px">Purchases</h3>' + table(['Date', 'Pack', 'Amount'], u.payments.map(p => '<tr><td>' + fmt(p.created) + '</td><td>' + esc(p.kind) + '</td><td>' + money(p.amount) + '</td></tr>'), 'None.')
+      + '<h3 style="margin-top:14px">Recent documents</h3>' + table(['Name', 'Status', 'Sent', 'Paid with'], u.documents.map(d => '<tr><td>' + esc(d.name) + '</td><td>' + statusPill(d.status) + '</td><td>' + fmt(d.sent) + '</td><td>' + esc(d.billing || '—') + '</td></tr>'), 'None.'))
+    return
+  }
+  if (act === 'credits') {
+    const v = prompt('Add or remove paid credits for ' + email + '. Enter a number like 10 to add, or -5 to remove.')
+    if (v == null || !v.trim()) return
+    const r = await api('/api/admin/users/' + encodeURIComponent(id) + '/credits', { method: 'POST', body: { delta: Number(v) } })
+    if (!r.ok) return toast(r.json.message || 'Could not change credits', true)
+    toast(email + ' now has ' + r.json.credits + ' credits.'); return show()
+  }
+  if (act === 'delete' && !confirm('Delete ' + email + '? This permanently removes their account, documents and credits. They can sign up again with the same email.')) return
+  if (act === 'block' && !confirm('Block ' + email + '? They won’t be able to log in or send documents until you unblock them.')) return
+  const r = act === 'delete'
+    ? await api('/api/admin/users/' + encodeURIComponent(id), { method: 'DELETE' })
+    : await api('/api/admin/users/' + encodeURIComponent(id) + '/block', { method: 'POST', body: { blocked: act === 'block' } })
+  if (!r.ok) return toast(r.json.message || 'Could not update user', true)
+  toast(email + (act === 'delete' ? ' deleted.' : act === 'block' ? ' blocked.' : ' unblocked.')); show()
+}
+
+gate().then(ok => { if (ok) show() })
+</script></body></html>

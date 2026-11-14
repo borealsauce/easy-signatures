@@ -562,7 +562,7 @@ async function signToken(token) {
   const res = await fetch('/api/sign/' + token, { headers: { 'X-Device-Local': deviceLocal() } })
   const session = await res.json().catch(() => null)
   if (!res.ok) return V.innerHTML = `<div class="card"><h2>${esc(session?.message || 'This link is not valid.')}</h2></div>`
-  if (session.status === 'expired' || session.status === 'declined') return V.innerHTML = `<div class="card"><h2>This document is ${esc(session.status)}.</h2></div>`
+  if (session.status === 'expired' || session.status === 'declined' || session.status === 'voided') return V.innerHTML = `<div class="card"><h2>This document is ${esc(session.status)}.</h2></div>`
   if (session.status === 'waiting_turn') return V.innerHTML = `<div class="card"><h2>Waiting on ${esc(session.waitingFor)}</h2><p>You’ll get an email when it’s your turn.</p></div>`
   if (session.status === 'completed' && session.me?.done) return V.innerHTML = `<div class="card" style="text-align:center"><h2>This document is complete.</h2><p><a class="btn p" href="/api/sign/${token}/download">Download the sealed PDF</a></p></div>`
   const d = session.document

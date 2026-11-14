@@ -15,8 +15,10 @@ import {
   verifyEmailToken, resendByEmail
 } from './service.js'
 import { adminCreateCode, adminListCodes, adminSetActive, isAdmin, redeemCode } from './promo.js'
-import { adminPageHtml } from './admin-page.js'
-import { DISABLED_MESSAGE, adminDeleteUser, adminListUsers, adminSetBlocked } from './admin.js'
+import {
+  DISABLED_MESSAGE, adminActivity, adminAdjustCredits, adminDeleteUser, adminHealth, adminIncome, adminListDocuments,
+  adminListUsers, adminSetBlocked, adminSupport, adminUserDetail, adminVoidDocument, logError
+} from './admin.js'
 import { allow } from './ratelimit.js'
 import { streamHelp } from './help.js'
 import { existsSync } from 'node:fs'
@@ -49,6 +51,7 @@ export async function createApp(env = process.env) {
   const sms = createSms(config, mailbox)
   const payments = createPayments(config)
   const ctx = { config, db, storage, email, sms, payments, mailbox }
+  ctx.logError = (source, message) => logError(db, source, message)
   const app = express()
   app.disable('x-powered-by')
   app.locals.ctx = ctx
@@ -177,7 +180,7 @@ export async function createApp(env = process.env) {
   app.get('/admin', (req, res) => {
     res.setHeader('X-Robots-Tag', 'noindex, nofollow')
     res.setHeader('Cache-Control', 'no-store')
-    res.type('html').send(adminPageHtml())
+    res.sendFile(join(root, 'admin.html'))
   })
 
   app.get('/api/admin/promo', adminOnly, asyncRoute(async (req, res) => {
@@ -200,6 +203,53 @@ export async function createApp(env = process.env) {
 
   app.delete('/api/admin/users/:id', adminOnly, asyncRoute(async (req, res) => {
     res.json(await adminDeleteUser(ctx, req.params.id))
+  }))
+
+  app.get('/api/admin/users/:id', adminOnly, asyncRoute(async (req, res) => {
+    res.json(await adminUserDetail(ctx, req.params.id))
+  }))
+
+  app.post('/api/admin/users/:id/credits', adminOnly, asyncRoute(async (req, res) => {
+    res.json(await adminAdjustCredits(ctx, req.params.id, req.body?.delta))
+  }))
+
+  app.get('/api/admin/income', adminOnly, asyncRoute(async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    try {
+      res.json(await adminIncome(ctx))
+    } catch (err) {
+      await ctx.logError('admin.income', err.message)
+      res.status(502).json({ error: 'stripe', message: 'Could not load income from Stripe: ' + String(err.message || err).slice(0, 200) })
+    }
+  }))
+
+  app.get('/api/admin/documents', adminOnly, asyncRoute(async (req, res) => {
+    res.json({ documents: await adminListDocuments(ctx, { q: req.query.q || '', status: req.query.status || '' }) })
+  }))
+
+  app.post('/api/admin/documents/:id/void', adminOnly, asyncRoute(async (req, res) => {
+    res.json(await adminVoidDocument(ctx, req.params.id))
+  }))
+
+  app.post('/api/admin/documents/:id/resend', adminOnly, asyncRoute(async (req, res) => {
+    const doc = (await db.query(`select owner_id from documents where id=$1`, [req.params.id])).rows[0]
+    if (!doc) return res.status(404).json({ error: 'not_found', message: 'Document not found.' })
+    const owner = (await db.query(`select * from profiles where id=$1`, [doc.owner_id])).rows[0]
+    const out = await remind(ctx, owner, req.params.id)
+    res.json({ ...out, message: `Signing link sent again to ${out.reminded} recipient${out.reminded === 1 ? '' : 's'}.` })
+  }))
+
+  app.get('/api/admin/activity', adminOnly, asyncRoute(async (req, res) => {
+    res.json(await adminActivity(ctx))
+  }))
+
+  app.get('/api/admin/support', adminOnly, asyncRoute(async (req, res) => {
+    res.json({ messages: await adminSupport(ctx) })
+  }))
+
+  app.get('/api/admin/health', adminOnly, asyncRoute(async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    res.json(await adminHealth(ctx))
   }))
 
   app.patch('/api/admin/promo/:code', adminOnly, asyncRoute(async (req, res) => {
@@ -440,6 +490,8 @@ export async function createApp(env = process.env) {
     }
     const ok = await allow(db, `contact:${req.device.ip || 'unknown'}`, { limit: 5, windowMs: 60 * 60 * 1000 })
     if (!ok) return res.status(429).json({ error: 'rate_limit', message: 'Too many messages from this network. Try again in an hour.' })
+    await db.query(`insert into support_messages (kind, name, email, document_id, message, ip) values ('contact',$1,$2,$3,$4,$5)`, [name, email, documentId || null, message, req.device.ip || null])
+      .catch(err => ctx.logError('support.store', err.message))
     const to = config.supportTo || 'support@localhost'
     const brand = { company: 'Easy Digital Signatures', color: '#0E6B62' }
     await ctx.email.send({
@@ -475,6 +527,12 @@ export async function createApp(env = process.env) {
     if (!await allow(db, `chat:${ip}`, { limit: 30, windowMs: 60 * 60 * 1000 })) {
       return res.status(429).json({ error: 'rate_limit', message: 'Too many questions. Use Contact support if you’re stuck.' })
     }
+    const list = Array.isArray(req.body?.messages) ? req.body.messages : []
+    const last = list[list.length - 1]
+    if (last && last.role === 'user' && typeof last.content === 'string' && last.content.trim()) {
+      await db.query(`insert into support_messages (kind, message, ip) values ('chat',$1,$2)`, [last.content.trim().slice(0, 2000), ip])
+        .catch(err => ctx.logError('support.store', err.message))
+    }
     await streamHelp(ctx, req.body?.messages, res)
   }))
 
@@ -500,7 +558,10 @@ export async function createApp(env = process.env) {
     if (res.headersSent) return next(err)
     if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'too_large', message: 'Files must be 10 MB or smaller.' })
     const status = err.status || 500
-    if (status >= 500) console.error(err)
+    if (status >= 500) {
+      console.error(err)
+      ctx.logError(`${req.method} ${req.path}`.slice(0, 60), err.message || String(err))
+    }
     res.status(status).json({
       error: err.code || 'server',
       message: err.publicMessage || (status >= 500 ? 'Something went wrong.' : err.message)

@@ -66,16 +66,42 @@ test('promo codes, admin toggle, block and delete', { timeout: 60000 }, async ()
     assert.equal(me.usage.promoCredits, 0)
     const off = await call('/api/promo/redeem', { method: 'POST', token: owner.token, body: { code: 'VIP100' } })
     assert.equal(off.status, 410)
+    const html = await fetch(base + '/admin').then(r => r.text())
+    assert.match(html, /Owner admin/)
     const s2 = await sendOne(u.token, '198.51.100.2')
     assert.notEqual(s2.json.billingSource, 'promo:VIP100')
     // create code
     assert.equal((await call('/api/admin/promo', { method: 'POST', token: owner.token, body: { code: 'friends', freeDocs: 5 } })).status, 201)
+    // dashboard tabs
+    const inc = await call('/api/admin/income', { token: owner.token })
+    assert.equal(inc.status, 200, JSON.stringify(inc.json))
+    const docs = (await call('/api/admin/documents', { token: owner.token })).json.documents
+    assert.ok(docs.length >= 2)
+    assert.ok(docs[0].recipients.length)
+    const open = docs.find(d => ['sent', 'waiting'].includes(d.status))
+    const rs = await call('/api/admin/documents/' + open.id + '/resend', { method: 'POST', token: owner.token })
+    assert.equal(rs.status, 200, JSON.stringify(rs.json))
+    const vd = await call('/api/admin/documents/' + open.id + '/void', { method: 'POST', token: owner.token })
+    assert.equal(vd.json.status, 'voided')
+    await call('/api/contact', { method: 'POST', body: { name: 'Pat', email: 'pat@example.com', message: 'How do I add a signer?' } })
+    const sup = (await call('/api/admin/support', { token: owner.token })).json.messages
+    assert.equal(sup[0].kind, 'contact')
+    const act = (await call('/api/admin/activity', { token: owner.token })).json
+    assert.ok(act.totals.users >= 2)
+    const hl = await call('/api/admin/health', { token: owner.token })
+    assert.equal(hl.json.database.ok, true)
+    assert.equal((await call('/api/admin/health', { token: u.token })).status, 403)
     // users: block, unblock, delete; owner protected
     const users = (await call('/api/admin/users', { token: owner.token })).json.users
     const vip = users.find(x => x.email === 'vip@example.com')
     const own = users.find(x => x.email === 'owner@example.com')
     assert.equal(own.protected, true)
     assert.equal((await call('/api/admin/users/' + own.id, { method: 'DELETE', token: owner.token })).status, 403)
+    const det = (await call('/api/admin/users/' + vip.id, { token: owner.token })).json
+    assert.equal(det.promos.length, 2)
+    const cr = await call('/api/admin/users/' + vip.id + '/credits', { method: 'POST', token: owner.token, body: { delta: 7 } })
+    assert.equal(cr.json.credits, 7)
+    assert.equal((await call('/api/admin/users/' + vip.id + '/credits', { method: 'POST', token: owner.token, body: { delta: -100 } })).json.credits, 0)
     assert.equal((await call('/api/admin/users/' + vip.id + '/block', { method: 'POST', token: owner.token, body: { blocked: true } })).status, 200)
     const blockedLogin = await call('/api/auth/login', { method: 'POST', body: { email: 'vip@example.com', password: 'correct-horse' } })
     assert.equal(blockedLogin.status, 403)

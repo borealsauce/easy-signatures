@@ -250,7 +250,7 @@ export async function signup(ctx, { name, email, password, ip, promo }) {
     }
     await createProfile(ctx, { id: data.user.id, email: cleanEmail, name: cleanName, passwordHash: null, ip })
     const promoResult = await signupPromo(ctx, data.user.id, promoCode)
-    const emailSent = await trySend(() => sendVerifyEmail(ctx, cleanEmail, cleanName, data.properties.action_link))
+    const emailSent = await trySend(() => sendVerifyEmail(ctx, cleanEmail, cleanName, data.properties.action_link), ctx)
     return { id: data.user.id, email: cleanEmail, emailSent, promo: promoResult }
   }
 
@@ -259,13 +259,14 @@ export async function signup(ctx, { name, email, password, ip, promo }) {
   await createProfile(ctx, { id, email: cleanEmail, name: cleanName, passwordHash: hashPassword(password), ip })
   await ctx.db.query(`update profiles set email_verify_token=$2 where id=$1`, [id, hashSecret(token, ctx.config.jwtSecret)])
   const promoResult = await signupPromo(ctx, id, promoCode)
-  const emailSent = await trySend(() => sendVerifyEmail(ctx, cleanEmail, cleanName, `${ctx.config.appUrl}/auth/verify?token=${token}`))
+  const emailSent = await trySend(() => sendVerifyEmail(ctx, cleanEmail, cleanName, `${ctx.config.appUrl}/auth/verify?token=${token}`), ctx)
   return { id, email: cleanEmail, emailSent, promo: promoResult }
 }
 
-async function trySend(fn) {
+async function trySend(fn, ctx) {
   try { await fn(); return true } catch (err) {
     console.error('verification email failed:', String(err?.message || err).slice(0, 300))
+    await ctx?.logError?.('email.verify', String(err?.message || err))
     return false
   }
 }
@@ -892,7 +893,7 @@ export async function signSession(ctx, token, device, { markView }) {
   if (!signer) throw fail(404, 'not_found', 'This signing link is not valid.')
   const doc = await partyDoc(ctx, signer)
   const signers = await loadSigners(ctx.db.query.bind(ctx.db), doc.id)
-  if (['declined', 'expired'].includes(doc.status)) {
+  if (['declined', 'expired', 'voided'].includes(doc.status)) {
     return { status: doc.status, name: doc.name }
   }
   if (doc.sent_at && ['sent', 'waiting'].includes(doc.status)) {

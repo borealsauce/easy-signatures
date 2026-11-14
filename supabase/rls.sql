@@ -23,6 +23,8 @@ alter table stripe_events enable row level security;
 alter table rate_limits enable row level security;
 alter table promo_codes enable row level security;
 alter table promo_redemptions enable row level security;
+alter table support_messages enable row level security;
+alter table error_log enable row level security;
 
 -- Storage: create a private bucket named "documents" in the Supabase dashboard
 -- (Storage → New bucket → name: documents → Public: off).

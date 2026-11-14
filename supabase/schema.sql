@@ -218,3 +218,27 @@ alter table promo_redemptions enable row level security;
 insert into promo_codes (code, free_docs_per_user, active) values ('VIP100', 100, true), ('VIP50', 50, true), ('VIP10', 10, true) on conflict (code) do nothing;
 
 alter table profiles add column if not exists blocked_at timestamptz;
+
+-- Owner admin: support inbox (contact form + AI Help questions) and recent server errors.
+create table if not exists support_messages (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null,
+  name text,
+  email text,
+  document_id text,
+  message text not null,
+  ip text,
+  created_at timestamptz not null default now()
+);
+create index if not exists support_messages_created_idx on support_messages (created_at desc);
+
+create table if not exists error_log (
+  id uuid primary key default gen_random_uuid(),
+  source text not null,
+  message text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists error_log_created_idx on error_log (created_at desc);
+
+alter table support_messages enable row level security;
+alter table error_log enable row level security;
