@@ -1457,8 +1457,8 @@ export async function runMaintenance(ctx) {
      where d.status in ('sent','waiting') and d.remind_days > 0 and d.sent_at is not null and not d.is_template
        and p.blocked_at is null
        and d.auto_reminders < $1
-       and d.sent_at + make_interval(days => d.remind_days) < now()
-       and (d.last_reminded_at is null or d.last_reminded_at + make_interval(days => d.remind_days) < now())
+       and d.sent_at + make_interval(days => d.remind_days) < now() + interval '1 hour'
+       and (d.last_reminded_at is null or d.last_reminded_at + make_interval(days => d.remind_days) < now() + interval '1 hour')
        and (d.last_reminded_at is null or d.last_reminded_at < now() - interval '24 hours')
      order by d.sent_at limit 200`, [MAX_AUTO_REMINDERS]
   )
@@ -1489,7 +1489,7 @@ export function resendLinkToken(ctx, userId, docId) {
 async function senderNudges(ctx) {
   const senders = (await ctx.db.query(
     `select * from profiles where sender_nudge_days > 0 and blocked_at is null and email_verified_at is not null
-       and (last_nudged_at is null or last_nudged_at + make_interval(days => sender_nudge_days) < now())
+       and (last_nudged_at is null or last_nudged_at + make_interval(days => sender_nudge_days) < now() + interval '1 hour')
      limit 200`
   )).rows
   let sent = 0
