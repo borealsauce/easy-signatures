@@ -1,0 +1,20 @@
+{
+  "name": "Easy Digital Signatures",
+  "short_name": "Easy Signatures",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#06141E",
+  "theme_color": "#06141E",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

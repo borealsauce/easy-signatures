@@ -22,6 +22,7 @@ import {
 import { allow } from './ratelimit.js'
 import { streamHelp } from './help.js'
 import { existsSync } from 'node:fs'
+import { registerSeo } from '../seo/routes.js'
 
 function projectRoot() {
   const here = dirname(fileURLToPath(import.meta.url))
@@ -579,6 +580,7 @@ export async function createApp(env = process.env) {
     await streamHelp(ctx, req.body?.messages, res)
   }))
 
+  registerSeo(app, { root, config })
   app.get('/', (req, res) => res.sendFile(join(root, 'index.html')))
   for (const page of ['/contact', '/signup', '/login', '/pricing', '/app']) {
     app.get(page, (req, res) => res.sendFile(join(root, 'index.html')))

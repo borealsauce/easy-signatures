@@ -1,3 +1,6 @@
+import { siteFooterHtml } from './shared/site-footer.js'
+import { homeFaqHtml } from './shared/home-faq.js'
+
 const sig = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 11.5c2-1 3.4 1.1 5-.2 1.8-1.4 2.7-3.5 6-2.5"/><path d="M3 13.5h6.5"/></svg>`
 const initials = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><path d="M5.5 9.2c.7-.4 1.3.2 2-.2.8-.5 1.2-1.3 2.6-.9"/></svg>`
 const dateIcon = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M6 2.5v2M10 2.5v2"/></svg>`
@@ -96,7 +99,8 @@ export function marketingHtml({ loggedIn, smsEnabled = true }) {
       </div>
     </div>
   </section>
-  <footer><div class="foot"><div>Easy Digital Signatures</div><nav><a href="#/contact">Privacy</a><a href="#/contact">Terms</a><a href="#/contact">Contact</a></nav><div>© 2026</div></div></footer>
+  ${homeFaqHtml()}
+  ${siteFooterHtml()}
   </div>`
 }
 
