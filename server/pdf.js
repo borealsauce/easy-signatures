@@ -152,7 +152,7 @@ export async function sealPdf({ original, doc, verifyUrl }) {
   pen.space(8)
   pen.text('Recipients', 13, cbold)
   for (const s of doc.signers || []) {
-    const when = s.doneAt ? `signed ${s.doneAt}` : (s.role === 'cc' ? 'copied' : 'pending')
+    const when = s.doneAt ? `${s.role === 'approver' ? 'approved' : 'signed'} ${s.doneAt}` : (s.role === 'cc' ? 'copied' : 'pending')
     pen.text(`${s.name || 'Signer'} <${s.email || 'no email'}>  role ${s.role}  ${when}`, 9)
     if (s.signIp || s.viewIp) pen.text(`IP ${s.signIp || s.viewIp || 'n/a'}  ${s.signUa || ''}`, 8, cfont, MUTED, 3)
     if (s.consentAt) pen.text(`Consent ${s.consentAt} from ${s.consentIp || 'n/a'} (${doc.consentVersion || 'esign'})`, 8, cfont, MUTED, 3)

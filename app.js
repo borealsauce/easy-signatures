@@ -1,7 +1,7 @@
 import { initialsOf } from '/shared/names.js'
 import { TERMS_VERSION } from '/shared/terms.js'
 import { parseBulkRecipients, bulkCostSummary, allowanceLabel } from '/shared/bulk.js'
-import { calc, visible, validate } from '/shared/fields.js'
+import { calc, visible, validate, ROLE_OPTIONS, roleLabel } from '/shared/fields.js'
 import { marketingHtml } from '/marketing.js'
 import { mountHelp } from '/help.js'
 
@@ -13,6 +13,38 @@ const MIN = { signature: [120, 36], initials: [48, 28], date: [70, 22], name: [7
 const FT = { signature: ['✍️', 'Signature', .26, .06], initials: ['🔤', 'Initials', .09, .05], date: ['📅', 'Date signed', .16, .035], name: ['👤', 'Full name', .24, .035], text: ['📝', 'Text', .24, .035], number: ['#️⃣', 'Number', .12, .035], checkbox: ['☑️', 'Checkbox', .03, .023], dropdown: ['🔽', 'Dropdown', .18, .035], formula: ['🧮', 'Formula', .14, .035], payment: ['💳', 'Payment', .2, .045], attachment: ['📎', 'Attachment', .2, .04] }
 const SIGFONTS = ['Caveat', 'Dancing Script', 'Great Vibes']
 const uid = () => crypto.randomUUID()
+function closeRoleMenus() {
+  $$('.role-dd-menu').forEach(el => el.remove())
+  $$('.role-dd-btn[aria-expanded=true]').forEach(el => el.setAttribute('aria-expanded', 'false'))
+}
+function openRoleMenu(btn, current, onPick) {
+  closeRoleMenus()
+  if (btn.disabled) return
+  btn.setAttribute('aria-expanded', 'true')
+  const menu = document.createElement('div')
+  menu.className = 'role-dd-menu'
+  menu.setAttribute('role', 'listbox')
+  menu.innerHTML = ROLE_OPTIONS.map(opt => {
+    const on = opt.value === current
+    return `<button type="button" class="role-dd-item" role="option" aria-selected="${on}" data-role="${opt.value}"><span class="check">${on ? '✓' : ''}</span><span><b>${esc(opt.label)}</b><span class="hint">${esc(opt.hint)}</span></span></button>`
+  }).join('')
+  document.body.appendChild(menu)
+  const r = btn.getBoundingClientRect()
+  const width = Math.max(260, r.width)
+  let left = r.left
+  if (left + width > innerWidth - 8) left = Math.max(8, innerWidth - width - 8)
+  let top = r.bottom + 4
+  const mh = menu.getBoundingClientRect().height
+  if (top + mh > innerHeight - 8 && r.top - mh > 8) top = r.top - mh - 4
+  Object.assign(menu.style, { left: left + 'px', top: top + 'px', width: width + 'px' })
+  menu.querySelectorAll('[data-role]').forEach(item => {
+    item.onclick = e => { e.preventDefault(); e.stopPropagation(); onPick(item.dataset.role); closeRoleMenus() }
+  })
+}
+document.addEventListener('mousedown', e => {
+  if (!e.target.closest('.role-dd-menu, .role-dd-btn')) closeRoleMenus()
+})
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRoleMenus() })
 const now = () => new Date().toISOString()
 const fmt = d => d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
@@ -478,7 +510,7 @@ async function editor(id) {
   ${d.tpl ? '<div class="card" style="margin-bottom:12px;padding:10px 14px;font-size:13px"><b>Template builder.</b> Recipients here are roles. Real names and emails are filled in each time you use the template.</div>' : ''}
   <div class="editor"><div class="panel"><h4>Fields — drag onto page</h4><div class="ftools">${Object.entries(FT).map(([k, [i, l]]) => `<div class="ftool" data-t="${k}">${i} ${l}</div>`).join('')}</div><p style="font-size:12px;color:var(--mut)">Click a field, then click the page. Shift+click keeps placing. Esc cancels.</p></div>
   <div class="pages" id="pages"></div>
-  <div class="panel"><h4>${d.tpl ? 'Roles' : 'Recipients'}</h4><label class="row" style="font-size:13px"><input type="checkbox" id="ord" ${d.ordered ? 'checked' : ''}> Sign in order — one after another</label><div id="sg"></div>${locked ? '' : '<button onclick="addSigner()" style="width:100%">+ Add recipient</button>'}
+  <div class="panel"><h4>${d.tpl ? 'Roles' : 'Who needs to sign?'}</h4><label class="row" style="font-size:13px"><input type="checkbox" id="ord" ${d.ordered ? 'checked' : ''}> Sign in order — one after another</label><div id="sg"></div>${locked ? '' : '<button onclick="addSigner()" style="width:100%">+ Add recipient</button>'}
   <h4 style="margin-top:16px">Field properties</h4><div id="props"><p style="font-size:13px;color:var(--mut)">Select a field.</p></div>
   <h4 style="margin-top:16px">Settings</h4><label class="f">Folder</label><select id="fo">${S.folders.slice(1).map(f => `<option ${f === d.folder ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select>
   <label class="f">Expires after (days)</label><input id="ex" type="number" min="1" max="365" value="${d.expiresDays}" style="width:100%"><p class="note" style="font-size:12px">The signing link closes after this many days. Unsigned signers and you get a warning email 2 days before.</p><label class="f">Automatic reminders</label>${remindSelect('rm', d.remindDays, 'style="width:100%"')}<p class="note" style="font-size:12px">Emails only people who haven’t signed. Up to 5 reminders; stops when signed, voided or expired.${locked && !d.tpl ? ` Sent ${d.autoReminders || 0} automatic so far.${d.lastReminded ? ' Last reminded ' + fmt(d.lastReminded) + '.' : ''}` : ''}</p>
@@ -486,12 +518,18 @@ async function editor(id) {
   ${locked && d.signers.some(s => s.token) ? `<h4>Signing links</h4>${d.signers.filter(s => s.token).map(s => `<p style="font-size:12px"><b>${esc(s.name)}</b> ${s.role === 'in-person' ? '<span class="note">(in person)</span>' : ''}<br><a href="#/${s.role === 'in-person' ? 'inperson/' + d.id : 'sign/' + s.token}">${s.role === 'in-person' ? 'Hand this device' : 'Open link'}</a></p>`).join('')}` : ''}</div></div>`
   window.addSigner = () => { d.signers.push({ id: uid(), name: 'Signer ' + (d.signers.length + 1), email: '', role: 'signer', color: COLORS[d.signers.length % 6], done: false }); save(); drawS() }
   const drawS = () => {
-    $('#sg').innerHTML = d.signers.map((s, i) => `<div style="border:1px solid ${s.id === cur ? s.color : 'var(--line)'};border-radius:8px;padding:6px;margin-bottom:6px" data-s="${s.id}"><div class="signer"><span class="dot" style="background:${s.color}"></span><b style="font-size:12px">${d.ordered ? i + 1 + '.' : ''}</b><input value="${esc(s.name)}" data-k="name" placeholder="${d.tpl ? 'Role name' : 'Full name'}" ${locked ? 'disabled' : ''}>${i > 0 && !locked ? `<span style="cursor:pointer" data-up="${i}">↑</span><span style="cursor:pointer" data-del="${i}">✕</span>` : ''}</div><div class="signer"><input value="${esc(s.email || '')}" data-k="email" placeholder="${s.role === 'in-person' ? 'Email optional' : 'email@example.com'}" ${locked ? 'disabled' : ''}><select data-k="role" ${locked ? 'disabled' : ''}>${[['signer', 'signer'], ['approver', 'approver'], ['in-person', 'in-person (hand this device)'], ['cc', 'cc']].map(([r, l]) => `<option value="${r}" ${r === s.role ? 'selected' : ''}>${l}</option>`).join('')}</select></div>${s.role === 'in-person' ? '<p class="note">No email needed — you’ll hand them this device after you send.</p>' : ''}${d.tpl || s.role === 'cc' ? '' : `<div class="asig"><img data-ps="sig" src="${s.name.trim() ? typedSig(s.name) : ''}"><img data-ps="ini" src="${s.name.trim() ? typedSig(initialsOf(s.name)) : ''}"><small data-ps="txt">${s.name.trim() ? initialsOf(s.name) : ''}</small></div>`}</div>`).join('')
+    $('#sg').innerHTML = d.signers.map((s, i) => `<div style="border:1px solid ${s.id === cur ? s.color : 'var(--line)'};border-radius:8px;padding:6px;margin-bottom:6px" data-s="${s.id}"><div class="signer"><span class="dot" style="background:${s.color}"></span><b style="font-size:12px">${d.ordered ? i + 1 + '.' : ''}</b><input value="${esc(s.name)}" data-k="name" placeholder="${d.tpl ? 'Role name' : 'Full name'}" ${locked ? 'disabled' : ''}>${i > 0 && !locked ? `<span style="cursor:pointer" data-up="${i}">↑</span><span style="cursor:pointer" data-del="${i}">✕</span>` : ''}</div><div class="signer"><input value="${esc(s.email || '')}" data-k="email" placeholder="${s.role === 'in-person' ? 'Email optional' : 'email@example.com'}" ${locked ? 'disabled' : ''}><div class="role-dd"><button type="button" class="role-dd-btn" data-k="role" data-role="${s.role}" ${locked ? 'disabled' : ''} aria-haspopup="listbox" aria-expanded="false" title="${esc((ROLE_OPTIONS.find(o => o.value === s.role) || ROLE_OPTIONS[0]).hint)}">${esc(roleLabel(s.role))}<span class="caret">▾</span></button></div></div>${s.role === 'in-person' ? '<p class="note">No email needed — you’ll hand them this device after you send.</p>' : s.role === 'approver' ? '<p class="note">Approves or declines with a reason. No signature fields needed.</p>' : s.role === 'cc' ? '<p class="note">Gets a copy of the finished document. They don’t sign.</p>' : ''}${d.tpl || s.role === 'cc' || s.role === 'approver' ? '' : `<div class="asig"><img data-ps="sig" src="${s.name.trim() ? typedSig(s.name) : ''}"><img data-ps="ini" src="${s.name.trim() ? typedSig(initialsOf(s.name)) : ''}"><small data-ps="txt">${s.name.trim() ? initialsOf(s.name) : ''}</small></div>`}</div>`).join('')
     $$('[data-s]').forEach(el => {
-      el.onclick = e => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') { cur = el.dataset.s; drawS() } }
+      el.onclick = e => { if (e.target.closest('input,select,button,.role-dd')) return; cur = el.dataset.s; drawS() }
       const nm = $('[data-k=name]', el)
       if (nm) nm.oninput = () => { const v = nm.value.trim(), a = $('[data-ps=sig]', el); if (!a) return; a.src = v ? typedSig(v) : ''; $('[data-ps=ini]', el).src = v ? typedSig(initialsOf(v)) : ''; $('[data-ps=txt]', el).textContent = v ? initialsOf(v) : '' }
-      $$('[data-k]', el).forEach(inp => inp.onchange = () => { const s = sigOf(d, el.dataset.s); s[inp.dataset.k] = inp.value; save(); drawF() })
+      $$('input[data-k]', el).forEach(inp => inp.onchange = () => { const s = sigOf(d, el.dataset.s); s[inp.dataset.k] = inp.value; save(); drawF() })
+      const roleBtn = $('[data-k=role]', el)
+      if (roleBtn && !roleBtn.disabled) roleBtn.onclick = e => {
+        e.preventDefault(); e.stopPropagation()
+        const s = sigOf(d, el.dataset.s)
+        openRoleMenu(roleBtn, s.role, role => { s.role = role; save(); drawS(); drawF() })
+      }
     })
     $$('[data-del]').forEach(x => x.onclick = () => { const s = d.signers.splice(+x.dataset.del, 1)[0]; d.fields = d.fields.filter(f => f.signer !== s.id); save(); drawS(); drawF() })
     $$('[data-up]').forEach(x => x.onclick = () => { const i = +x.dataset.up; [d.signers[i - 1], d.signers[i]] = [d.signers[i], d.signers[i - 1]]; save(); drawS() })
@@ -795,7 +833,7 @@ async function cert(id) {
   <div class="cert" style="border-top-color:${esc(S.brand?.color || 'var(--brand)')}"><div class="row">${S.brand?.logoUrl ? `<img src="${esc(S.brand.logoUrl)}" alt="" style="height:36px;max-width:160px;object-fit:contain">` : '<span class="mark">E</span>'}<h1 style="margin:0">Certificate of Completion</h1></div><p style="color:var(--mut)">${esc(S.brand?.company || 'Easy Digital Signatures')} electronic signature record. Compare the complete-file fingerprint at the public verify page.</p>
   <div class="grid3" style="grid-template-columns:1fr 1fr;margin:16px 0"><div><b>Document</b><br>${esc(d.name)}</div><div><b>Status</b><br><span class="pill s-${d.status}">${d.status}</span></div><div><b>Document ID</b><br><span class="mono">${d.id}</span></div><div><b>Completed</b><br>${fmt(d.completed)}</div></div>
   <p><b>Original SHA-256</b><br><span class="mono">${d.hashOrig || '—'}</span></p><p><b>Signed content SHA-256</b><br><span class="mono">${d.hashContent || '—'}</span></p><p><b>Complete file SHA-256</b><br><span class="mono">${d.hashFinal || '—'}</span></p>
-  <h3>Recipients</h3>${table(['Name', 'Email', 'Role', 'Status', 'Signed at', 'IP'], d.signers.map(s => `<tr><td>${esc(s.name)}</td><td>${esc(s.email)}</td><td>${s.role}</td><td>${s.done ? 'Signed' : s.declined ? 'Declined' + (s.declineReason ? ' — ' + esc(s.declineReason) : '') : s.role === 'cc' ? 'Copied' : 'Pending'}</td><td>${fmt(s.doneAt)}</td><td>${esc(s.signIp || s.viewIp || '—')}</td></tr>`))}
+  <h3>Recipients</h3>${table(['Name', 'Email', 'Role', 'Status', 'Signed at', 'IP'], d.signers.map(s => `<tr><td>${esc(s.name)}</td><td>${esc(s.email)}</td><td>${s.role}</td><td>${s.done ? (s.role === 'approver' ? 'Approved' : 'Signed') : s.declined ? 'Declined' + (s.declineReason ? ' — ' + esc(s.declineReason) : '') : s.role === 'cc' ? 'Copied' : 'Pending'}</td><td>${fmt(s.doneAt)}</td><td>${esc(s.signIp || s.viewIp || '—')}</td></tr>`))}
   <h3>Audit trail</h3>${table(['Time', 'Event', 'By', 'IP'], d.events.map(e => `<tr><td>${fmt(e.ts)}</td><td>${esc(e.t)}</td><td>${esc(e.who || '')}</td><td>${esc(e.ip || '')}</td></tr>`))}</div>`
 }
 

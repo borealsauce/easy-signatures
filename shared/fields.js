@@ -35,3 +35,12 @@ export function validate(f, v) {
 
 export const FIELD_TYPES = ['signature', 'initials', 'date', 'name', 'text', 'number', 'checkbox', 'dropdown', 'formula', 'payment', 'attachment']
 export const ROLES = ['signer', 'approver', 'in-person', 'cc']
+export const ROLE_OPTIONS = [
+  { value: 'signer', label: 'Signer', hint: 'Signs the document.' },
+  { value: 'approver', label: 'Approver', hint: 'Reviews and approves it before it goes to the next recipients. No signature fields needed. They can approve or decline with a reason.' },
+  { value: 'in-person', label: 'In person', hint: 'Signs on this device after you send. Email is optional.' },
+  { value: 'cc', label: 'CC', hint: 'Gets a copy only. They don’t sign or approve.' }
+]
+export function roleLabel(role) {
+  return ROLE_OPTIONS.find(r => r.value === role)?.label || 'Signer'
+}

@@ -946,8 +946,8 @@ async function emailSigner(ctx, user, doc, signer, token, accessCode, { reminder
     : 'You don’t need an account. The link is unique to you.'
   await ctx.email.send({
     to: signer.email,
-    subject: reminder ? `Reminder: “${doc.name}” is waiting for your signature` : `${brandOf(user, ctx).company} sent you “${doc.name}” to sign`,
-    text: `${reminder ? 'Reminder: ' : ''}${user.full_name} asked you to sign ${doc.name}. ${href}${accessCode ? ' Access code: ' + accessCode : ''}`,
+    subject: reminder ? `Reminder: “${doc.name}” is waiting for your ${signer.role === 'approver' ? 'review' : 'signature'}` : `${brandOf(user, ctx).company} sent you “${doc.name}” to ${signer.role === 'approver' ? 'review' : 'sign'}`,
+    text: `${reminder ? 'Reminder: ' : ''}${user.full_name} asked you to ${signer.role === 'approver' ? 'review' : 'sign'} ${doc.name}. ${href}${accessCode ? ' Access code: ' + accessCode : ''}`,
     html: htmlEmail({
       title: reminder ? `Reminder: ${doc.name}` : doc.name,
       intro: reminder
