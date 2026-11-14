@@ -28,6 +28,13 @@ test('SEO pages are server-rendered with unique meta, canonical, JSON-LD, and ar
       for (const m of html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)) JSON.parse(m[1])
       assert.ok(sitemap.includes(`<loc>https://easydigitalsignatures.com${path}</loc>`), 'sitemap ' + path)
     }
+    for (const bad of ['/verify/not-a-real-id', '/verify/00000000-0000-0000-0000-000000000000']) {
+      const v = await fetch(base + bad)
+      assert.equal(v.status, 404, bad)
+      assert.match(await v.text(), /couldn’t find that document/)
+    }
+    for (const legal of ['/privacy', '/terms']) assert.match(await (await fetch(base + legal)).text(), /Last updated Nov 14, 2026/)
+    assert.match(await (await fetch(base + '/')).text(), /href="\/privacy"/)
     const home = await (await fetch(base + '/')).text()
     assert.match(home, /Send it\. Get it signed\./)
     assert.match(home, /"@type":"FAQPage"/)

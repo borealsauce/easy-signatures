@@ -27,6 +27,7 @@ import {
 } from './developer.js'
 import { existsSync } from 'node:fs'
 import { registerSeo } from '../seo/routes.js'
+import { notFoundPage } from '../seo/layout.js'
 
 function projectRoot() {
   const here = dirname(fileURLToPath(import.meta.url))
@@ -548,8 +549,16 @@ export async function createApp(env = process.env) {
   app.post('/api/cron/reminders', cron)
 
   app.get('/verify/:id', asyncRoute(async (req, res) => {
-    const rec = await verificationRecord(ctx, req.params.id)
-    if (!rec) return res.status(404).type('html').send('<!doctype html><title>Not found</title><p>No completed document matches that id.</p>')
+    const id = String(req.params.id || '')
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+    const rec = isUuid ? await verificationRecord(ctx, id) : null
+    if (!rec) {
+      return res.status(404).type('html').send(notFoundPage({
+        path: '/verify', h1: 'We couldn’t find that document',
+        lede: 'No completed document matches this verification link.',
+        body: '<p>Check that you copied the whole link from the certificate page of the signed PDF. Verification links only work for documents that every signer has finished signing.</p><p>If you think this is a mistake, <a href="/contact">contact us</a> and include the document ID from the certificate.</p>'
+      }))
+    }
     const row = (label, value) => `<p><b>${label}</b><br><span style="font-family:ui-monospace,monospace;word-break:break-all">${value || '—'}</span></p>`
     res.type('html').send(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
       <title>Verify document</title>

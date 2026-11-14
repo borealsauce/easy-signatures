@@ -5,6 +5,7 @@ import { SITE, ORG_LD, APP_LD, faqLd, headTags, renderPage } from './layout.js'
 import { PAGES } from './pages.js'
 import { POSTS, BLOG_INDEX } from './blog.js'
 import { TOOL_PAGE } from './tool-page.js'
+import { PRIVACY, TERMS } from './legal.js'
 import { marketingHtml } from '../marketing.js'
 import { HOME_FAQ } from '../shared/home-faq.js'
 
@@ -13,7 +14,7 @@ const LASTMOD = '2026-11-14'
 const HTML_CACHE = 'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400'
 const ASSET_CACHE = 'public, max-age=86400, s-maxage=604800'
 
-export const SEO_PAGES = [...PAGES, TOOL_PAGE, BLOG_INDEX, ...POSTS]
+export const SEO_PAGES = [...PAGES, TOOL_PAGE, BLOG_INDEX, ...POSTS, PRIVACY, TERMS]
 
 const HOME = {
   path: '/',

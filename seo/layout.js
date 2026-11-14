@@ -105,7 +105,7 @@ export function renderPage(p) {
   if (p.faqs?.length) jsonld.push(faqLd(p.faqs))
   const cta = p.cta || 'Start free'
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-${headTags({ path: p.path, title: p.title, description: p.description, type: p.ogType, jsonld })}
+${headTags({ path: p.path, title: p.title, description: p.description, type: p.ogType, robots: p.robots, jsonld })}
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Inter+Tight:wght@600&display=swap" media="print" onload="this.media='all'">
 <style>${SEO_CSS}</style>
@@ -133,4 +133,14 @@ ${p.noBottomCta ? '' : `<section class="s-band"><h2>Send your first document fre
 ${siteFooterHtml()}
 ${p.scripts || ''}
 </body></html>`
+}
+
+// Friendly, branded 404 page (noindex) used for unknown verification links.
+export function notFoundPage({ path = '/404', h1 = 'Page not found', lede = '', body = '' } = {}) {
+  return renderPage({
+    path, title: `${h1} | ${BRAND}`, description: lede || 'This page could not be found.',
+    h1, lede, crumb: 'Not found', compactHero: true, noHeroCta: true, noBottomCta: true,
+    robots: 'noindex,follow',
+    body: `<section class="card"><div class="prose">${body}<p><a class="s-btn" href="/">Go to the homepage</a></p></div></section>`
+  })
 }
