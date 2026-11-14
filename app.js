@@ -331,7 +331,9 @@ function dashboard() {
       const next = d.signers.find(s => s.role !== 'cc' && !s.done)
       const exp = d.expiresAt || (d.sent && d.expiresDays ? new Date(new Date(d.sent).getTime() + d.expiresDays * 864e5).toISOString() : null)
       const expNote = exp && ['sent', 'waiting'].includes(st) ? `<div class="note">Expires ${fmt(exp)}</div>` : (st === 'expired' && exp ? `<div class="note">Expired ${fmt(exp)}</div>` : '')
-      return `<tr><td><a href="#/${st === 'draft' ? 'edit' : st === 'completed' ? 'cert' : 'edit'}/${d.id}">${esc(d.name)}</a></td><td data-v="${st}"><span class="pill s-${st}">${st[0].toUpperCase() + st.slice(1)}</span>${expNote}</td><td>${esc(d.folder)}</td><td>${sg.map(s => esc(s.name)).join(', ')}</td><td data-v="${n / Math.max(1, sg.length)}">${n}/${sg.length}</td><td data-v="${d.created}">${fmt(d.created)}</td><td data-v="${d.events.at(-1)?.ts || ''}">${fmt(d.events.at(-1)?.ts)}</td><td>${st === 'draft' ? `<a href="#/edit/${d.id}">Edit</a>` : ''}${['sent', 'waiting'].includes(st) && next?.token ? `<a href="#/${next.role === 'in-person' ? 'inperson/' + d.id : 'sign/' + next.token}">${next.role === 'in-person' ? 'Sign in person' : 'Signing link'}</a> · ${recentlyReminded(d) ? `<span class="note" title="You can resend once every 24 hours">Reminded ${fmt(d.lastReminded)}</span>` : `<a href="javascript:remind('${d.id}')">Resend</a>${d.lastReminded ? ` <span class="note">(last ${fmt(d.lastReminded)})</span>` : ''}`}` : ''}${st === 'completed' ? `<a href="javascript:downloadDoc('${d.id}')">PDF</a> · <a href="#/cert/${d.id}">Certificate</a>` : ''}${st !== 'draft' ? ` · <a href="javascript:timeline('${d.id}')">Timeline</a>` : ''}</td></tr>`
+      const declinedBy = d.signers.find(s => s.declined)
+      const decNote = st === 'declined' && declinedBy ? `<div class="note">${esc(declinedBy.name)} declined${declinedBy.declineReason ? ': ' + esc(declinedBy.declineReason) : ''}</div>` : ''
+      return `<tr><td><a href="#/${st === 'draft' ? 'edit' : st === 'completed' ? 'cert' : 'edit'}/${d.id}">${esc(d.name)}</a></td><td data-v="${st}"><span class="pill s-${st}">${st[0].toUpperCase() + st.slice(1)}</span>${expNote}${decNote}</td><td>${esc(d.folder)}</td><td>${sg.map(s => esc(s.name)).join(', ')}</td><td data-v="${n / Math.max(1, sg.length)}">${n}/${sg.length}</td><td data-v="${d.created}">${fmt(d.created)}</td><td data-v="${d.events.at(-1)?.ts || ''}">${fmt(d.events.at(-1)?.ts)}</td><td>${st === 'draft' ? `<a href="#/edit/${d.id}">Edit</a>` : ''}${['sent', 'waiting'].includes(st) && next?.token ? `<a href="#/${next.role === 'in-person' ? 'inperson/' + d.id : 'sign/' + next.token}">${next.role === 'in-person' ? 'Sign in person' : 'Signing link'}</a> · ${recentlyReminded(d) ? `<span class="note" title="You can resend once every 24 hours">Reminded ${fmt(d.lastReminded)}</span>` : `<a href="javascript:remind('${d.id}')">Resend</a>${d.lastReminded ? ` <span class="note">(last ${fmt(d.lastReminded)})</span>` : ''}`}` : ''}${st === 'completed' ? `<a href="javascript:downloadDoc('${d.id}')">PDF</a> · <a href="#/cert/${d.id}">Certificate</a>` : ''}${st !== 'draft' ? ` · <a href="javascript:timeline('${d.id}')">Timeline</a>` : ''}</td></tr>`
     })
     $('#dt').innerHTML = rows.length ? table(['Document', 'Status', 'Folder', 'Recipients', 'Signed', 'Created', 'Last activity', 'Actions'], rows) : '<div class="card"><h3>No documents yet</h3><p><a href="#/new">Upload a PDF or start from a blank page.</a></p></div>'
     afterRender()
@@ -649,7 +651,10 @@ async function signToken(token) {
   const res = await fetch('/api/sign/' + token, { headers: { 'X-Device-Local': deviceLocal() } })
   const session = await res.json().catch(() => null)
   if (!res.ok) return V.innerHTML = `<div class="card"><h2>${esc(session?.message || 'This link is not valid.')}</h2></div>`
-  if (session.status === 'expired' || session.status === 'declined' || session.status === 'voided') return V.innerHTML = `<div class="card"><h2>This document is ${esc(session.status)}.</h2></div>`
+  if (session.status === 'expired' || session.status === 'declined' || session.status === 'voided') {
+    const why = session.me?.declineReason || session.document?.signers?.find(s => s.declined)?.declineReason
+    return V.innerHTML = `<div class="card"><h2>This document is ${esc(session.status)}.</h2>${session.status === 'declined' && why ? `<p>${esc(why)}</p>` : ''}${handBack()}</div>`
+  }
   if (session.status === 'waiting_turn') return V.innerHTML = `<div class="card"><h2>Waiting on ${esc(session.waitingFor)}</h2><p>You’ll get an email when it’s your turn.</p></div>`
   if (session.status === 'completed' && session.me?.done) return V.innerHTML = `<div class="card" style="text-align:center"><h2>This document is complete.</h2><p><a class="btn p" href="/api/sign/${token}/download">Download the sealed PDF</a></p></div>`
   const d = session.document
@@ -696,7 +701,29 @@ async function signToken(token) {
   }
   draw(); prog()
   const nx = $('#nx'); if (nx) nx.onclick = () => { const f = mine().find(f => f.value == null || f.value === ''); $$('.fld').forEach(x => x.classList.remove('cur')); if (!f) return toast('All your fields are filled — click Finish'); const el = $(`.fld[data-id="${f.id}"]`); el.classList.add('cur'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (!['text', 'name', 'number', 'dropdown'].includes(f.type)) setTimeout(() => fill(f), 400); else $('input,select', el)?.focus() }
-  $('#dec').onclick = async () => { const reason = prompt('Reason for declining?'); if (!reason) return; const r = await fetch('/api/sign/' + token + '/decline', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) }); const j = await r.json(); if (!r.ok) return toast(j.message || 'Could not decline'); V.innerHTML = '<div class="card"><h2>You declined this document.</h2><p>The sender has been emailed.</p>' + handBack() + '</div>' }
+  $('#dec').onclick = () => {
+    modal(`<h3>Decline this document?</h3>
+      <p>The sender will be emailed your reason. This cannot be undone.</p>
+      <label class="f">Reason</label>
+      <textarea id="dreason" rows="4" maxlength="500" style="width:100%" placeholder="Why are you declining?"></textarea>
+      <p class="note"><span id="dcount">0</span>/500</p>
+      <div class="row" style="margin-top:14px"><button id="dgo" style="background:#fee2e2">Decline and notify the sender</button><button id="dcx">Cancel</button></div>`)
+    const box = $('#dreason')
+    const count = $('#dcount')
+    box.oninput = () => { count.textContent = box.value.length }
+    $('#dcx').onclick = closeModal
+    $('#dgo').onclick = async () => {
+      const reason = box.value.trim()
+      if (!reason) return toast('Add a short reason for declining.')
+      $('#dgo').disabled = true
+      const r = await fetch('/api/sign/' + token + '/decline', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Device-Local': deviceLocal() }, body: JSON.stringify({ reason }) })
+      const j = await r.json()
+      if (!r.ok) { $('#dgo').disabled = false; return toast(j.message || 'Could not decline') }
+      closeModal()
+      V.innerHTML = `<div class="card"><h2>You declined this document.</h2><p>The sender has been emailed:</p><p class="note">${esc(j.reason || reason)}</p>${handBack()}</div>`
+    }
+    setTimeout(() => box.focus(), 0)
+  }
   $('#cm').onclick = () => { modal(`<h3>Comments</h3>${d.comments.map(c => `<div class="card" style="margin:6px 0;padding:10px"><b>${esc(c.who)}</b> <small>${fmt(c.ts)}</small><br>${esc(c.t)}</div>`).join('') || '<p>No comments yet.</p>'}<textarea id="ct" style="width:100%"></textarea><br><br><button class="p" id="cs">Post</button> <button onclick="closeModal()">Close</button>`); $('#cs').onclick = async () => { const t = $('#ct').value.trim(); if (!t) return; await fetch('/api/sign/' + token + '/comment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t }) }); d.comments.push({ t, who: s.name, ts: now() }); closeModal(); toast('Comment posted') } }
   $('#fin').onclick = async () => {
     if (!$('#ok').checked) return toast('Please accept the electronic-signature consent first'), $('#consent').scrollIntoView({ block: 'center' })
@@ -760,7 +787,7 @@ async function cert(id) {
   <div class="cert"><div class="row"><span class="mark">E</span><h1 style="margin:0">Certificate of Completion</h1></div><p style="color:var(--mut)">Electronic signature record. Compare the complete-file fingerprint at the public verify page.</p>
   <div class="grid3" style="grid-template-columns:1fr 1fr;margin:16px 0"><div><b>Document</b><br>${esc(d.name)}</div><div><b>Status</b><br><span class="pill s-${d.status}">${d.status}</span></div><div><b>Document ID</b><br><span class="mono">${d.id}</span></div><div><b>Completed</b><br>${fmt(d.completed)}</div></div>
   <p><b>Original SHA-256</b><br><span class="mono">${d.hashOrig || '—'}</span></p><p><b>Signed content SHA-256</b><br><span class="mono">${d.hashContent || '—'}</span></p><p><b>Complete file SHA-256</b><br><span class="mono">${d.hashFinal || '—'}</span></p>
-  <h3>Recipients</h3>${table(['Name', 'Email', 'Role', 'Status', 'Signed at', 'IP'], d.signers.map(s => `<tr><td>${esc(s.name)}</td><td>${esc(s.email)}</td><td>${s.role}</td><td>${s.done ? 'Signed' : s.role === 'cc' ? 'Copied' : 'Pending'}</td><td>${fmt(s.doneAt)}</td><td>${esc(s.signIp || s.viewIp || '—')}</td></tr>`))}
+  <h3>Recipients</h3>${table(['Name', 'Email', 'Role', 'Status', 'Signed at', 'IP'], d.signers.map(s => `<tr><td>${esc(s.name)}</td><td>${esc(s.email)}</td><td>${s.role}</td><td>${s.done ? 'Signed' : s.declined ? 'Declined' + (s.declineReason ? ' — ' + esc(s.declineReason) : '') : s.role === 'cc' ? 'Copied' : 'Pending'}</td><td>${fmt(s.doneAt)}</td><td>${esc(s.signIp || s.viewIp || '—')}</td></tr>`))}
   <h3>Audit trail</h3>${table(['Time', 'Event', 'By', 'IP'], d.events.map(e => `<tr><td>${fmt(e.ts)}</td><td>${esc(e.t)}</td><td>${esc(e.who || '')}</td><td>${esc(e.ip || '')}</td></tr>`))}</div>`
 }
 

@@ -99,6 +99,7 @@ function mapSigner(row, secret, reveal) {
     doneAt: iso(row.signed_at),
     viewed: !!row.viewed_at,
     declined: !!row.declined_at,
+    declineReason: row.decline_reason || null,
     token: reveal && row.token ? unseal(row.token, secret) : undefined,
     signIp: row.sign_ip || null,
     signUa: row.sign_ua || null,
@@ -1234,7 +1235,7 @@ export async function declineSign(ctx, token, reason, device) {
       })
     })
   } catch { /* audited already */ }
-  return { ok: true, status: 'declined' }
+  return { ok: true, status: 'declined', reason: why }
 }
 
 export async function completeDocument(ctx, id) {
