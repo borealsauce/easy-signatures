@@ -13,6 +13,10 @@ import { htmlEmail, isVoipLine } from './providers.js'
 import { DISABLED_MESSAGE } from './admin.js'
 import { checkCode, consumePromo, normalizeCode, promoUsage, redeemCode } from './promo.js'
 
+export const REMIND_OPTIONS = [0, 2, 3, 7]
+export const MAX_AUTO_REMINDERS = 5
+export const REMIND_GAP_MS = 24 * 60 * 60 * 1000
+function cadence(v, fallback = 3) { const n = Number(v); return REMIND_OPTIONS.includes(n) ? n : fallback }
 const COLORS = ['#2563eb', '#db2777', '#16a34a', '#ea580c', '#7c3aed', '#0891b2']
 
 export function fail(status, error, message) {
@@ -114,6 +118,8 @@ function mapDoc(row, signers, events, secret, reveal) {
     ordered: row.ordered_sign,
     expiresDays: row.expires_days,
     remindDays: row.remind_days,
+    lastReminded: iso(row.last_reminded_at),
+    autoReminders: num(row.auto_reminders),
     message: row.message,
     idv: row.idv,
     tpl: row.is_template,
@@ -238,17 +244,32 @@ export async function signup(ctx, { name, email, password, ip, promo }) {
 
   if (ctx.config.authMode === 'supabase') {
     const admin = await supabaseAdmin(ctx.config)
-    const { data, error } = await admin.auth.admin.generateLink({
+    const makeLink = () => admin.auth.admin.generateLink({
       type: 'signup',
       email: cleanEmail,
       password,
       options: { data: { full_name: cleanName }, redirectTo: `${ctx.config.appUrl}/auth/confirmed` }
     })
+    let { data, error } = await makeLink()
+    if (error && /registered|already/i.test(error.message || '')) {
+      // Auth user exists but we have no profile: a leftover from a failed signup. Remove it and start clean.
+      const orphan = await findAuthUserByEmail(admin, cleanEmail)
+      if (orphan && !orphan.email_confirmed_at) {
+        await admin.auth.admin.deleteUser(orphan.id)
+        ;({ data, error } = await makeLink())
+      }
+    }
     if (error) {
-      if (/registered|already/i.test(error.message || '')) throw fail(409, 'exists', 'An account with that email already exists. Log in instead, or use “Resend confirmation” on the login page.')
+      if (/registered|already/i.test(error.message || '')) throw fail(409, 'exists', 'An account with that email already exists. Log in instead, or use “Forgot password” on the login page.')
       throw fail(400, 'signup', error.message)
     }
-    await createProfile(ctx, { id: data.user.id, email: cleanEmail, name: cleanName, passwordHash: null, ip })
+    try {
+      await createProfile(ctx, { id: data.user.id, email: cleanEmail, name: cleanName, passwordHash: null, ip })
+    } catch (err) {
+      await admin.auth.admin.deleteUser(data.user.id).catch(() => {})
+      if (constraintReason(err) || /duplicate|unique/i.test(err.message || '')) throw fail(409, 'exists', 'An account with that email already exists. Log in instead.')
+      throw err
+    }
     const promoResult = await signupPromo(ctx, data.user.id, promoCode)
     const emailSent = await trySend(() => sendVerifyEmail(ctx, cleanEmail, cleanName, data.properties.action_link), ctx)
     return { id: data.user.id, email: cleanEmail, emailSent, promo: promoResult }
@@ -261,6 +282,17 @@ export async function signup(ctx, { name, email, password, ip, promo }) {
   const promoResult = await signupPromo(ctx, id, promoCode)
   const emailSent = await trySend(() => sendVerifyEmail(ctx, cleanEmail, cleanName, `${ctx.config.appUrl}/auth/verify?token=${token}`), ctx)
   return { id, email: cleanEmail, emailSent, promo: promoResult }
+}
+
+async function findAuthUserByEmail(admin, email) {
+  for (let page = 1; page <= 20; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 })
+    if (error) return null
+    const hit = data.users.find(u => String(u.email || '').toLowerCase() === email)
+    if (hit) return hit
+    if (data.users.length < 1000) return null
+  }
+  return null
 }
 
 async function trySend(fn, ctx) {
@@ -285,6 +317,77 @@ async function safeResend(ctx, userId) {
     console.error('resend verification failed:', String(err?.message || err).slice(0, 300))
     return false
   }
+}
+
+// ---------- password reset ----------
+function resetFingerprint(user) { return sha256(String(user.password_hash || 'none') + ':' + user.id).slice(0, 16) }
+
+export async function requestPasswordReset(ctx, email) {
+  const cleanEmail = String(email || '').trim().toLowerCase()
+  if (!emailOk(cleanEmail)) throw fail(400, 'email', 'Enter a valid email address.')
+  const generic = { ok: true, message: 'If an account exists for that email, we sent a link to reset your password.' }
+  const user = (await ctx.db.query(`select * from profiles where email=$1`, [cleanEmail])).rows[0]
+  if (!user || user.blocked_at) return generic
+  let url
+  if (ctx.config.authMode === 'supabase') {
+    const admin = await supabaseAdmin(ctx.config)
+    const { data, error } = await admin.auth.admin.generateLink({ type: 'recovery', email: cleanEmail })
+    if (error) { await ctx.logError?.('auth.reset', error.message); return generic }
+    url = `${ctx.config.appUrl}/#/reset/${encodeURIComponent(data.properties.hashed_token)}`
+  } else {
+    const token = signJwt({ uid: user.id, purpose: 'reset', fp: resetFingerprint(user) }, ctx.config.jwtSecret, 60 * 60 * 1000)
+    url = `${ctx.config.appUrl}/#/reset/${encodeURIComponent(token)}`
+  }
+  const sent = await trySend(() => ctx.email.send({
+    to: cleanEmail,
+    subject: 'Reset your Easy Digital Signatures password',
+    text: `Hi ${user.full_name || ''}, reset your password here (link works for 1 hour): ${url}\n\nIf you didn’t ask for this, ignore this email.`,
+    html: htmlEmail({
+      title: 'Reset your password',
+      intro: `Hi ${esc(user.full_name || '')}, use the button below to choose a new password. The link works for 1 hour.`,
+      button: 'Choose a new password',
+      href: url,
+      note: 'If you didn’t ask for this, you can ignore this email.',
+      brand: { company: 'Easy Digital Signatures', color: '#0f766e' }
+    })
+  }), ctx)
+  if (!sent) throw fail(503, 'email', 'We couldn’t send the reset email right now. Try again in a few minutes.')
+  return generic
+}
+
+export async function resetPassword(ctx, { token, password }) {
+  if (String(password || '').length < 8) throw fail(400, 'password', 'Use at least 8 characters.')
+  const bad = () => fail(400, 'reset_invalid', 'This reset link is invalid or has expired. Request a new one from the login page.')
+  if (!token) throw bad()
+  let userId
+  if (ctx.config.authMode === 'supabase') {
+    const admin = await supabaseAdmin(ctx.config)
+    const { data, error } = await admin.auth.verifyOtp({ type: 'recovery', token_hash: String(token) })
+    if (error || !data?.user) throw bad()
+    userId = data.user.id
+    const upd = await admin.auth.admin.updateUserById(userId, { password: String(password) })
+    if (upd.error) throw fail(400, 'password', upd.error.message)
+    await ctx.db.query(`update profiles set email_verified_at=coalesce(email_verified_at, now()) where id=$1`, [userId])
+  } else {
+    const payload = readJwt(String(token), ctx.config.jwtSecret)
+    if (!payload || payload.purpose !== 'reset') throw bad()
+    const user = (await ctx.db.query(`select * from profiles where id=$1`, [payload.uid])).rows[0]
+    if (!user || resetFingerprint(user) !== payload.fp) throw bad()
+    userId = user.id
+    await ctx.db.query(`update profiles set password_hash=$2, email_verified_at=coalesce(email_verified_at, now()) where id=$1`, [userId, hashPassword(String(password))])
+  }
+  const user = (await ctx.db.query(`select blocked_at from profiles where id=$1`, [userId])).rows[0]
+  if (user?.blocked_at) throw fail(403, 'account_disabled', DISABLED_MESSAGE)
+  return { ok: true, message: 'Password updated. Log in with your new password.' }
+}
+
+export async function logout(ctx, token) {
+  if (ctx.config.authMode !== 'supabase' || !token) return { ok: true }
+  try {
+    const admin = await supabaseAdmin(ctx.config)
+    await admin.auth.admin.signOut(token, 'local')
+  } catch { /* token already invalid */ }
+  return { ok: true }
 }
 
 // Public "resend confirmation" from the login page. Never reveals whether the email exists.
@@ -466,7 +569,9 @@ function publicUser(user) {
     phoneVerified: !!user.phone_verified_at,
     brand: { company: brand.company || '', color: brand.color || '#0f766e' },
     folders: asJson(user.folders, ['All', 'Sales', 'HR', 'Real Estate', 'Legal']),
-    proposal: asJson(user.proposal, null)
+    proposal: asJson(user.proposal, null),
+    reminderDefault: cadence(user.default_remind_days, 3),
+    senderNudgeDays: cadence(user.sender_nudge_days, 0)
   }
 }
 
@@ -523,9 +628,11 @@ export async function stateFor(ctx, user, device) {
 }
 
 export async function saveSettings(ctx, user, body) {
+  const current = asJson(user.brand, {})
+  const srcBrand = body.brand || current
   const brand = {
-    company: String(body.brand?.company || '').slice(0, 80),
-    color: /^#[0-9a-fA-F]{6}$/.test(body.brand?.color || '') ? body.brand.color : '#0f766e'
+    company: String(srcBrand?.company || '').slice(0, 80),
+    color: /^#[0-9a-fA-F]{6}$/.test(srcBrand?.color || '') ? srcBrand.color : '#0f766e'
   }
   let folders = Array.isArray(body.folders) ? body.folders.map(f => String(f).slice(0, 40)).filter(Boolean).slice(0, 30) : null
   if (folders) {
@@ -542,6 +649,8 @@ export async function saveSettings(ctx, user, body) {
     `update profiles set brand=$2::jsonb, folders=coalesce($3::jsonb, folders), proposal=coalesce($4::jsonb, proposal) where id=$1`,
     [user.id, JSON.stringify(brand), folders ? JSON.stringify(folders) : null, proposal]
   )
+  if (body.reminderDefault !== undefined) await ctx.db.query(`update profiles set default_remind_days=$2 where id=$1`, [user.id, cadence(body.reminderDefault, 3)])
+  if (body.senderNudgeDays !== undefined) await ctx.db.query(`update profiles set sender_nudge_days=$2 where id=$1`, [user.id, cadence(body.senderNudgeDays, 0)])
   const next = await ctx.db.query(`select * from profiles where id=$1`, [user.id])
   return publicUser(next.rows[0])
 }
@@ -590,9 +699,9 @@ async function storeNewDoc(ctx, user, { name, template, signers, bytes, folder }
   const key = `${user.id}/${id}/original.pdf`
   await ctx.storage.put(key, bytes)
   await ctx.db.query(
-    `insert into documents (id, owner_id, name, status, folder, is_template, original_path)
-     values ($1,$2,$3,'draft',$4,$5,$6)`,
-    [id, user.id, name, folder || 'Sales', template, key]
+    `insert into documents (id, owner_id, name, status, folder, is_template, original_path, remind_days)
+     values ($1,$2,$3,'draft',$4,$5,$6,$7)`,
+    [id, user.id, name, folder || 'Sales', template, key, cadence(user.default_remind_days, 3)]
   )
   await ctx.db.tx(q => insertSigners(q, id, signers))
   await ctx.db.query(
@@ -621,7 +730,7 @@ export async function saveDraft(ctx, user, id, body) {
         folder,
         !!body.ordered,
         Math.max(1, Math.min(365, Number(body.expiresDays) || 30)),
-        Math.max(0, Math.min(60, Number(body.remindDays) || 0)),
+        cadence(body.remindDays, 3),
         String(body.message || '').slice(0, 2000),
         !!body.idv,
         JSON.stringify(fields)
@@ -723,7 +832,7 @@ function brandOf(user) {
   return { company: brand.company || user.full_name || 'Easy Digital Signatures', color: brand.color || '#0f766e' }
 }
 
-async function emailSigner(ctx, user, doc, signer, token, accessCode) {
+async function emailSigner(ctx, user, doc, signer, token, accessCode, { reminder = false } = {}) {
   if (!signer.email) return
   const href = `${ctx.config.appUrl}/#/sign/${token}`
   const note = accessCode
@@ -731,11 +840,13 @@ async function emailSigner(ctx, user, doc, signer, token, accessCode) {
     : 'You don’t need an account. The link is unique to you.'
   await ctx.email.send({
     to: signer.email,
-    subject: `${brandOf(user).company} sent you “${doc.name}” to sign`,
-    text: `${user.full_name} asked you to sign ${doc.name}. ${href}${accessCode ? ' Access code: ' + accessCode : ''}`,
+    subject: reminder ? `Reminder: “${doc.name}” is waiting for your signature` : `${brandOf(user).company} sent you “${doc.name}” to sign`,
+    text: `${reminder ? 'Reminder: ' : ''}${user.full_name} asked you to sign ${doc.name}. ${href}${accessCode ? ' Access code: ' + accessCode : ''}`,
     html: htmlEmail({
-      title: doc.name,
-      intro: `${esc(user.full_name)} asked you to review and sign this document.<br><br>${esc(doc.message || '')}`,
+      title: reminder ? `Reminder: ${doc.name}` : doc.name,
+      intro: reminder
+        ? `${esc(user.full_name)} is still waiting for your signature on <b>${esc(doc.name)}</b>. It only takes a minute.<br><br>${esc(doc.message || '')}`
+        : `${esc(user.full_name)} asked you to review and sign this document.<br><br>${esc(doc.message || '')}`,
       button: signer.role === 'approver' ? 'Review document' : 'Review and sign',
       href,
       note,
@@ -852,24 +963,71 @@ export async function sendDocument(ctx, user, id, device) {
   }
 }
 
-export async function remind(ctx, user, id) {
+export async function remind(ctx, user, id, { force = false, auto = false } = {}) {
   const doc = await ownDoc(ctx.db.query.bind(ctx.db), user.id, id)
   if (!['sent', 'waiting'].includes(doc.status)) throw fail(409, 'status', 'This document is not waiting for signatures.')
+  if (!force && doc.last_reminded_at && Date.now() - new Date(doc.last_reminded_at).getTime() < REMIND_GAP_MS) {
+    const next = new Date(new Date(doc.last_reminded_at).getTime() + REMIND_GAP_MS)
+    const err = fail(429, 'reminded_recently', `Already reminded in the last 24 hours. You can resend after ${next.toLocaleString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} PT.`)
+    err.nextAllowed = next.toISOString()
+    throw err
+  }
   const signers = await loadSigners(ctx.db.query.bind(ctx.db), id)
-  let pending = signers.filter(s => s.role !== 'cc' && !s.signed_at)
+  let pending = signers.filter(s => s.role !== 'cc' && !s.signed_at && !s.declined_at)
   if (doc.ordered_sign) pending = pending.slice(0, 1)
+  let sent = 0
   for (const s of pending) {
+    if (!s.email || !s.token) continue
     let access = null
     if (doc.idv) {
       access = String(Math.floor(100000 + Math.random() * 900000))
       await ctx.db.query(`update signers set access_code_hash=$2 where id=$1`, [s.id, hashSecret(access, ctx.config.jwtSecret)])
     }
     const token = unseal(s.token, ctx.config.jwtSecret)
-    await emailSigner(ctx, user, doc, { ...s, name: s.full_name }, token, access)
-    await audit(ctx.db.query.bind(ctx.db), id, { type: `Reminder sent to ${s.full_name}`, actor: user.full_name, email: s.email })
+    try {
+      await emailSigner(ctx, user, doc, { ...s, name: s.full_name }, token, access, { reminder: true })
+      sent++
+      await audit(ctx.db.query.bind(ctx.db), id, { type: `${auto ? 'Automatic reminder' : 'Reminder'} sent to ${s.full_name}`, actor: auto ? 'System' : user.full_name, email: s.email })
+    } catch (err) {
+      await ctx.logError?.('email.reminder', String(err?.message || err))
+      await audit(ctx.db.query.bind(ctx.db), id, { type: 'Email failed', actor: 'System', meta: { error: String(err.message || err).slice(0, 200), email: s.email } })
+    }
   }
-  await ctx.db.query(`update documents set last_reminded_at=now() where id=$1`, [id])
-  return { ok: true, reminded: pending.length }
+  await ctx.db.query(
+    `update documents set last_reminded_at=now()${auto ? ', auto_reminders = auto_reminders + 1' : ''} where id=$1`, [id]
+  )
+  return { ok: true, reminded: sent, lastReminded: new Date().toISOString() }
+}
+
+// Preview + run "Resend all unsigned" for one account. Skips documents reminded in the last 24 hours.
+export async function remindAll(ctx, user, { dryRun = false } = {}) {
+  const docs = (await ctx.db.query(
+    `select * from documents where owner_id=$1 and status in ('sent','waiting') and not is_template order by sent_at`, [user.id]
+  )).rows
+  const plan = []
+  let skipped = 0
+  for (const doc of docs) {
+    if (doc.last_reminded_at && Date.now() - new Date(doc.last_reminded_at).getTime() < REMIND_GAP_MS) { skipped++; continue }
+    const signers = await loadSigners(ctx.db.query.bind(ctx.db), doc.id)
+    let pending = signers.filter(s => s.role !== 'cc' && !s.signed_at && !s.declined_at && s.email && s.token)
+    if (doc.ordered_sign) pending = pending.slice(0, 1)
+    if (pending.length) plan.push({ id: doc.id, signers: pending.length })
+  }
+  const totals = { documents: plan.length, signers: plan.reduce((a, p) => a + p.signers, 0), skipped }
+  if (dryRun) return { ok: true, ...totals }
+  let reminded = 0
+  for (const p of plan) {
+    try { reminded += (await remind(ctx, user, p.id)).reminded } catch (err) { if (err.code !== 'reminded_recently') throw err }
+  }
+  return { ok: true, ...totals, reminded }
+}
+
+export async function setDocReminders(ctx, user, id, remindDays) {
+  const doc = await ownDoc(ctx.db.query.bind(ctx.db), user.id, id)
+  const n = cadence(remindDays, -1)
+  if (n < 0) throw fail(400, 'remind_days', 'Choose Off, every 2 days, every 3 days, or weekly.')
+  await ctx.db.query(`update documents set remind_days=$2, updated_at=now() where id=$1`, [doc.id, n])
+  return { ok: true, id: doc.id, remindDays: n }
 }
 
 async function signerByToken(ctx, token) {
@@ -1293,20 +1451,96 @@ export async function runMaintenance(ctx) {
     await ctx.db.query(`update documents set status='expired', updated_at=now() where id=$1 and status in ('sent','waiting')`, [row.id])
     await audit(ctx.db.query.bind(ctx.db), row.id, { type: 'Expired', actor: 'System' })
   }
+  // Automatic signer reminders: cadence 2/3/7 days, at most 5, never within 24h of any reminder.
   const due = await ctx.db.query(
-    `select id, owner_id from documents
-     where status in ('sent','waiting') and remind_days > 0 and sent_at is not null
-     and sent_at + make_interval(days => remind_days) < now()
-     and (last_reminded_at is null or last_reminded_at + make_interval(days => remind_days) < now())`
+    `select d.id, d.owner_id from documents d join profiles p on p.id = d.owner_id
+     where d.status in ('sent','waiting') and d.remind_days > 0 and d.sent_at is not null and not d.is_template
+       and p.blocked_at is null
+       and d.auto_reminders < $1
+       and d.sent_at + make_interval(days => d.remind_days) < now()
+       and (d.last_reminded_at is null or d.last_reminded_at + make_interval(days => d.remind_days) < now())
+       and (d.last_reminded_at is null or d.last_reminded_at < now() - interval '24 hours')
+     order by d.sent_at limit 200`, [MAX_AUTO_REMINDERS]
   )
-  let reminded = 0
+  let reminded = 0, signers = 0
   for (const row of due.rows) {
     const user = (await ctx.db.query(`select * from profiles where id=$1`, [row.owner_id])).rows[0]
     if (!user) continue
-    await remind(ctx, user, row.id)
-    reminded++
+    try {
+      const r = await remind(ctx, user, row.id, { auto: true })
+      reminded++; signers += r.reminded
+    } catch (err) { await ctx.logError?.('cron.reminder', err.message) }
   }
-  return { expired: expired.rows.length, reminded }
+  const nudged = await senderNudges(ctx)
+  return { expired: expired.rows.length, reminded, signers, nudged }
+}
+
+function ago(date) {
+  const days = Math.floor((Date.now() - new Date(date).getTime()) / 864e5)
+  if (days <= 0) return 'today'
+  return days === 1 ? '1 day ago' : `${days} days ago`
+}
+
+export function resendLinkToken(ctx, userId, docId) {
+  return signJwt({ uid: userId, doc: docId, purpose: 'resend' }, ctx.config.jwtSecret, 7 * 864e5)
+}
+
+// Sender follow-up digest: lists the sender's documents still waiting, each with a one-click resend link.
+async function senderNudges(ctx) {
+  const senders = (await ctx.db.query(
+    `select * from profiles where sender_nudge_days > 0 and blocked_at is null and email_verified_at is not null
+       and (last_nudged_at is null or last_nudged_at + make_interval(days => sender_nudge_days) < now())
+     limit 200`
+  )).rows
+  let sent = 0
+  for (const user of senders) {
+    const docs = (await ctx.db.query(
+      `select * from documents where owner_id=$1 and status in ('sent','waiting') and not is_template
+         and sent_at < now() - make_interval(days => $2) order by sent_at limit 25`, [user.id, num(user.sender_nudge_days)]
+    )).rows
+    if (!docs.length) continue
+    const items = []
+    for (const doc of docs) {
+      const signersRows = await loadSigners(ctx.db.query.bind(ctx.db), doc.id)
+      const waiting = signersRows.filter(s => s.role !== 'cc' && !s.signed_at && !s.declined_at).map(s => s.full_name || s.email)
+      if (!waiting.length) continue
+      const link = `${ctx.config.appUrl}/r/${resendLinkToken(ctx, user.id, doc.id)}`
+      items.push({ doc, waiting, link })
+    }
+    if (!items.length) continue
+    const rows = items.map(i => `<tr><td style="padding:10px 0;border-bottom:1px solid #e2e8f0"><b>${esc(i.doc.name)}</b><br><span style="color:#64748b;font-size:13px">Still waiting on ${esc(i.waiting.join(', '))} · sent ${ago(i.doc.sent_at)}</span></td><td style="padding:10px 0;border-bottom:1px solid #e2e8f0;text-align:right"><a href="${i.link}" style="color:#0E6B62;font-weight:700">Resend</a></td></tr>`).join('')
+    try {
+      await ctx.email.send({
+        to: user.email,
+        subject: items.length === 1 ? `Your “${items[0].doc.name}” is still waiting on ${items[0].waiting[0]}` : `${items.length} documents are still waiting for signatures`,
+        text: items.map(i => `${i.doc.name}: still waiting on ${i.waiting.join(', ')}, sent ${ago(i.doc.sent_at)}. Resend: ${i.link}`).join('\n'),
+        html: htmlEmail({
+          title: 'Documents waiting for signatures',
+          intro: `Hi ${esc(user.full_name || '')}, here’s what’s still open. One click resends the signing link to anyone who hasn’t signed.<table style="width:100%;border-collapse:collapse;margin-top:12px">${rows}</table>`,
+          button: 'Open dashboard',
+          href: `${ctx.config.appUrl}/#/app`,
+          note: 'Change or turn off these follow-ups in Settings.',
+          brand: { company: 'Easy Digital Signatures', color: '#0f766e' }
+        })
+      })
+      sent++
+    } catch (err) { await ctx.logError?.('email.nudge', String(err?.message || err)) }
+    await ctx.db.query(`update profiles set last_nudged_at=now() where id=$1`, [user.id])
+  }
+  return sent
+}
+
+export async function resendFromLink(ctx, token) {
+  const p = readJwt(String(token || ''), ctx.config.jwtSecret)
+  if (!p || p.purpose !== 'resend') return { ok: false, message: 'This resend link has expired. Open your dashboard to resend.' }
+  const user = (await ctx.db.query(`select * from profiles where id=$1`, [p.uid])).rows[0]
+  if (!user || user.blocked_at) return { ok: false, message: 'This resend link is no longer valid.' }
+  try {
+    const r = await remind(ctx, user, p.doc)
+    return { ok: true, message: r.reminded ? `Sent the signing link again to ${r.reminded} signer${r.reminded === 1 ? '' : 's'}.` : 'Nobody is waiting to sign this document.' }
+  } catch (err) {
+    return { ok: false, message: err.publicMessage || 'Could not resend this document.' }
+  }
 }
 
 export async function verificationRecord(ctx, id) {

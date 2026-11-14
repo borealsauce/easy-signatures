@@ -242,3 +242,10 @@ create index if not exists error_log_created_idx on error_log (created_at desc);
 
 alter table support_messages enable row level security;
 alter table error_log enable row level security;
+
+-- Reminders: per-document auto reminders (remind_days 0=off, 2, 3, 7) capped at 5,
+-- account defaults, and optional sender follow-up digests.
+alter table documents add column if not exists auto_reminders integer not null default 0;
+alter table profiles add column if not exists default_remind_days integer not null default 3;
+alter table profiles add column if not exists sender_nudge_days integer not null default 0;
+alter table profiles add column if not exists last_nudged_at timestamptz;

@@ -12,7 +12,7 @@ import {
   ownerFile, publicStart, remind, resendVerification, runMaintenance,
   saveDraft, saveSettings, saveSignFields, sendDocument, setLinkActive, signSession,
   signerFile, signup, startPhone, stateFor, userFromAuth, verificationRecord,
-  verifyEmailToken, resendByEmail
+  verifyEmailToken, resendByEmail, requestPasswordReset, resetPassword, logout, remindAll, setDocReminders, resendFromLink
 } from './service.js'
 import { adminCreateCode, adminListCodes, adminSetActive, isAdmin, redeemCode } from './promo.js'
 import {
@@ -120,6 +120,25 @@ export async function createApp(env = process.env) {
   app.post('/api/auth/signup', asyncRoute(async (req, res) => {
     const user = await signup(ctx, { name: req.body.name, email: req.body.email, password: req.body.password, ip: req.device.ip, promo: req.body.promo })
     res.status(201).json({ ok: true, email: user.email, emailSent: user.emailSent !== false, promo: user.promo || null })
+  }))
+
+  app.post('/api/auth/forgot', asyncRoute(async (req, res) => {
+    if (!await allow(db, `forgot:${req.device.ip || 'unknown'}`, { limit: 6, windowMs: 60 * 60 * 1000 })) {
+      return res.status(429).json({ error: 'rate_limit', message: 'Too many reset requests. Try again in an hour.' })
+    }
+    res.json(await requestPasswordReset(ctx, req.body?.email))
+  }))
+
+  app.post('/api/auth/reset', asyncRoute(async (req, res) => {
+    if (!await allow(db, `reset:${req.device.ip || 'unknown'}`, { limit: 10, windowMs: 60 * 60 * 1000 })) {
+      return res.status(429).json({ error: 'rate_limit', message: 'Too many attempts. Try again in an hour.' })
+    }
+    res.json(await resetPassword(ctx, req.body || {}))
+  }))
+
+  app.post('/api/auth/logout', asyncRoute(async (req, res) => {
+    const header = req.headers.authorization || ''
+    res.json(await logout(ctx, header.startsWith('Bearer ') ? header.slice(7) : ''))
   }))
 
   app.post('/api/auth/resend-email', asyncRoute(async (req, res) => {
@@ -235,7 +254,7 @@ export async function createApp(env = process.env) {
     const doc = (await db.query(`select owner_id from documents where id=$1`, [req.params.id])).rows[0]
     if (!doc) return res.status(404).json({ error: 'not_found', message: 'Document not found.' })
     const owner = (await db.query(`select * from profiles where id=$1`, [doc.owner_id])).rows[0]
-    const out = await remind(ctx, owner, req.params.id)
+    const out = await remind(ctx, owner, req.params.id, { force: true })
     res.json({ ...out, message: `Signing link sent again to ${out.reminded} recipient${out.reminded === 1 ? '' : 's'}.` })
   }))
 
@@ -308,6 +327,30 @@ export async function createApp(env = process.env) {
     const result = await sendDocument(ctx, req.user, req.params.id, req.device)
     if (!result.ok) return res.status(result.status || 400).json(result)
     res.json(result)
+  }))
+
+  app.post('/api/documents/remind-all', auth, asyncRoute(async (req, res) => {
+    res.json(await remindAll(ctx, req.user, { dryRun: !!req.body?.dryRun }))
+  }))
+
+  app.patch('/api/documents/:id/reminders', auth, asyncRoute(async (req, res) => {
+    res.json(await setDocReminders(ctx, req.user, req.params.id, req.body?.remindDays))
+  }))
+
+  const resendPage = (title, body) => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title>
+    <body style="font-family:Inter,system-ui,sans-serif;background:#0b1f3a;color:#14213d;margin:0;display:grid;place-items:center;min-height:100vh">
+    <div style="background:#fff;padding:32px;border-radius:16px;max-width:440px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.25)">
+    <p style="letter-spacing:.12em;text-transform:uppercase;color:#0E6B62;font-size:12px;font-weight:700;margin:0 0 8px">Easy Digital Signatures</p>${body}</div></body>`
+
+  app.get('/r/:token', (req, res) => {
+    res.setHeader('X-Robots-Tag', 'noindex')
+    res.type('html').send(resendPage('Resend signing link', `<h1 style="font-size:22px">Resend the signing link?</h1><p style="color:#64748b">We’ll email everyone who hasn’t signed yet. This doesn’t use any credits.</p>
+      <form method="post"><button style="background:#0E6B62;color:#fff;border:0;border-radius:10px;padding:12px 20px;font:inherit;font-weight:700;cursor:pointer">Resend now</button></form>`))
+  })
+
+  app.post('/r/:token', asyncRoute(async (req, res) => {
+    const out = await resendFromLink(ctx, req.params.token)
+    res.type('html').send(resendPage(out.ok ? 'Sent' : 'Not sent', `<h1 style="font-size:22px">${out.ok ? 'Done' : 'Not sent'}</h1><p style="color:#64748b">${escapeHtml(out.message)}</p><p><a href="/#/app" style="color:#0E6B62;font-weight:700">Open dashboard</a></p>`))
   }))
 
   app.post('/api/documents/:id/remind', auth, asyncRoute(async (req, res) => {

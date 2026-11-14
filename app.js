@@ -14,6 +14,10 @@ const uid = () => crypto.randomUUID()
 const now = () => new Date().toISOString()
 const fmt = d => d ? new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—'
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const REMIND_OPTS = [[0, 'Off'], [2, 'Every 2 days'], [3, 'Every 3 days'], [7, 'Weekly']]
+const remindSelect = (id, val, extra = '') => `<select id="${id}" ${extra}>${REMIND_OPTS.map(([v, l]) => `<option value="${v}" ${Number(val) === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`
+const DAY_MS = 864e5
+const recentlyReminded = d => d.lastReminded && Date.now() - new Date(d.lastReminded).getTime() < DAY_MS
 const PHONE_NOTE = "Your number is only used to verify your account. We'll never send spam or marketing texts."
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
@@ -158,14 +162,14 @@ async function route() {
   const hash = location.hash || '#/'
   const pricingAnchor = hash === '#pricing'
   const [, r, a] = (pricingAnchor ? '#/' : hash).split('/')
-  const pub = ['', 'pricing', 'login', 'signup', 'sign', 'form', 'phone', 'contact']
+  const pub = ['', 'pricing', 'login', 'signup', 'sign', 'form', 'phone', 'contact', 'forgot', 'reset']
   document.body.classList.toggle('marketing', (r || '') === '')
   if (S.me) { await flushNow(); activeId = null; if (r !== 'sign') await hydrate() }
   nav()
   window.scrollTo(0, 0)
   if (!S.me && !pub.includes(r || '')) { location.hash = '#/login'; return }
   const R = {
-    '': landing, pricing, login, signup, phone, contact, app: dashboard, new: newDoc, edit: () => editor(a),
+    '': landing, pricing, login, signup, phone, contact, forgot, reset: () => resetPw(a), app: dashboard, new: newDoc, edit: () => editor(a),
     sign: () => signToken(a), cert: () => cert(a), templates, links, form: () => publicForm(a), bulk, proposal, settings
   }
   await (R[r] || landing)()
@@ -205,7 +209,7 @@ function login() {
   <label class="f">Email</label><input id="em" type="email" autocomplete="username" style="width:100%">
   <label class="f">Password</label><input id="pw" type="password" autocomplete="current-password" style="width:100%">
   <br><br><button class="p" id="go">Log in</button><div id="lmsg"></div>
-  <p><a href="#/signup">Create an account</a> · <a href="javascript:void 0" id="rs2">Resend confirmation email</a></p></div>`
+  <p><a href="#/forgot">Forgot password?</a> · <a href="#/signup">Create an account</a> · <a href="javascript:void 0" id="rs2">Resend confirmation email</a></p></div>`
   const resendConfirm = async () => {
     const email = $('#em').value
     if (!email) return toast('Enter your email first')
@@ -224,6 +228,31 @@ function login() {
     await hydrate()
     if (sessionStorage.getItem('eds_buy')) { await resumeBuy(); return }
     location.hash = (!S.smsEnabled || S.usage?.phoneVerified) ? '#/app' : '#/phone'
+  }
+}
+
+function forgot() {
+  V.innerHTML = `<div class="card auth"><h1>Reset your password</h1><p>Enter your account email and we’ll send you a reset link.</p>
+  <label class="f">Email</label><input id="em" type="email" autocomplete="email" style="width:100%">
+  <br><br><button class="p" id="go">Send reset link</button><div id="fmsg"></div>
+  <p><a href="#/login">Back to log in</a></p></div>`
+  $('#go').onclick = async () => {
+    $('#go').disabled = true
+    const r = await api('/api/auth/forgot', { method: 'POST', body: { email: $('#em').value } })
+    $('#go').disabled = false
+    $('#fmsg').innerHTML = `<p class="banner">${esc(r.json?.message || (r.ok ? 'Check your email.' : 'Could not send the reset email.'))}</p>`
+  }
+}
+function resetPw(token) {
+  V.innerHTML = `<div class="card auth"><h1>Choose a new password</h1>
+  <label class="f">New password</label><input id="pw" type="password" autocomplete="new-password" style="width:100%">
+  <label class="f">Confirm new password</label><input id="pw2" type="password" autocomplete="new-password" style="width:100%">
+  <br><br><button class="p" id="go">Save password</button><div id="rmsg"></div></div>`
+  $('#go').onclick = async () => {
+    if ($('#pw').value !== $('#pw2').value) { $('#rmsg').innerHTML = '<p class="banner">The passwords don’t match.</p>'; return }
+    const r = await api('/api/auth/reset', { method: 'POST', body: { token: decodeURIComponent(token || ''), password: $('#pw').value } })
+    if (!r.ok) { $('#rmsg').innerHTML = `<p class="banner">${esc(r.json?.message || 'Could not reset password.')} ${r.json?.error === 'reset_invalid' ? '<a href="#/forgot">Send a new link</a>' : ''}</p>`; return }
+    V.innerHTML = `<div class="card auth"><h1>Password updated</h1><p>Log in with your new password.</p><a class="btn p" href="#/login">Go to log in</a></div>`
   }
 }
 
@@ -288,7 +317,7 @@ function dashboard() {
   const mx = Math.max(...per, 1)
   const comp = ds.filter(d => d.completed && d.sent)
   const avg = comp.length ? (comp.reduce((a, d) => a + (new Date(d.completed) - new Date(d.sent)), 0) / comp.length / 36e5).toFixed(1) : '—'
-  V.innerHTML = `${phoneBanner()}<div class="row"><h1 style="margin:0">Documents</h1><span class="sp"></span>${meter()}<a class="btn" href="#/bulk">Bulk send</a><a class="btn p" href="#/new">+ New document</a><label class="btn">⬆ Upload<input type="file" accept="application/pdf,image/png,image/jpeg" multiple hidden onchange="uploadFiles(this.files)"></label></div>
+  V.innerHTML = `${phoneBanner()}<div class="row"><h1 style="margin:0">Documents</h1><span class="sp"></span>${meter()}${ds.some(d => ['sent', 'waiting'].includes(d.status)) ? '<button id="rall" title="Email a reminder to everyone who hasn’t signed yet. Doesn’t use credits.">↻ Resend all unsigned</button>' : ''}<a class="btn" href="#/bulk">Bulk send</a><a class="btn p" href="#/new">+ New document</a><label class="btn">⬆ Upload<input type="file" accept="application/pdf,image/png,image/jpeg" multiple hidden onchange="uploadFiles(this.files)"></label></div>
   <div class="grid4" style="margin:18px 0">${[['Drafts', c('draft')], ['Awaiting signatures', c('sent') + c('waiting')], ['Completed', c('completed')], ['Avg. hours to complete', avg]].map(([l, v]) => `<div class="card kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('')}</div>
   <div class="card" style="margin-bottom:18px"><h3>Documents sent per month</h3><div class="bar" style="margin:16px 0 22px">${per.map((v, i) => `<div style="height:${v / mx * 100}%" title="${v}"><span>${months[i].toLocaleString('en', { month: 'short' })} · ${v}</span></div>`).join('') || '<p>No documents yet.</p>'}</div></div>
   <div class="row" style="margin-bottom:10px">${S.folders.map(f => `<button class="${f === folder ? 'p' : ''}" data-f="${esc(f)}">📁 ${esc(f)}</button>`).join('')}<span class="sp"></span><input id="q" placeholder="Search documents…"></div><div id="dt"></div>`
@@ -297,16 +326,35 @@ function dashboard() {
     const rows = ds.filter(d => (folder === 'All' || d.folder === folder) && d.name.toLowerCase().includes(q)).map(d => {
       const sg = d.signers.filter(s => s.role !== 'cc'); const n = sg.filter(s => s.done).length; const st = d.status
       const next = d.signers.find(s => s.role !== 'cc' && !s.done)
-      return `<tr><td><a href="#/${st === 'draft' ? 'edit' : st === 'completed' ? 'cert' : 'edit'}/${d.id}">${esc(d.name)}</a></td><td data-v="${st}"><span class="pill s-${st}">${st[0].toUpperCase() + st.slice(1)}</span></td><td>${esc(d.folder)}</td><td>${sg.map(s => esc(s.name)).join(', ')}</td><td data-v="${n / Math.max(1, sg.length)}">${n}/${sg.length}</td><td data-v="${d.created}">${fmt(d.created)}</td><td data-v="${d.events.at(-1)?.ts || ''}">${fmt(d.events.at(-1)?.ts)}</td><td>${st === 'draft' ? `<a href="#/edit/${d.id}">Edit</a>` : ''}${['sent', 'waiting'].includes(st) && next?.token ? `<a href="#/sign/${next.token}">Signing link</a> · <a href="javascript:remind('${d.id}')">Remind</a>` : ''}${st === 'completed' ? `<a href="javascript:downloadDoc('${d.id}')">PDF</a> · <a href="#/cert/${d.id}">Certificate</a>` : ''}${st !== 'draft' ? ` · <a href="javascript:timeline('${d.id}')">Timeline</a>` : ''}</td></tr>`
+      return `<tr><td><a href="#/${st === 'draft' ? 'edit' : st === 'completed' ? 'cert' : 'edit'}/${d.id}">${esc(d.name)}</a></td><td data-v="${st}"><span class="pill s-${st}">${st[0].toUpperCase() + st.slice(1)}</span></td><td>${esc(d.folder)}</td><td>${sg.map(s => esc(s.name)).join(', ')}</td><td data-v="${n / Math.max(1, sg.length)}">${n}/${sg.length}</td><td data-v="${d.created}">${fmt(d.created)}</td><td data-v="${d.events.at(-1)?.ts || ''}">${fmt(d.events.at(-1)?.ts)}</td><td>${st === 'draft' ? `<a href="#/edit/${d.id}">Edit</a>` : ''}${['sent', 'waiting'].includes(st) && next?.token ? `<a href="#/sign/${next.token}">Signing link</a> · ${recentlyReminded(d) ? `<span class="note" title="You can resend once every 24 hours">Reminded ${fmt(d.lastReminded)}</span>` : `<a href="javascript:remind('${d.id}')">Resend</a>${d.lastReminded ? ` <span class="note">(last ${fmt(d.lastReminded)})</span>` : ''}`}` : ''}${st === 'completed' ? `<a href="javascript:downloadDoc('${d.id}')">PDF</a> · <a href="#/cert/${d.id}">Certificate</a>` : ''}${st !== 'draft' ? ` · <a href="javascript:timeline('${d.id}')">Timeline</a>` : ''}</td></tr>`
     })
     $('#dt').innerHTML = rows.length ? table(['Document', 'Status', 'Folder', 'Recipients', 'Signed', 'Created', 'Last activity', 'Actions'], rows) : '<div class="card"><h3>No documents yet</h3><p><a href="#/new">Upload a PDF or start from a blank page.</a></p></div>'
     afterRender()
   }
   $$('[data-f]').forEach(b => b.onclick = () => { sessionStorage.qpf = b.dataset.f; dashboard() })
+  if ($('#rall')) $('#rall').onclick = async () => {
+    const pre = await api('/api/documents/remind-all', { method: 'POST', body: { dryRun: true } })
+    if (!pre.ok) return toast(pre.json?.message || 'Could not check documents')
+    const p = pre.json
+    const skippedNote = p.skipped ? `<p class="note">${p.skipped} document${p.skipped === 1 ? ' was' : 's were'} reminded in the last 24 hours and will be skipped.</p>` : ''
+    if (!p.signers) return modal(`<h3>Nothing to resend</h3><p>No one is waiting to be reminded right now.</p>${skippedNote}<button onclick="closeModal()">OK</button>`)
+    modal(`<h3>Resend to ${p.signers} signer${p.signers === 1 ? '' : 's'} on ${p.documents} document${p.documents === 1 ? '' : 's'}?</h3><p>Only people who haven’t signed yet get the reminder. This doesn’t use any credits.</p>${skippedNote}<div class="row" style="margin-top:12px"><button class="p" id="rgo">Resend now</button><button onclick="closeModal()">Cancel</button></div>`)
+    $('#rgo').onclick = async () => {
+      $('#rgo').disabled = true
+      const r = await api('/api/documents/remind-all', { method: 'POST', body: {} })
+      closeModal()
+      toast(r.ok ? `Reminders sent to ${r.json.reminded} signer${r.json.reminded === 1 ? '' : 's'}` : (r.json?.message || 'Could not resend'))
+      await hydrate(); route()
+    }
+  }
   const resend = $('#resend'); if (resend) resend.onclick = async () => { const r = await api('/api/auth/resend', { method: 'POST' }); toast(r.ok ? 'Confirmation email sent' : (r.json?.message || 'Could not send')) }
   $('#q').oninput = drawT; drawT()
 }
-async function remind(id) { const r = await api('/api/documents/' + id + '/remind', { method: 'POST' }); toast(r.ok ? 'Reminder sent' : (r.json?.message || 'Could not remind')); if (r.ok) { await hydrate(); route() } }
+async function remind(id) {
+  const r = await api('/api/documents/' + id + '/remind', { method: 'POST' })
+  toast(r.ok ? (r.json.reminded ? `Signing link resent to ${r.json.reminded} signer${r.json.reminded === 1 ? '' : 's'}` : 'No one is waiting to sign') : (r.json?.message || 'Could not resend'))
+  if (r.ok) { await hydrate(); route() }
+}
 function timeline(id) { const d = doc(id); modal(`<h3>${esc(d.name)}</h3><div class="tl">${d.events.map(e => `<div><b>${esc(e.t)}</b><br><small>${fmt(e.ts)} · ${esc(e.who || '')}${e.ip ? ' · ' + esc(e.ip) : ''}</small></div>`).join('') || '<p>No activity yet.</p>'}</div><p><button onclick="closeModal()">Close</button></p>`) }
 async function downloadDoc(id) {
   const res = await fetch('/api/documents/' + id + '/download', { headers: authHeaders(false) })
@@ -392,7 +440,7 @@ function tplBuilder() {
       if (!res.ok) return toast(json.message || 'Upload failed')
       if (roles.length) {
         json.signers = roles.map((r, i) => ({ id: json.signers[i]?.id || uid(), name: r, email: '', role: 'signer', color: COLORS[i % 6] }))
-        json.ordered = true; json.fields = []; json.expiresDays = 30; json.remindDays = 3; json.message = json.message || 'Please review and sign.'; json.folder = json.folder || 'Sales'
+        json.ordered = true; json.fields = []; json.expiresDays = 30; json.remindDays = S.me?.reminderDefault ?? 3; json.message = json.message || 'Please review and sign.'; json.folder = json.folder || 'Sales'
         await api('/api/documents/' + json.id, { method: 'PUT', body: payload(json) })
       }
       closeModal(); location.hash = '#/edit/' + json.id
@@ -420,7 +468,7 @@ async function editor(id) {
   <div class="panel"><h4>${d.tpl ? 'Roles' : 'Recipients'}</h4><label class="row" style="font-size:13px"><input type="checkbox" id="ord" ${d.ordered ? 'checked' : ''}> Sign in order</label><div id="sg"></div>${locked ? '' : '<button onclick="addSigner()" style="width:100%">+ Add recipient</button>'}
   <h4 style="margin-top:16px">Field properties</h4><div id="props"><p style="font-size:13px;color:var(--mut)">Select a field.</p></div>
   <h4 style="margin-top:16px">Settings</h4><label class="f">Folder</label><select id="fo">${S.folders.slice(1).map(f => `<option ${f === d.folder ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select>
-  <label class="f">Expires after (days)</label><input id="ex" type="number" value="${d.expiresDays}" style="width:100%"><label class="f">Remind every (days)</label><input id="rm" type="number" value="${d.remindDays}" style="width:100%">
+  <label class="f">Expires after (days)</label><input id="ex" type="number" value="${d.expiresDays}" style="width:100%"><label class="f">Automatic reminders</label>${remindSelect('rm', d.remindDays, 'style="width:100%"')}<p class="note" style="font-size:12px">Emails only people who haven’t signed. Up to 5 reminders; stops when signed, voided or expired.${locked && !d.tpl ? ` Sent ${d.autoReminders || 0} automatic so far.${d.lastReminded ? ' Last reminded ' + fmt(d.lastReminded) + '.' : ''}` : ''}</p>
   <label class="row" style="font-size:13px;margin-top:8px"><input type="checkbox" id="idv" ${d.idv ? 'checked' : ''}> Email an access code</label><label class="f">Message</label><textarea id="msg" style="width:100%">${esc(d.message || '')}</textarea>
   ${locked && d.signers.some(s => s.token) ? `<h4>Signing links</h4>${d.signers.filter(s => s.token).map(s => `<p style="font-size:12px"><b>${esc(s.name)}</b><br><a href="#/sign/${s.token}">Open link</a></p>`).join('')}` : ''}</div></div>`
   window.addSigner = () => { d.signers.push({ id: uid(), name: 'Signer ' + (d.signers.length + 1), email: '', role: 'signer', color: COLORS[d.signers.length % 6], done: false }); save(); drawS() }
@@ -519,7 +567,12 @@ async function editor(id) {
   $('#ord').onchange = e => { d.ordered = e.target.checked; save(); drawS() }
   $('#fo').onchange = e => { d.folder = e.target.value; save() }
   $('#ex').onchange = e => { d.expiresDays = +e.target.value; save() }
-  $('#rm').onchange = e => { d.remindDays = +e.target.value; save() }
+  $('#rm').onchange = async e => {
+    d.remindDays = +e.target.value
+    if (!locked) return save()
+    const r = await api('/api/documents/' + d.id + '/reminders', { method: 'PATCH', body: { remindDays: d.remindDays } })
+    toast(r.ok ? 'Reminder schedule updated' : (r.json?.message || 'Could not update reminders'))
+  }
   $('#idv').onchange = e => { d.idv = e.target.checked; save() }
   $('#msg').onchange = e => { d.message = e.target.value; save() }
   if ($('#send')) $('#send').onclick = async () => {
@@ -749,7 +802,7 @@ function proposal() {
       const json = await up.json()
       if (!up.ok) return toast(json.message || 'Could not create the proposal')
       json.signers[0].name = P.client || 'Client'
-      json.ordered = true; json.expiresDays = 30; json.remindDays = 3; json.message = 'Please review and sign.'; json.folder = json.folder || 'Sales'
+      json.ordered = true; json.expiresDays = 30; json.remindDays = S.me?.reminderDefault ?? 3; json.message = 'Please review and sign.'; json.folder = json.folder || 'Sales'
       json.fields = [
         { id: uid(), page: 0, type: 'signature', signer: json.signers[0].id, x: .09, y: .72, w: .36, h: .06, required: true, label: 'Signature' },
         { id: uid(), page: 0, type: 'date', signer: json.signers[0].id, x: .54, y: .75, w: .2, h: .03, required: true, label: 'Date' }
@@ -769,13 +822,22 @@ function settings() {
   <p style="margin-top:16px"><button id="portal">Receipts</button></p><p class="note">${esc(meterText())}</p></div>
   <div class="card" id="promo"><h3>Promo code</h3>${(S.usage?.promoCodes || []).map(c => `<p>${esc(c.code)}: ${c.active ? `${c.remaining} of ${c.granted} free documents left` : 'this code has been turned off'}</p>`).join('')}
   <label class="f">Have a code?</label><div class="row"><input id="pcode" placeholder="e.g. VIP100" style="text-transform:uppercase;max-width:200px"><button class="p" id="pgo">Apply</button></div><div id="pmsg"></div></div>
+  <div class="card"><h3>Reminders</h3><label class="f">Default automatic reminders for new documents</label>${remindSelect('rdef', S.me.reminderDefault ?? 3, 'style="width:100%"')}
+  <p class="note">Signers who haven’t signed get a reminder on this schedule, up to 5 times. You can change it on each document.</p>
+  <label class="f" style="margin-top:12px">Email me a follow-up about documents still waiting</label>${remindSelect('rnud', S.me.senderNudgeDays ?? 0, 'style="width:100%"')}
+  <p class="note">A short digest like “Your NDA is still waiting on Jane, sent 3 days ago” with a one-click Resend link.</p></div>
   ${S.me.isAdmin ? '<div class="card"><h3>Owner</h3><p><a class="btn" href="/admin">Open admin</a></p></div>' : ''}</div>`
+  const saveRem = async () => {
+    const r = await api('/api/settings', { method: 'PUT', body: { reminderDefault: +$('#rdef').value, senderNudgeDays: +$('#rnud').value } })
+    if (r.ok) { S.me = { ...S.me, ...r.json, isAdmin: S.me.isAdmin }; toast('Reminder settings saved') } else toast(r.json?.message || 'Could not save')
+  }
+  $('#rdef').onchange = saveRem; $('#rnud').onchange = saveRem
   $('#pgo').onclick = async () => {
     const r = await api('/api/promo/redeem', { method: 'POST', body: { code: $('#pcode').value } })
     if (!r.ok) { $('#pmsg').innerHTML = `<p class="banner">${esc(r.json?.message || 'That code could not be applied.')}</p>`; return }
     toast(r.json.message); await hydrate(); route()
   }
-  $('#out').onclick = () => { setToken(''); S.me = null; location.hash = '#/' }
+  $('#out').onclick = async () => { await api('/api/auth/logout', { method: 'POST' }).catch(() => {}); setToken(''); S.me = null; location.hash = '#/' }
   $('#addf').onclick = async () => { const n = prompt('Folder name'); if (!n) return; S.folders.push(n); await api('/api/settings', { method: 'PUT', body: { brand: S.brand, folders: S.folders } }); route() }
   const saveBrand = async () => { S.brand = { company: $('#bc').value, color: $('#bk').value }; await api('/api/settings', { method: 'PUT', body: { brand: S.brand, folders: S.folders } }); route() }
   $('#bc').onchange = saveBrand; $('#bk').onchange = saveBrand
