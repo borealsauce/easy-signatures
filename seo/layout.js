@@ -1,4 +1,8 @@
+import { readFileSync } from 'node:fs'
 import { siteFooterHtml } from '../shared/site-footer.js'
+
+// Inlined into every SEO page so first paint doesn't wait on a separate stylesheet request.
+const SEO_CSS = readFileSync(new URL('./seo.css', import.meta.url), 'utf8').replace(/\n/g, '')
 
 export const SITE = 'https://easydigitalsignatures.com'
 export const BRAND = 'Easy Digital Signatures'
@@ -104,7 +108,7 @@ export function renderPage(p) {
 ${headTags({ path: p.path, title: p.title, description: p.description, type: p.ogType, jsonld })}
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Inter+Tight:wght@600&display=swap" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/seo.css">
+<style>${SEO_CSS}</style>
 ${p.head || ''}
 </head><body class="seo">
 <a class="skip" href="#content">Skip to content</a>
