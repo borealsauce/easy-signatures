@@ -190,3 +190,31 @@ create table if not exists rate_limits (
   created_at timestamptz not null default now()
 );
 create index if not exists rate_limits_bucket_idx on rate_limits (bucket, created_at);
+
+-- Promo codes. Each code grants free documents per account, used before paid credits.
+-- Turning a code off (active=false) blocks new redemptions and any unused promo documents from it.
+create table if not exists promo_codes (
+  code text primary key,
+  free_docs_per_user integer not null default 100,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists promo_redemptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  code text not null references promo_codes(code) on delete cascade,
+  docs_granted integer not null,
+  docs_used integer not null default 0,
+  redeemed_at timestamptz not null default now(),
+  last_used_at timestamptz,
+  unique (user_id, code)
+);
+create index if not exists promo_redemptions_code_idx on promo_redemptions (code, redeemed_at desc);
+
+alter table promo_codes enable row level security;
+alter table promo_redemptions enable row level security;
+
+insert into promo_codes (code, free_docs_per_user, active) values ('VIP100', 100, true), ('VIP50', 50, true), ('VIP10', 10, true) on conflict (code) do nothing;
+
+alter table profiles add column if not exists blocked_at timestamptz;

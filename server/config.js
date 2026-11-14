@@ -52,6 +52,7 @@ export function loadConfig(env = process.env) {
     aiBaseUrl: (env.AI_BASE_URL || 'https://api.x.ai/v1').replace(/\/$/, ''),
     aiModel: env.AI_MODEL || 'grok-3',
     cronSecret: env.CRON_SECRET || '',
+    adminEmails: String(env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean),
     vercel: env.VERCEL === '1'
   }
   config.authMode = config.supabaseUrl && config.supabaseServiceKey ? 'supabase' : 'local'

@@ -12,8 +12,11 @@ import {
   ownerFile, publicStart, remind, resendVerification, runMaintenance,
   saveDraft, saveSettings, saveSignFields, sendDocument, setLinkActive, signSession,
   signerFile, signup, startPhone, stateFor, userFromAuth, verificationRecord,
-  verifyEmailToken
+  verifyEmailToken, resendByEmail
 } from './service.js'
+import { adminCreateCode, adminListCodes, adminSetActive, isAdmin, redeemCode } from './promo.js'
+import { adminPageHtml } from './admin-page.js'
+import { DISABLED_MESSAGE, adminDeleteUser, adminListUsers, adminSetBlocked } from './admin.js'
 import { allow } from './ratelimit.js'
 import { streamHelp } from './help.js'
 import { existsSync } from 'node:fs'
@@ -82,6 +85,7 @@ export async function createApp(env = process.env) {
       const token = header.startsWith('Bearer ') ? header.slice(7) : ''
       const user = await userFromAuth(ctx, token)
       if (!user) return res.status(401).json({ error: 'auth', message: 'Log in again.' })
+      if (user.blocked_at) return res.status(403).json({ error: 'account_disabled', message: DISABLED_MESSAGE })
       req.user = user
       next()
     } catch (err) { next(err) }
@@ -111,8 +115,15 @@ export async function createApp(env = process.env) {
   })
 
   app.post('/api/auth/signup', asyncRoute(async (req, res) => {
-    const user = await signup(ctx, { name: req.body.name, email: req.body.email, password: req.body.password, ip: req.device.ip })
-    res.status(201).json({ ok: true, email: user.email })
+    const user = await signup(ctx, { name: req.body.name, email: req.body.email, password: req.body.password, ip: req.device.ip, promo: req.body.promo })
+    res.status(201).json({ ok: true, email: user.email, emailSent: user.emailSent !== false, promo: user.promo || null })
+  }))
+
+  app.post('/api/auth/resend-email', asyncRoute(async (req, res) => {
+    if (!await allow(db, `resend:${req.device.ip || 'unknown'}`, { limit: 5, windowMs: 60 * 60 * 1000 })) {
+      return res.status(429).json({ error: 'rate_limit', message: 'Too many requests. Try again in an hour.' })
+    }
+    res.json(await resendByEmail(ctx, req.body?.email))
   }))
 
   app.post('/api/auth/login', asyncRoute(async (req, res) => {
@@ -121,7 +132,12 @@ export async function createApp(env = process.env) {
   }))
 
   app.post('/api/auth/resend', auth, asyncRoute(async (req, res) => {
-    res.json(await resendVerification(ctx, req.user))
+    try {
+      res.json(await resendVerification(ctx, req.user))
+    } catch (err) {
+      console.error('resend verification failed:', String(err?.message || err).slice(0, 300))
+      res.status(503).json({ error: 'email', message: 'We couldn’t send the email right now. Try again in a few minutes.' })
+    }
   }))
 
   app.get('/auth/verify', asyncRoute(async (req, res) => {
@@ -139,11 +155,60 @@ export async function createApp(env = process.env) {
 
   app.get('/api/me', auth, asyncRoute(async (req, res) => {
     const state = await stateFor(ctx, req.user, req.device)
-    res.json({ me: state.me, usage: state.usage })
+    res.json({ me: { ...state.me, isAdmin: isAdmin(config, req.user) }, usage: state.usage })
+  }))
+
+  app.post('/api/promo/redeem', auth, asyncRoute(async (req, res) => {
+    if (!await allow(db, `promo:${req.user.id}`, { limit: 10, windowMs: 60 * 60 * 1000 })) {
+      return res.status(429).json({ error: 'rate_limit', message: 'Too many promo code attempts. Try again in an hour.' })
+    }
+    const out = await redeemCode(db, req.user.id, req.body?.code)
+    res.json({ ...out, message: `${out.code} applied: ${out.granted} free documents added to your account.` })
+  }))
+
+  async function adminOnly(req, res, next) {
+    await auth(req, res, (err) => {
+      if (err) return next(err)
+      if (!isAdmin(config, req.user)) return res.status(403).json({ error: 'forbidden', message: 'This page is only for the site owner.' })
+      next()
+    })
+  }
+
+  app.get('/admin', (req, res) => {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow')
+    res.setHeader('Cache-Control', 'no-store')
+    res.type('html').send(adminPageHtml())
+  })
+
+  app.get('/api/admin/promo', adminOnly, asyncRoute(async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    res.json({ codes: await adminListCodes(db) })
+  }))
+
+  app.post('/api/admin/promo', adminOnly, asyncRoute(async (req, res) => {
+    res.status(201).json(await adminCreateCode(db, req.body || {}))
+  }))
+
+  app.get('/api/admin/users', adminOnly, asyncRoute(async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    res.json({ users: await adminListUsers(ctx) })
+  }))
+
+  app.post('/api/admin/users/:id/block', adminOnly, asyncRoute(async (req, res) => {
+    res.json(await adminSetBlocked(ctx, req.params.id, req.body?.blocked !== false))
+  }))
+
+  app.delete('/api/admin/users/:id', adminOnly, asyncRoute(async (req, res) => {
+    res.json(await adminDeleteUser(ctx, req.params.id))
+  }))
+
+  app.patch('/api/admin/promo/:code', adminOnly, asyncRoute(async (req, res) => {
+    res.json(await adminSetActive(db, req.params.code, req.body?.active))
   }))
 
   app.get('/api/state', auth, asyncRoute(async (req, res) => {
-    res.json(await stateFor(ctx, req.user, req.device))
+    const state = await stateFor(ctx, req.user, req.device)
+    res.json({ ...state, me: { ...state.me, isAdmin: isAdmin(config, req.user) } })
   }))
 
   app.put('/api/settings', auth, asyncRoute(async (req, res) => {

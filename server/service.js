@@ -10,6 +10,8 @@ import { num } from './db.js'
 import { FREE_MESSAGES, assertSignupAllowed, evaluateFree, noteCardFingerprint, recordFreeClaim } from './abuse.js'
 import { assertReadablePdf, blankPdf, imageToPdf, sealPdf } from './pdf.js'
 import { htmlEmail, isVoipLine } from './providers.js'
+import { DISABLED_MESSAGE } from './admin.js'
+import { checkCode, consumePromo, normalizeCode, promoUsage, redeemCode } from './promo.js'
 
 const COLORS = ['#2563eb', '#db2777', '#16a34a', '#ea580c', '#7c3aed', '#0891b2']
 
@@ -207,12 +209,14 @@ export async function createProfile(ctx, { id, email, name, passwordHash, ip }) 
   await ctx.db.query(`insert into entitlements (user_id) values ($1)`, [id])
 }
 
-export async function signup(ctx, { name, email, password, ip }) {
+export async function signup(ctx, { name, email, password, ip, promo }) {
   const cleanEmail = String(email || '').trim().toLowerCase()
   const cleanName = String(name || '').trim().slice(0, 120)
   if (!cleanName) throw fail(400, 'name', 'Enter your name.')
   if (!emailOk(cleanEmail)) throw fail(400, 'email', 'Enter a valid email address.')
   if (String(password || '').length < 8) throw fail(400, 'password', 'Use at least 8 characters.')
+  const promoCode = normalizeCode(promo)
+  if (promoCode) await checkCode(ctx.db.query.bind(ctx.db), promoCode)
 
   const gate = await ctx.db.tx(q => assertSignupAllowed(q, {
     ip,
@@ -221,8 +225,16 @@ export async function signup(ctx, { name, email, password, ip }) {
   }))
   if (!gate.ok) throw fail(gate.status, gate.error, gate.message)
 
-  const existing = await ctx.db.query(`select id from profiles where email=$1`, [cleanEmail])
-  if (existing.rows[0]) throw fail(409, 'exists', 'An account with that email already exists. Log in instead.')
+  const existing = await ctx.db.query(`select id, email_verified_at, full_name from profiles where email=$1`, [cleanEmail])
+  if (existing.rows[0]) {
+    if (!existing.rows[0].email_verified_at) {
+      const resent = await safeResend(ctx, existing.rows[0].id)
+      throw fail(409, 'exists_unverified', resent
+        ? 'An account with that email is waiting for confirmation. We sent the confirmation link again. Open it, then log in with the password you chose.'
+        : 'An account with that email is waiting for confirmation. Log in with the password you chose, or use “Resend confirmation” on the login page.')
+    }
+    throw fail(409, 'exists', 'An account with that email already exists. Log in instead.')
+  }
 
   if (ctx.config.authMode === 'supabase') {
     const admin = await supabaseAdmin(ctx.config)
@@ -232,18 +244,55 @@ export async function signup(ctx, { name, email, password, ip }) {
       password,
       options: { data: { full_name: cleanName }, redirectTo: `${ctx.config.appUrl}/auth/confirmed` }
     })
-    if (error) throw fail(400, 'signup', error.message)
+    if (error) {
+      if (/registered|already/i.test(error.message || '')) throw fail(409, 'exists', 'An account with that email already exists. Log in instead, or use “Resend confirmation” on the login page.')
+      throw fail(400, 'signup', error.message)
+    }
     await createProfile(ctx, { id: data.user.id, email: cleanEmail, name: cleanName, passwordHash: null, ip })
-    await sendVerifyEmail(ctx, cleanEmail, cleanName, data.properties.action_link)
-    return { id: data.user.id, email: cleanEmail }
+    const promoResult = await signupPromo(ctx, data.user.id, promoCode)
+    const emailSent = await trySend(() => sendVerifyEmail(ctx, cleanEmail, cleanName, data.properties.action_link))
+    return { id: data.user.id, email: cleanEmail, emailSent, promo: promoResult }
   }
 
   const id = crypto.randomUUID()
   const token = randomToken(32)
   await createProfile(ctx, { id, email: cleanEmail, name: cleanName, passwordHash: hashPassword(password), ip })
   await ctx.db.query(`update profiles set email_verify_token=$2 where id=$1`, [id, hashSecret(token, ctx.config.jwtSecret)])
-  await sendVerifyEmail(ctx, cleanEmail, cleanName, `${ctx.config.appUrl}/auth/verify?token=${token}`)
-  return { id, email: cleanEmail }
+  const promoResult = await signupPromo(ctx, id, promoCode)
+  const emailSent = await trySend(() => sendVerifyEmail(ctx, cleanEmail, cleanName, `${ctx.config.appUrl}/auth/verify?token=${token}`))
+  return { id, email: cleanEmail, emailSent, promo: promoResult }
+}
+
+async function trySend(fn) {
+  try { await fn(); return true } catch (err) {
+    console.error('verification email failed:', String(err?.message || err).slice(0, 300))
+    return false
+  }
+}
+
+async function signupPromo(ctx, userId, code) {
+  if (!code) return null
+  try { return await redeemCode(ctx.db, userId, code) } catch (err) {
+    return { ok: false, code, message: err.publicMessage || 'That promo code could not be applied.' }
+  }
+}
+
+async function safeResend(ctx, userId) {
+  const row = (await ctx.db.query(`select * from profiles where id=$1`, [userId])).rows[0]
+  if (!row || row.email_verified_at) return false
+  try { await resendVerification(ctx, row); return true } catch (err) {
+    console.error('resend verification failed:', String(err?.message || err).slice(0, 300))
+    return false
+  }
+}
+
+// Public "resend confirmation" from the login page. Never reveals whether the email exists.
+export async function resendByEmail(ctx, email) {
+  const cleanEmail = String(email || '').trim().toLowerCase()
+  if (!emailOk(cleanEmail)) throw fail(400, 'email', 'Enter a valid email address.')
+  const row = (await ctx.db.query(`select id from profiles where email=$1 and email_verified_at is null`, [cleanEmail])).rows[0]
+  if (row) await safeResend(ctx, row.id)
+  return { ok: true, message: 'If that account is waiting for confirmation, we sent the link again.' }
 }
 
 async function sendVerifyEmail(ctx, email, name, url) {
@@ -300,11 +349,14 @@ export async function login(ctx, { email, password }) {
       if (/confirm/i.test(error.message || '')) throw fail(403, 'email_unverified', 'Confirm your email first. We can send the link again from the login page.')
       throw fail(401, 'login', 'Email or password is incorrect.')
     }
+    const prof = (await ctx.db.query(`select blocked_at from profiles where id=$1`, [data.user.id])).rows[0]
+    if (prof?.blocked_at) throw fail(403, 'account_disabled', DISABLED_MESSAGE)
     return { token: data.session.access_token, userId: data.user.id }
   }
   const found = await ctx.db.query(`select * from profiles where email=$1`, [cleanEmail])
   const user = found.rows[0]
   if (!user || !verifyPassword(password, user.password_hash)) throw fail(401, 'login', 'Email or password is incorrect.')
+  if (user.blocked_at) throw fail(403, 'account_disabled', DISABLED_MESSAGE)
   return { token: signJwt({ uid: user.id }, ctx.config.jwtSecret), userId: user.id }
 }
 
@@ -314,7 +366,14 @@ export async function userFromAuth(ctx, token) {
     const admin = await supabaseAdmin(ctx.config)
     const { data, error } = await admin.auth.getUser(token)
     if (error || !data?.user) return null
-    const row = await ctx.db.query(`select * from profiles where id=$1`, [data.user.id])
+    let row = await ctx.db.query(`select * from profiles where id=$1`, [data.user.id])
+    if (!row.rows[0] && data.user.email) {
+      // Auth user exists but the profile insert never happened (e.g. an earlier failed signup).
+      try {
+        await createProfile(ctx, { id: data.user.id, email: String(data.user.email).toLowerCase(), name: data.user.user_metadata?.full_name || '', passwordHash: null, ip: null })
+      } catch (err) { console.error('profile backfill failed:', String(err?.message || err).slice(0, 200)) }
+      row = await ctx.db.query(`select * from profiles where id=$1`, [data.user.id])
+    }
     const profile = row.rows[0]
     if (!profile) return null
     if (data.user.email_confirmed_at && !profile.email_verified_at) {
@@ -387,6 +446,7 @@ export async function usageFor(ctx, user, device) {
     freeReason: free.ok ? null : free.error,
     freeMessage: free.ok ? 'Your free document is ready to send.' : free.message,
     credits: num(ent?.credits),
+    ...(await promoUsage(ctx.db.query.bind(ctx.db), user.id)),
     emailVerified: !!user.email_verified_at,
     phoneVerified: !!user.phone_verified_at,
     phone: user.phone_e164 || '',
@@ -699,9 +759,14 @@ export async function sendDocument(ctx, user, id, device) {
       const problem = readyErrors(clientSigners, fields)
       if (problem) throw fail(400, 'invalid', problem)
       const profile = (await q(`select * from profiles where id=$1 for update`, [user.id])).rows[0]
+      if (profile.blocked_at) throw fail(403, 'account_disabled', DISABLED_MESSAGE)
       if (!profile.email_verified_at) throw fail(403, 'email_unverified', FREE_MESSAGES.email_unverified)
       const ent = (await q(`select * from entitlements where user_id=$1 for update`, [user.id])).rows[0]
       let source = doc.billing_source
+      if (!source) {
+        const promoCode = await consumePromo(q, user.id)
+        if (promoCode) source = `promo:${promoCode}`
+      }
       if (!source) {
         const free = await evaluateFree(q, profile, {
           localId: device.localId,
@@ -1169,7 +1234,7 @@ export async function bulkSend(ctx, user, { templateId, recipients }, device) {
   if (people.length > 100) throw fail(400, 'recipients', 'Send at most 100 at a time.')
   if (people.some(p => !emailOk(p.email))) throw fail(400, 'email', 'Each recipient needs a valid email.')
   const usage = await usageFor(ctx, user, device)
-  const capacity = usage.credits + (usage.freeAvailable ? 1 : 0)
+  const capacity = usage.credits + (usage.promoCredits || 0) + (usage.freeAvailable ? 1 : 0)
   if (capacity < people.length) {
     return {
       ok: false,

@@ -44,7 +44,8 @@ async function api(path, opt = {}) {
   const text = await res.text()
   let json = null
   try { json = text ? JSON.parse(text) : null } catch { json = null }
-  if (res.status === 401 && TOKEN && !path.startsWith('/api/sign')) {
+  if ((res.status === 401 || json?.error === 'account_disabled') && TOKEN && !path.startsWith('/api/sign')) {
+    if (json?.error === 'account_disabled') setTimeout(() => toast(json.message), 0)
     TOKEN = ''
     localStorage.removeItem('eds_token')
     S.me = null
@@ -137,6 +138,7 @@ function meter() {
   const u = S.usage
   if (!u) return ''
   const bits = []
+  if (u.promoCredits) bits.push(`${u.promoCredits} promo doc${u.promoCredits === 1 ? '' : 's'}`)
   if (u.credits) bits.push(`${u.credits} credit${u.credits === 1 ? '' : 's'}`)
   if (u.freeAvailable) bits.push('1 free document')
   if (!bits.length) bits.push('Buy documents')
@@ -202,11 +204,22 @@ function login() {
   V.innerHTML = `<div class="card auth"><h1>Log in</h1>${params.get('verified') === '1' ? '<p class="banner">Email confirmed. Log in to continue.</p>' : ''}${params.get('verified') === '0' ? '<p class="banner">That confirmation link is invalid or already used.</p>' : ''}
   <label class="f">Email</label><input id="em" type="email" autocomplete="username" style="width:100%">
   <label class="f">Password</label><input id="pw" type="password" autocomplete="current-password" style="width:100%">
-  <br><br><button class="p" id="go">Log in</button>
-  <p><a href="#/signup">Create an account</a></p></div>`
+  <br><br><button class="p" id="go">Log in</button><div id="lmsg"></div>
+  <p><a href="#/signup">Create an account</a> · <a href="javascript:void 0" id="rs2">Resend confirmation email</a></p></div>`
+  const resendConfirm = async () => {
+    const email = $('#em').value
+    if (!email) return toast('Enter your email first')
+    const r = await api('/api/auth/resend-email', { method: 'POST', body: { email } })
+    toast(r.json?.message || (r.ok ? 'Sent' : 'Could not send'))
+  }
+  $('#rs2').onclick = resendConfirm
   $('#go').onclick = async () => {
     const res = await api('/api/auth/login', { method: 'POST', body: { email: $('#em').value, password: $('#pw').value } })
-    if (!res.ok) return toast(res.json?.message || 'Could not log in')
+    if (!res.ok) {
+      $('#lmsg').innerHTML = `<p class="banner">${esc(res.json?.message || 'Could not log in')}${res.json?.error === 'email_unverified' ? ' <a href="javascript:void 0" id="rs">Resend confirmation</a>' : ''}</p>`
+      if ($('#rs')) $('#rs').onclick = resendConfirm
+      return
+    }
     setToken(res.json.token)
     await hydrate()
     if (sessionStorage.getItem('eds_buy')) { await resumeBuy(); return }
@@ -219,12 +232,18 @@ function signup() {
   <label class="f">Full name</label><input id="nm" autocomplete="name" style="width:100%">
   <label class="f">Email</label><input id="em" type="email" autocomplete="email" style="width:100%">
   <label class="f">Password</label><input id="pw" type="password" autocomplete="new-password" style="width:100%">
-  <br><br><button class="p" id="go">Create account</button>
+  <label class="f">Promo code (optional)</label><input id="pc" autocomplete="off" style="width:100%;text-transform:uppercase" placeholder="e.g. VIP100">
+  <br><br><button class="p" id="go">Create account</button><div id="smsg"></div>
   <p><a href="#/login">I already have an account</a></p></div>`
   $('#go').onclick = async () => {
-    const res = await api('/api/auth/signup', { method: 'POST', body: { name: $('#nm').value, email: $('#em').value, password: $('#pw').value } })
-    if (!res.ok) return toast(res.json?.message || 'Could not sign up')
-    V.innerHTML = `<div class="card auth"><h1>Check your email</h1><p>We sent a confirmation link to <b>${esc($('#em').value)}</b>. Open it, then log in.</p><a class="btn p" href="#/login">Go to log in</a></div>`
+    const res = await api('/api/auth/signup', { method: 'POST', body: { name: $('#nm').value, email: $('#em').value, password: $('#pw').value, promo: $('#pc').value } })
+    if (!res.ok) { $('#smsg').innerHTML = `<p class="banner">${esc(res.json?.message || 'Could not sign up')}</p>`; return }
+    const em = esc($('#em').value)
+    const promo = res.json.promo
+    const promoLine = promo ? (promo.ok ? `<p class="banner">${esc(promo.code)} applied: ${promo.granted} free documents are on your account.</p>` : `<p class="banner">${esc(promo.message)} You can enter a code later in Settings.</p>`) : ''
+    V.innerHTML = res.json.emailSent === false
+      ? `<div class="card auth"><h1>Account created</h1>${promoLine}<p>We couldn’t send the confirmation email to <b>${em}</b> just now. Go to log in and use <b>Resend confirmation email</b> in a few minutes.</p><a class="btn p" href="#/login">Go to log in</a></div>`
+      : `<div class="card auth"><h1>Check your email</h1>${promoLine}<p>We sent a confirmation link to <b>${em}</b>. Open it, then log in.</p><a class="btn p" href="#/login">Go to log in</a></div>`
   }
 }
 
@@ -518,6 +537,7 @@ function payModal(id, info) {
   const extra = id ? `,'${id}'` : ''
   modal(`<h3>This send needs a credit</h3><p>${esc(info?.message || 'Buy a pack, then send.')}</p>
   <div class="row" style="margin-top:10px"><button class="p" onclick="buy('doc1'${extra})">1 document · $1</button><button onclick="buy('doc10'${extra})">10 documents · $5</button><button onclick="buy('doc50'${extra})">50 documents · $10</button></div>
+  <p class="note">Have a promo code? <a href="#/settings" onclick="closeModal()">Enter it in Settings</a>.</p>
   <p class="note">Apple Pay and Google Pay show on the secure checkout page when your device supports them. The free-document checks never block a paid send.</p>`)
 }
 async function buy(kind, documentId) {
@@ -746,7 +766,15 @@ function settings() {
   <h3 style="margin-top:16px">Folders</h3><p>${S.folders.slice(1).map(esc).join(' · ') || 'None yet'}</p><button id="addf">+ Folder</button></div>
   <div class="card"><h3>Branding</h3><label class="f">Company name</label><input id="bc" value="${esc(S.brand.company || '')}" style="width:100%"><label class="f">Accent color</label><input id="bk" type="color" value="${S.brand.color || '#0f766e'}"><p class="note">Used on signer emails and the certificate.</p>
   <div class="card" style="border-top:5px solid ${S.brand.color || '#0f766e'};margin-top:10px"><b>${esc(S.brand.company || 'Your company')}</b> sent you a document</div>
-  <p style="margin-top:16px"><button id="portal">Receipts</button></p><p class="note">${esc(meterText())}</p></div></div>`
+  <p style="margin-top:16px"><button id="portal">Receipts</button></p><p class="note">${esc(meterText())}</p></div>
+  <div class="card" id="promo"><h3>Promo code</h3>${(S.usage?.promoCodes || []).map(c => `<p>${esc(c.code)}: ${c.active ? `${c.remaining} of ${c.granted} free documents left` : 'this code has been turned off'}</p>`).join('')}
+  <label class="f">Have a code?</label><div class="row"><input id="pcode" placeholder="e.g. VIP100" style="text-transform:uppercase;max-width:200px"><button class="p" id="pgo">Apply</button></div><div id="pmsg"></div></div>
+  ${S.me.isAdmin ? '<div class="card"><h3>Owner</h3><p><a class="btn" href="/admin">Open admin</a></p></div>' : ''}</div>`
+  $('#pgo').onclick = async () => {
+    const r = await api('/api/promo/redeem', { method: 'POST', body: { code: $('#pcode').value } })
+    if (!r.ok) { $('#pmsg').innerHTML = `<p class="banner">${esc(r.json?.message || 'That code could not be applied.')}</p>`; return }
+    toast(r.json.message); await hydrate(); route()
+  }
   $('#out').onclick = () => { setToken(''); S.me = null; location.hash = '#/' }
   $('#addf').onclick = async () => { const n = prompt('Folder name'); if (!n) return; S.folders.push(n); await api('/api/settings', { method: 'PUT', body: { brand: S.brand, folders: S.folders } }); route() }
   const saveBrand = async () => { S.brand = { company: $('#bc').value, color: $('#bk').value }; await api('/api/settings', { method: 'PUT', body: { brand: S.brand, folders: S.folders } }); route() }
@@ -759,6 +787,8 @@ Object.assign(window, { closeModal, uploadFiles, fromTemplate, tplBuilder, saveT
 function meterText() {
   const u = S.usage
   if (!u) return ''
+  const promo = u.promoCredits ? `${u.promoCredits} promo documents` : ''
+  if (promo) return [promo, u.freeAvailable ? '1 free document' : '', u.credits ? `${u.credits} credits` : ''].filter(Boolean).join(', then ')
   if (u.freeAvailable && u.credits) return `1 free document, then ${u.credits} credits`
   if (u.freeAvailable) return '1 free document ready'
   return `${u.credits || 0} document credits`

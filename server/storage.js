@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, normalize } from 'node:path'
 
 function safeKey(key) {
@@ -17,6 +17,9 @@ function disk(root) {
     },
     async get(key) {
       return readFile(join(root, safeKey(key)))
+    },
+    async remove(keys) {
+      for (const key of keys) await rm(join(root, safeKey(key)), { force: true })
     }
   }
 }
@@ -47,6 +50,12 @@ function supabaseStorage(config) {
       const { data, error } = await supabase.storage.from('documents').download(safeKey(key))
       if (error) throw new Error(error.message)
       return Buffer.from(await data.arrayBuffer())
+    },
+    async remove(keys) {
+      if (!keys.length) return
+      const supabase = await sb()
+      const { error } = await supabase.storage.from('documents').remove(keys.map(safeKey))
+      if (error) throw new Error(error.message)
     }
   }
 }
