@@ -936,6 +936,7 @@ export async function sendDocument(ctx, user, id, device) {
     ? prepared.issued.filter(s => s.role !== 'cc').slice(0, 1)
     : prepared.issued.filter(s => s.role !== 'cc')
   for (const s of firsts) {
+    if (s.role === 'in-person' || !s.email) continue
     try {
       await emailSigner(ctx, prepared.profile, prepared.doc, s, s.token, s.access)
       await ctx.db.query(

@@ -151,6 +151,8 @@ function meter() {
 }
 function nav() {
   const h = location.hash || '#/'
+  const logo = document.querySelector('header.top a.logo')
+  if (logo) logo.setAttribute('href', h.startsWith('#/sign/') ? h : '#/')
   if (h.startsWith('#/sign/')) { $('#nav').innerHTML = '<span class="sp"></span><span style="font-size:13px;color:var(--mut)">Secure signing link</span>'; document.body.classList.remove('navopen'); return }
   if (!S.me) {
     $('#nav').innerHTML = `<a href="#/pricing" class="${h.startsWith('#/pricing') ? 'on' : ''}">Pricing</a><a href="#/contact">Need help?</a><span class="sp"></span><a href="#/login">Log in</a><a href="#/signup" class="btn p" style="color:#fff">Sign up</a>`
@@ -171,7 +173,7 @@ async function route() {
   if (!S.me && !pub.includes(r || '')) { location.hash = '#/login'; return }
   const R = {
     '': landing, pricing, login, signup, phone, contact, forgot, reset: () => resetPw(a), app: dashboard, new: newDoc, edit: () => editor(a),
-    sign: () => signToken(a), cert: () => cert(a), templates, links, form: () => publicForm(a), bulk, proposal, settings
+    sign: () => signToken(a), inperson: () => inperson(a), cert: () => cert(a), templates, links, form: () => publicForm(a), bulk, proposal, settings
   }
   await (R[r] || landing)()
   if (pricingAnchor) document.getElementById('pricing')?.scrollIntoView()
@@ -329,7 +331,7 @@ function dashboard() {
       const next = d.signers.find(s => s.role !== 'cc' && !s.done)
       const exp = d.expiresAt || (d.sent && d.expiresDays ? new Date(new Date(d.sent).getTime() + d.expiresDays * 864e5).toISOString() : null)
       const expNote = exp && ['sent', 'waiting'].includes(st) ? `<div class="note">Expires ${fmt(exp)}</div>` : (st === 'expired' && exp ? `<div class="note">Expired ${fmt(exp)}</div>` : '')
-      return `<tr><td><a href="#/${st === 'draft' ? 'edit' : st === 'completed' ? 'cert' : 'edit'}/${d.id}">${esc(d.name)}</a></td><td data-v="${st}"><span class="pill s-${st}">${st[0].toUpperCase() + st.slice(1)}</span>${expNote}</td><td>${esc(d.folder)}</td><td>${sg.map(s => esc(s.name)).join(', ')}</td><td data-v="${n / Math.max(1, sg.length)}">${n}/${sg.length}</td><td data-v="${d.created}">${fmt(d.created)}</td><td data-v="${d.events.at(-1)?.ts || ''}">${fmt(d.events.at(-1)?.ts)}</td><td>${st === 'draft' ? `<a href="#/edit/${d.id}">Edit</a>` : ''}${['sent', 'waiting'].includes(st) && next?.token ? `<a href="#/sign/${next.token}">Signing link</a> · ${recentlyReminded(d) ? `<span class="note" title="You can resend once every 24 hours">Reminded ${fmt(d.lastReminded)}</span>` : `<a href="javascript:remind('${d.id}')">Resend</a>${d.lastReminded ? ` <span class="note">(last ${fmt(d.lastReminded)})</span>` : ''}`}` : ''}${st === 'completed' ? `<a href="javascript:downloadDoc('${d.id}')">PDF</a> · <a href="#/cert/${d.id}">Certificate</a>` : ''}${st !== 'draft' ? ` · <a href="javascript:timeline('${d.id}')">Timeline</a>` : ''}</td></tr>`
+      return `<tr><td><a href="#/${st === 'draft' ? 'edit' : st === 'completed' ? 'cert' : 'edit'}/${d.id}">${esc(d.name)}</a></td><td data-v="${st}"><span class="pill s-${st}">${st[0].toUpperCase() + st.slice(1)}</span>${expNote}</td><td>${esc(d.folder)}</td><td>${sg.map(s => esc(s.name)).join(', ')}</td><td data-v="${n / Math.max(1, sg.length)}">${n}/${sg.length}</td><td data-v="${d.created}">${fmt(d.created)}</td><td data-v="${d.events.at(-1)?.ts || ''}">${fmt(d.events.at(-1)?.ts)}</td><td>${st === 'draft' ? `<a href="#/edit/${d.id}">Edit</a>` : ''}${['sent', 'waiting'].includes(st) && next?.token ? `<a href="#/${next.role === 'in-person' ? 'inperson/' + d.id : 'sign/' + next.token}">${next.role === 'in-person' ? 'Sign in person' : 'Signing link'}</a> · ${recentlyReminded(d) ? `<span class="note" title="You can resend once every 24 hours">Reminded ${fmt(d.lastReminded)}</span>` : `<a href="javascript:remind('${d.id}')">Resend</a>${d.lastReminded ? ` <span class="note">(last ${fmt(d.lastReminded)})</span>` : ''}`}` : ''}${st === 'completed' ? `<a href="javascript:downloadDoc('${d.id}')">PDF</a> · <a href="#/cert/${d.id}">Certificate</a>` : ''}${st !== 'draft' ? ` · <a href="javascript:timeline('${d.id}')">Timeline</a>` : ''}</td></tr>`
     })
     $('#dt').innerHTML = rows.length ? table(['Document', 'Status', 'Folder', 'Recipients', 'Signed', 'Created', 'Last activity', 'Actions'], rows) : '<div class="card"><h3>No documents yet</h3><p><a href="#/new">Upload a PDF or start from a blank page.</a></p></div>'
     afterRender()
@@ -473,10 +475,10 @@ async function editor(id) {
   <h4 style="margin-top:16px">Settings</h4><label class="f">Folder</label><select id="fo">${S.folders.slice(1).map(f => `<option ${f === d.folder ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select>
   <label class="f">Expires after (days)</label><input id="ex" type="number" min="1" max="365" value="${d.expiresDays}" style="width:100%"><p class="note" style="font-size:12px">The signing link closes after this many days. Unsigned signers and you get a warning email 2 days before.</p><label class="f">Automatic reminders</label>${remindSelect('rm', d.remindDays, 'style="width:100%"')}<p class="note" style="font-size:12px">Emails only people who haven’t signed. Up to 5 reminders; stops when signed, voided or expired.${locked && !d.tpl ? ` Sent ${d.autoReminders || 0} automatic so far.${d.lastReminded ? ' Last reminded ' + fmt(d.lastReminded) + '.' : ''}` : ''}</p>
   <label class="row" style="font-size:13px;margin-top:8px"><input type="checkbox" id="idv" ${d.idv ? 'checked' : ''}> Email an access code</label><label class="f">Message</label><textarea id="msg" style="width:100%">${esc(d.message || '')}</textarea>
-  ${locked && d.signers.some(s => s.token) ? `<h4>Signing links</h4>${d.signers.filter(s => s.token).map(s => `<p style="font-size:12px"><b>${esc(s.name)}</b><br><a href="#/sign/${s.token}">Open link</a></p>`).join('')}` : ''}</div></div>`
+  ${locked && d.signers.some(s => s.token) ? `<h4>Signing links</h4>${d.signers.filter(s => s.token).map(s => `<p style="font-size:12px"><b>${esc(s.name)}</b> ${s.role === 'in-person' ? '<span class="note">(in person)</span>' : ''}<br><a href="#/${s.role === 'in-person' ? 'inperson/' + d.id : 'sign/' + s.token}">${s.role === 'in-person' ? 'Hand this device' : 'Open link'}</a></p>`).join('')}` : ''}</div></div>`
   window.addSigner = () => { d.signers.push({ id: uid(), name: 'Signer ' + (d.signers.length + 1), email: '', role: 'signer', color: COLORS[d.signers.length % 6], done: false }); save(); drawS() }
   const drawS = () => {
-    $('#sg').innerHTML = d.signers.map((s, i) => `<div style="border:1px solid ${s.id === cur ? s.color : 'var(--line)'};border-radius:8px;padding:6px;margin-bottom:6px" data-s="${s.id}"><div class="signer"><span class="dot" style="background:${s.color}"></span><b style="font-size:12px">${d.ordered ? i + 1 + '.' : ''}</b><input value="${esc(s.name)}" data-k="name" placeholder="${d.tpl ? 'Role name' : 'Full name'}" ${locked ? 'disabled' : ''}>${i > 0 && !locked ? `<span style="cursor:pointer" data-up="${i}">↑</span><span style="cursor:pointer" data-del="${i}">✕</span>` : ''}</div><div class="signer"><input value="${esc(s.email || '')}" data-k="email" placeholder="email@example.com" ${locked ? 'disabled' : ''}><select data-k="role" ${locked ? 'disabled' : ''}>${['signer', 'approver', 'in-person', 'cc'].map(r => `<option ${r === s.role ? 'selected' : ''}>${r}</option>`).join('')}</select></div>${d.tpl || s.role === 'cc' ? '' : `<div class="asig"><img data-ps="sig" src="${s.name.trim() ? typedSig(s.name) : ''}"><img data-ps="ini" src="${s.name.trim() ? typedSig(initialsOf(s.name)) : ''}"><small data-ps="txt">${s.name.trim() ? initialsOf(s.name) : ''}</small></div>`}</div>`).join('')
+    $('#sg').innerHTML = d.signers.map((s, i) => `<div style="border:1px solid ${s.id === cur ? s.color : 'var(--line)'};border-radius:8px;padding:6px;margin-bottom:6px" data-s="${s.id}"><div class="signer"><span class="dot" style="background:${s.color}"></span><b style="font-size:12px">${d.ordered ? i + 1 + '.' : ''}</b><input value="${esc(s.name)}" data-k="name" placeholder="${d.tpl ? 'Role name' : 'Full name'}" ${locked ? 'disabled' : ''}>${i > 0 && !locked ? `<span style="cursor:pointer" data-up="${i}">↑</span><span style="cursor:pointer" data-del="${i}">✕</span>` : ''}</div><div class="signer"><input value="${esc(s.email || '')}" data-k="email" placeholder="${s.role === 'in-person' ? 'Email optional' : 'email@example.com'}" ${locked ? 'disabled' : ''}><select data-k="role" ${locked ? 'disabled' : ''}>${[['signer', 'signer'], ['approver', 'approver'], ['in-person', 'in-person (hand this device)'], ['cc', 'cc']].map(([r, l]) => `<option value="${r}" ${r === s.role ? 'selected' : ''}>${l}</option>`).join('')}</select></div>${s.role === 'in-person' ? '<p class="note">No email needed — you’ll hand them this device after you send.</p>' : ''}${d.tpl || s.role === 'cc' ? '' : `<div class="asig"><img data-ps="sig" src="${s.name.trim() ? typedSig(s.name) : ''}"><img data-ps="ini" src="${s.name.trim() ? typedSig(initialsOf(s.name)) : ''}"><small data-ps="txt">${s.name.trim() ? initialsOf(s.name) : ''}</small></div>`}</div>`).join('')
     $$('[data-s]').forEach(el => {
       el.onclick = e => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') { cur = el.dataset.s; drawS() } }
       const nm = $('[data-k=name]', el)
@@ -584,8 +586,12 @@ async function editor(id) {
     if (res.status === 402) return payModal(d.id, res.json)
     if (!res.ok) return toast(res.json?.message || 'Could not send')
     const links = res.json.links || []
-    modal(`<h3>Sent</h3><p>Each recipient with an email address got a secure link. You can also open a link here.</p>${links.map(l => `<div class="card" style="margin:8px 0"><b>${esc(l.name)}</b> ${l.email ? `&lt;${esc(l.email)}&gt;` : '(no email — open the link on this device)'}<br><a class="btn p" style="margin-top:8px" href="${l.url.replace(/^https?:\/\/[^/]+/, '')}">Open signing link</a></div>`).join('')}<button onclick="closeModal();location.hash='#/app'">Back to dashboard</button>`)
     await hydrate()
+    if (links.some(l => l.role === 'in-person')) {
+      location.hash = '#/inperson/' + d.id
+      return
+    }
+    modal(`<h3>Sent</h3><p>Each recipient with an email address got a secure link. You can also open a link here.</p>${links.map(l => `<div class="card" style="margin:8px 0"><b>${esc(l.name)}</b> ${l.email ? `&lt;${esc(l.email)}&gt;` : '(no email — open the link on this device)'}<br><a class="btn p" style="margin-top:8px" href="${l.url.replace(/^https?:\/\/[^/]+/, '')}">Open signing link</a></div>`).join('')}<button onclick="closeModal();location.hash='#/app'">Back to dashboard</button>`)
   }
 }
 
@@ -613,6 +619,31 @@ async function resumeBuy() {
   try { const { kind, documentId } = JSON.parse(raw); await buy(kind, documentId) } catch { toast('Checkout could not start') }
 }
 
+function handBack(label = 'Hand the device back') {
+  const id = sessionStorage.getItem('eds_handoff')
+  if (!id) return ''
+  return `<p style="margin-top:18px"><a class="btn p" href="#/inperson/${id}">${esc(label)}</a></p>`
+}
+async function inperson(id) {
+  if (!S.me) return (location.hash = '#/login')
+  const d = doc(id)
+  if (!d) return V.innerHTML = '<div class="card"><h2>Document not found.</h2><p><a href="#/app">Back to dashboard</a></p></div>'
+  const pending = d.signers.filter(s => s.role === 'in-person' && !s.done)
+  const doneIp = d.signers.filter(s => s.role === 'in-person' && s.done)
+  const current = d.ordered ? d.signers.find(s => s.role !== 'cc' && !s.done) : pending[0]
+  const canStart = current && current.role === 'in-person' && current.token
+  const emailed = d.signers.filter(s => s.role !== 'cc' && s.role !== 'in-person' && !s.done)
+  let body
+  if (d.status === 'completed') body = `<h2>Everyone has signed.</h2><p><a class="btn p" href="#/cert/${d.id}">View certificate</a></p>`
+  else if (d.status === 'declined' || d.status === 'voided' || d.status === 'expired') body = `<h2>This document is ${esc(d.status)}.</h2>`
+  else if (canStart) body = `<h2>Hand this device to ${esc(current.name)}</h2><p>They’ll sign on the next screen. When they’re done, the device comes back to you${pending.length > 1 ? ' for the next person' : ''}.</p><p style="margin-top:24px"><button class="p lg" id="go">Start signing as ${esc(current.name)}</button></p>`
+  else if (current && current.role !== 'in-person') body = `<h2>Waiting on ${esc(current.name)}</h2><p>They were emailed a signing link. You can hand this device to the next in-person signer after they finish.</p>`
+  else if (!pending.length) body = `<h2>No one is waiting to sign in person.</h2>${emailed.length ? `<p>${esc(emailed.map(s => s.name).join(', '))} still need to sign by email.</p>` : ''}`
+  else body = `<h2>Ready when you are.</h2>`
+  V.innerHTML = `<div class="card" style="max-width:560px;margin:40px auto;text-align:center;padding:36px 28px"><p class="note">In-person signing</p><h1 style="margin:8px 0 16px">${esc(d.name)}</h1>${body}${doneIp.length ? `<p class="note" style="margin-top:16px">Already signed in person: ${doneIp.map(s => esc(s.name)).join(', ')}</p>` : ''}<p style="margin-top:24px"><a href="#/app">Back to dashboard</a></p></div>`
+  const go = $('#go')
+  if (go) go.onclick = () => { sessionStorage.setItem('eds_handoff', d.id); location.hash = '#/sign/' + current.token }
+}
 async function signToken(token) {
   if (!token) return V.innerHTML = '<p>Missing signing link.</p>'
   const res = await fetch('/api/sign/' + token, { headers: { 'X-Device-Local': deviceLocal() } })
@@ -629,7 +660,7 @@ async function signToken(token) {
     await fetch('/api/sign/' + token + '/fields', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Device-Local': deviceLocal() }, body: JSON.stringify({ name: s.name, fields: d.fields.filter(f => f.signer === s.id).map(f => ({ id: f.id, value: f.value })) }) })
   }
   const approver = s.role === 'approver'
-  V.innerHTML = `<div class="signbar"><b>${esc(d.name)}</b><span>· ${esc(s.name)} ${s.role === 'in-person' ? '(in person — hand the device to the signer)' : ''}</span><span class="sp"></span><span id="prog"></span>${approver ? '' : '<button id="nx" style="background:var(--acc)">Next field</button>'}<button id="fin" class="p" style="background:var(--brand2)">${approver ? 'Approve' : 'Finish'}</button><button id="dec" style="background:#fee2e2">Decline</button><button id="cm">Comments (${d.comments.length})</button></div>
+  V.innerHTML = `<div class="signbar"><b>${esc(d.name)}</b><span>· ${esc(s.name)}${s.role === 'in-person' ? ' · signing in person' : ''}</span><span class="sp"></span><span id="prog"></span>${approver ? '' : '<button id="nx" style="background:var(--acc)">Next field</button>'}<button id="fin" class="p" style="background:var(--brand2)">${approver ? 'Approve' : 'Finish'}</button><button id="dec" style="background:#fee2e2">Decline</button><button id="cm">Comments (${d.comments.length})</button></div>
   <div class="card" id="consent" style="margin-bottom:12px">${session.accessCodeRequired ? `<label class="f">Access code from your email</label><input id="acode" maxlength="6" style="max-width:160px;letter-spacing:3px">` : ''}<label class="row"><input type="checkbox" id="ok"> ${esc(session.consentText)}</label></div><div class="pages" id="pages"></div>`
   await renderPages($('#pages'), d)
   const mine = () => d.fields.filter(f => f.signer === s.id && visible(d.fields, f) && f.type !== 'formula')
@@ -665,15 +696,15 @@ async function signToken(token) {
   }
   draw(); prog()
   const nx = $('#nx'); if (nx) nx.onclick = () => { const f = mine().find(f => f.value == null || f.value === ''); $$('.fld').forEach(x => x.classList.remove('cur')); if (!f) return toast('All your fields are filled — click Finish'); const el = $(`.fld[data-id="${f.id}"]`); el.classList.add('cur'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (!['text', 'name', 'number', 'dropdown'].includes(f.type)) setTimeout(() => fill(f), 400); else $('input,select', el)?.focus() }
-  $('#dec').onclick = async () => { const reason = prompt('Reason for declining?'); if (!reason) return; const r = await fetch('/api/sign/' + token + '/decline', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) }); const j = await r.json(); if (!r.ok) return toast(j.message || 'Could not decline'); V.innerHTML = '<div class="card"><h2>You declined this document.</h2><p>The sender has been emailed.</p></div>' }
+  $('#dec').onclick = async () => { const reason = prompt('Reason for declining?'); if (!reason) return; const r = await fetch('/api/sign/' + token + '/decline', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) }); const j = await r.json(); if (!r.ok) return toast(j.message || 'Could not decline'); V.innerHTML = '<div class="card"><h2>You declined this document.</h2><p>The sender has been emailed.</p>' + handBack() + '</div>' }
   $('#cm').onclick = () => { modal(`<h3>Comments</h3>${d.comments.map(c => `<div class="card" style="margin:6px 0;padding:10px"><b>${esc(c.who)}</b> <small>${fmt(c.ts)}</small><br>${esc(c.t)}</div>`).join('') || '<p>No comments yet.</p>'}<textarea id="ct" style="width:100%"></textarea><br><br><button class="p" id="cs">Post</button> <button onclick="closeModal()">Close</button>`); $('#cs').onclick = async () => { const t = $('#ct').value.trim(); if (!t) return; await fetch('/api/sign/' + token + '/comment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t }) }); d.comments.push({ t, who: s.name, ts: now() }); closeModal(); toast('Comment posted') } }
   $('#fin').onclick = async () => {
     if (!$('#ok').checked) return toast('Please accept the electronic-signature consent first'), $('#consent').scrollIntoView({ block: 'center' })
     const r = await fetch('/api/sign/' + token + '/finish', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Device-Local': deviceLocal() }, body: JSON.stringify({ consent: true, accessCode: $('#acode')?.value || '', name: s.name, fields: d.fields.filter(f => f.signer === s.id).map(f => ({ id: f.id, value: f.value })) }) })
     const j = await r.json()
     if (!r.ok) return toast(j.message || 'Could not finish')
-    if (j.status === 'completed') V.innerHTML = `<div class="card" style="text-align:center"><h2>Thanks, ${esc(s.name)}. Everyone has signed.</h2><p>A sealed PDF is on its way by email.</p><p><a class="btn p" href="/api/sign/${token}/download">Download the sealed PDF</a></p></div>`
-    else V.innerHTML = `<div class="card" style="text-align:center"><h2>Thanks, ${esc(s.name)}.</h2><p>We’ll email the next recipient. You’ll get the sealed PDF when everyone is done.</p></div>`
+    if (j.status === 'completed') V.innerHTML = `<div class="card" style="text-align:center"><h2>Thanks, ${esc(s.name)}. Everyone has signed.</h2><p>A sealed PDF is on its way by email.</p><p><a class="btn p" href="/api/sign/${token}/download">Download the sealed PDF</a></p>${handBack('Hand the device back')}</div>`
+    else V.innerHTML = `<div class="card" style="text-align:center"><h2>Thanks, ${esc(s.name)}.</h2><p>${s.role === 'in-person' ? 'Please hand this device back so the next person can sign, or so the sender can finish up.' : 'We’ll email the next recipient. You’ll get the sealed PDF when everyone is done.'}</p>${handBack('Hand the device back')}</div>`
   }
 }
 
