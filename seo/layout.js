@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { siteFooterHtml } from '../shared/site-footer.js'
+import { logoMarkSvg, WORDMARK, BRAND_NAME } from '../shared/logo.js'
 
 // Inlined into every SEO page so first paint doesn't wait on a separate stylesheet request.
 const SEO_CSS = readFileSync(new URL('./seo.css', import.meta.url), 'utf8').replace(/\n/g, '')
@@ -10,7 +11,7 @@ export const CHECKED = 'November 14, 2026'
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
-export const LOGO = `<svg width="26" height="26" viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect width="28" height="28" rx="7" fill="#14C4B0"/><path d="M6.5 16.2c2.6-1.1 4.4 1.4 6.5-.2 2.3-1.7 3.5-4.4 7.8-3.2" stroke="#042F2E" stroke-width="1.8" stroke-linecap="round"/><path d="M7.2 19.4h8.4" stroke="#042F2E" stroke-width="1.5" stroke-linecap="round" opacity="0.65"/></svg>`
+export const LOGO = logoMarkSvg({ size: 26 })
 
 // Google Search Console HTML-tag verification. Set GOOGLE_SITE_VERIFICATION in Vercel
 // (the content="..." value Google gives you) and every page will carry the tag.
@@ -114,7 +115,7 @@ ${p.head || ''}
 <a class="skip" href="#content">Skip to content</a>
 <header class="s-hero${p.compactHero ? ' compact' : ''}">
   <nav class="s-nav" aria-label="Main">
-    <a class="s-logo" href="/">${LOGO}<span>${BRAND}</span></a>
+    <a class="s-logo" href="/" aria-label="${BRAND_NAME}">${LOGO}<span>${WORDMARK}</span></a>
     <div class="s-links"><a href="/e-signature-pricing">Pricing</a><a href="/signature-generator">Signature generator</a><a href="/blog">Blog</a><a href="/#/login">Log in</a><a class="s-btn" href="/#/signup" data-cta="nav">Start free</a></div>
   </nav>
   <div class="s-hero-copy">

@@ -5,7 +5,8 @@ a{color:var(--brand)}button,.btn{font:inherit;cursor:pointer;border:1px solid va
 .demo-banner{background:#fef3c7;color:#92400e;text-align:center;font-size:12px;padding:5px}
 .top{display:flex;align-items:center;gap:20px;padding:12px 24px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
 .logo{font-weight:800;font-size:20px;color:var(--ink);text-decoration:none;display:flex;align-items:center;gap:8px}
-.mark{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-family:Caveat;font-size:24px}
+.logo .logo-mark,.cert .logo-mark{width:30px;height:30px;flex-shrink:0;display:block}
+.cert .logo-mark{width:36px;height:36px}
 #nav{display:flex;gap:4px;flex:1;flex-wrap:wrap}#nav a{padding:7px 10px;border-radius:8px;text-decoration:none;color:var(--ink);font-size:14px}#nav a.on,#nav a:hover{background:#ecfdf5;color:var(--brand)}
 .burger{display:none}
 main{max-width:1240px;margin:0 auto;padding:24px}

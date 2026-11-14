@@ -1,5 +1,6 @@
 import { siteFooterHtml } from './shared/site-footer.js'
 import { homeFaqHtml } from './shared/home-faq.js'
+import { logoMarkSvg, WORDMARK, BRAND_NAME } from './shared/logo.js'
 
 const sig = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 11.5c2-1 3.4 1.1 5-.2 1.8-1.4 2.7-3.5 6-2.5"/><path d="M3 13.5h6.5"/></svg>`
 const initials = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><path d="M5.5 9.2c.7-.4 1.3.2 2-.2.8-.5 1.2-1.3 2.6-.9"/></svg>`
@@ -19,7 +20,7 @@ export function marketingHtml({ loggedIn, smsEnabled = true }) {
   <header class="hero">
     <div class="hero-bg"></div>
     <nav>
-      <a class="logo" href="#/">${logo()} Easy Digital Signatures</a>
+      <a class="logo" href="#/" aria-label="${BRAND_NAME}">${logo()} ${WORDMARK}</a>
       <div class="nav-links">
         <a class="btn btn-teal" href="${start}">Start free</a>
         <a href="#pricing">Pricing</a>
@@ -106,5 +107,5 @@ export function marketingHtml({ loggedIn, smsEnabled = true }) {
 }
 
 function logo() {
-  return `<svg class="logo-mark" width="32" height="32" viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect width="28" height="28" rx="7" fill="#14C4B0"/><path d="M6.5 16.2c2.6-1.1 4.4 1.4 6.5-.2 2.3-1.7 3.5-4.4 7.8-3.2" stroke="#042F2E" stroke-width="1.8" stroke-linecap="round"/><path d="M7.2 19.4h8.4" stroke="#042F2E" stroke-width="1.5" stroke-linecap="round" opacity="0.65"/></svg>`
+  return logoMarkSvg({ size: 32, className: 'logo-mark' })
 }

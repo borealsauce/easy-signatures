@@ -1,3 +1,4 @@
+import { logoMarkSvg, WORDMARK, BRAND_NAME } from './logo.js'
 // Site-wide footer with internal links. Used by the homepage (marketing.js, in the browser
 // and when the server prerenders it) and by every SEO page (seo/layout.js).
 export const FOOTER_GROUPS = [
@@ -46,9 +47,7 @@ export const FOOTER_CSS = `footer.site-foot{background:#06141E;color:rgba(226,23
 .site-foot .sf-base{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-top:1px solid rgba(255,255,255,.1);margin-top:36px;padding-top:20px;font-size:12.5px;color:rgba(226,232,240,.55)}
 @media (max-width:860px){.site-foot .sf-grid{grid-template-columns:1fr 1fr}.site-foot .sf-about{grid-column:1/-1}}`
 
-const LOGO = `<svg width="26" height="26" viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect width="28" height="28" rx="7" fill="#14C4B0"/><path d="M6.5 16.2c2.6-1.1 4.4 1.4 6.5-.2 2.3-1.7 3.5-4.4 7.8-3.2" stroke="#042F2E" stroke-width="1.8" stroke-linecap="round"/><path d="M7.2 19.4h8.4" stroke="#042F2E" stroke-width="1.5" stroke-linecap="round" opacity="0.65"/></svg>`
-
 export function siteFooterHtml() {
   const cols = FOOTER_GROUPS.map(([title, links]) => `<nav aria-label="${title}"><h2>${title}</h2><ul>${links.map(([href, label]) => `<li><a href="${href}">${label}</a></li>`).join('')}</ul></nav>`).join('')
-  return `<style>${FOOTER_CSS}</style><footer class="site-foot"><div class="sf-wrap"><div class="sf-grid"><div class="sf-about"><a class="sf-brand" href="/">${LOGO} Easy Digital Signatures</a><p class="sf-tag">Send PDFs for e-signature. First document free, then $1 each, 10 for $5, or 50 for $10. No subscription.</p></div>${cols}</div><div class="sf-base"><span>© ${new Date().getFullYear()} Easy Digital Signatures</span><span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/contact">Contact</a></span><span>Use of this site constitutes acceptance of our <a href="/terms">Terms</a>. Information on this site is general and is not legal advice.</span></div></div></footer>`
+  return `<style>${FOOTER_CSS}</style><footer class="site-foot"><div class="sf-wrap"><div class="sf-grid"><div class="sf-about"><a class="sf-brand" href="/" aria-label="${BRAND_NAME}">${logoMarkSvg({ size: 26 })} ${WORDMARK}</a><p class="sf-tag">Send PDFs for e-signature. First document free, then $1 each, 10 for $5, or 50 for $10. No subscription.</p></div>${cols}</div><div class="sf-base"><span>© ${new Date().getFullYear()} Easy Digital Signatures</span><span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/contact">Contact</a></span><span>Use of this site constitutes acceptance of our <a href="/terms">Terms</a>. Information on this site is general and is not legal advice.</span></div></div></footer>`
 }

@@ -1,3 +1,4 @@
+import { logoMarkSvg, WORDMARK, BRAND_NAME } from '../shared/logo.js'
 // Standalone HTML for /auth/confirmed — the page after an email confirmation link.
 export function confirmedPageHtml() {
   return `<!doctype html>
@@ -10,7 +11,9 @@ export function confirmedPageHtml() {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@600;700&display=swap" rel="stylesheet">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 rx=%227%22 fill=%22%2314C4B0%22/><path d=%22M7.5 18.5c3-1.2 5 1.6 7.4-.2 2.6-1.9 4-5 8.9-3.6%22 stroke=%22%23042F2E%22 stroke-width=%222%22 fill=%22none%22 stroke-linecap=%22round%22/></svg>">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <style>
     :root { --teal:#14C4B0; --ink:#042F2E; --paper:#F8FAFC; --mut:rgba(226,232,240,.8); }
     * { box-sizing: border-box; }
@@ -132,9 +135,9 @@ export function confirmedPageHtml() {
   <svg class="scribble s4" viewBox="0 0 240 70" aria-hidden="true"><path d="M12 44c26-32 58 22 92-10 28-26 54-8 120 8" stroke-width="2.3"/></svg>
   <main class="wrap">
     <div class="card">
-      <a class="brand" href="/">
-        <svg width="32" height="32" viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect width="28" height="28" rx="7" fill="#14C4B0"/><path d="M6.5 16.2c2.6-1.1 4.4 1.4 6.5-.2 2.3-1.7 3.5-4.4 7.8-3.2" stroke="#042F2E" stroke-width="1.8" stroke-linecap="round"/><path d="M7.2 19.4h8.4" stroke="#042F2E" stroke-width="1.5" stroke-linecap="round" opacity="0.65"/></svg>
-        Easy Digital Signatures
+      <a class="brand" href="/" aria-label="${BRAND_NAME}">
+        ${logoMarkSvg({ size: 32 })}
+        ${WORDMARK}
       </a>
       <div id="panel"></div>
     </div>

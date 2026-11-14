@@ -3,6 +3,7 @@ import { TERMS_VERSION } from '/shared/terms.js'
 import { parseBulkRecipients, bulkCostSummary, allowanceLabel } from '/shared/bulk.js'
 import { calc, visible, validate, ROLE_OPTIONS, ROLE_LABELS, roleLabel } from '/shared/fields.js'
 import { marketingHtml } from '/marketing.js'
+import { logoMarkSvg } from '/shared/logo.js'
 import { mountHelp } from '/help.js'
 
 const $ = (s, r = document) => r.querySelector(s)
@@ -830,7 +831,7 @@ function sigModal(kind, s, d, cb) {
 async function cert(id) {
   const d = doc(id); if (!d) return V.innerHTML = '<p>Not found</p>'
   V.innerHTML = `<div class="row" style="max-width:820px;margin:0 auto 12px"><a href="#/app">← Dashboard</a><span class="sp"></span>${d.status === 'completed' ? `<button class="p" onclick="downloadDoc('${id}')">Download sealed PDF</button>` : `<span class="pill s-${d.status}">${d.status}</span>`}<a class="btn" href="/verify/${id}">Public fingerprint</a></div>
-  <div class="cert" style="border-top-color:${esc(S.brand?.color || 'var(--brand)')}"><div class="row">${S.brand?.logoUrl ? `<img src="${esc(S.brand.logoUrl)}" alt="" style="height:36px;max-width:160px;object-fit:contain">` : '<span class="mark">E</span>'}<h1 style="margin:0">Certificate of Completion</h1></div><p style="color:var(--mut)">${esc(S.brand?.company || 'Easy Digital Signatures')} electronic signature record. Compare the complete-file fingerprint at the public verify page.</p>
+  <div class="cert" style="border-top-color:${esc(S.brand?.color || 'var(--brand)')}"><div class="row">${S.brand?.logoUrl ? `<img src="${esc(S.brand.logoUrl)}" alt="" style="height:36px;max-width:160px;object-fit:contain">` : logoMarkSvg({ size: 36 })}<h1 style="margin:0">Certificate of Completion</h1></div><p style="color:var(--mut)">${esc(S.brand?.company || 'Easy Digital Signatures')} electronic signature record. Compare the complete-file fingerprint at the public verify page.</p>
   <div class="grid3" style="grid-template-columns:1fr 1fr;margin:16px 0"><div><b>Document</b><br>${esc(d.name)}</div><div><b>Status</b><br><span class="pill s-${d.status}">${d.status}</span></div><div><b>Document ID</b><br><span class="mono">${d.id}</span></div><div><b>Completed</b><br>${fmt(d.completed)}</div></div>
   <p><b>Original SHA-256</b><br><span class="mono">${d.hashOrig || '—'}</span></p><p><b>Signed content SHA-256</b><br><span class="mono">${d.hashContent || '—'}</span></p><p><b>Complete file SHA-256</b><br><span class="mono">${d.hashFinal || '—'}</span></p>
   <h3>Recipients</h3>${table(['Name', 'Email', 'Role', 'Status', 'Signed at', 'IP'], d.signers.map(s => `<tr><td>${esc(s.name)}</td><td>${esc(s.email)}</td><td>${s.role}</td><td>${s.done ? (s.role === 'approver' ? 'Approved' : 'Signed') : s.declined ? 'Declined' + (s.declineReason ? ' — ' + esc(s.declineReason) : '') : s.role === 'cc' ? 'Copied' : 'Pending'}</td><td>${fmt(s.doneAt)}</td><td>${esc(s.signIp || s.viewIp || '—')}</td></tr>`))}

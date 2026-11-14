@@ -4,11 +4,12 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import puppeteer from 'puppeteer-core'
+import { logoMarkSvg, faviconESvg, WORDMARK } from '../shared/logo.js'
 
 const out = join(dirname(fileURLToPath(import.meta.url)), '..', 'seo', 'assets')
 mkdirSync(out, { recursive: true })
 
-const ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28"><rect width="28" height="28" rx="7" fill="#14C4B0"/><path d="M6.5 16.2c2.6-1.1 4.4 1.4 6.5-.2 2.3-1.7 3.5-4.4 7.8-3.2" fill="none" stroke="#042F2E" stroke-width="1.8" stroke-linecap="round"/><path d="M7.2 19.4h8.4" fill="none" stroke="#042F2E" stroke-width="1.5" stroke-linecap="round" opacity="0.65"/></svg>`
+const ICON_SVG = faviconESvg({ xmlns: true })
 writeFileSync(join(out, 'icon.svg'), ICON_SVG)
 
 const OG = `<!doctype html><html><head><link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=Inter+Tight:wght@600;700&family=Great+Vibes&display=block" rel="stylesheet"><style>
@@ -30,7 +31,7 @@ p{font-size:25px;color:rgba(226,232,240,.85);margin:26px 0 0;line-height:1.4}
 .sig div{font-family:"Great Vibes";font-size:52px;color:#115E59;line-height:1.05}
 .cert{display:flex;align-items:center;gap:8px;margin-top:18px;font-size:14px;color:#0F766E;font-weight:600}
 </style></head><body><div class="dots"></div>
-<div class="l"><div class="brand">${ICON_SVG.replace('<svg ', '<svg width="44" height="44" ')}Easy Digital Signatures</div>
+<div class="l"><div class="brand">${logoMarkSvg({ size: 44, className: '' })} ${WORDMARK}</div>
 <h1>Send it.<br>Get it <span>signed.</span></h1>
 <p>E-sign any PDF. Signers need no account.<br>Signed PDF + audit certificate.</p>
 <div class="pill">First document free · then $1</div></div>
