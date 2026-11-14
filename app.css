@@ -85,3 +85,6 @@ footer{text-align:center;color:var(--mut);font-size:13px;padding:40px}
 .role-dd-item .check{font-size:13px;color:var(--brand2);line-height:1.2}
 .role-dd-item b{display:block;font-size:13px}
 .role-dd-item .hint{grid-column:2;font-size:11px;line-height:1.35;color:var(--mut);font-weight:400}
+
+.signer input{flex:1;min-width:0;width:auto}
+.role-dd{flex:0 0 118px;width:118px;max-width:44%}
