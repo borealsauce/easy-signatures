@@ -124,7 +124,8 @@ footer{text-align:center;color:var(--mut);font-size:13px;padding:40px}
 .rdel{width:40px;height:40px;justify-content:center;padding:0;color:#64748b;flex:none}.rdel:hover{color:#dc2626;border-color:#fecaca;background:#fef2f2}
 .rcpadd{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.rcpadd button{border-style:dashed;color:var(--brand);font-weight:600}.rcpadd .rme{border-style:solid;background:#ecfdf5;border-color:#99f6e4}
 .rcpfoot{display:flex;align-items:center;gap:10px;padding:14px 24px;border-top:1px solid var(--line);background:#fafbfc}.rcpfoot .sp{flex:1}.rlink{border:0;background:none;color:var(--mut);text-decoration:underline;padding:8px 4px}
-@media (max-width:640px){.rrow{flex-wrap:wrap}.rf{flex:1 1 calc(100% - 50px)}.rrow select{flex:1;width:auto}.rcphead h2{font-size:20px}.rcpfoot{flex-wrap:wrap}.rcpfoot .p{width:100%;justify-content:center}}.editor{grid-template-columns:280px 1fr 260px}
+@media (max-width:640px){.rrow{flex-wrap:wrap}.rf{flex:1 1 calc(100% - 50px)}.rrow select{flex:1;width:auto}.rcphead h2{font-size:20px}.rcpfoot{flex-wrap:wrap}.rcpfoot .p{width:100%;justify-content:center}}
+@media (min-width:901px){.editor{grid-template-columns:280px 1fr 260px}}
 .fpanel{padding:12px}
 .fpanel h4{margin:0 0 8px}
 .rpick{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
