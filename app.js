@@ -291,7 +291,8 @@ async function route() {
   const [, r, a] = (pricingAnchor ? '#/' : hash).split('/')
   const pub = ['', 'pricing', 'login', 'signup', 'sign', 'form', 'phone', 'contact', 'forgot', 'reset', 'team-invite']
   document.body.classList.toggle('marketing', (r || '') === '')
-  if (S.me) { await flushNow(); activeId = null; if (r !== 'sign') await hydrate() }
+  if (S.me) { await flushNow(); activeId = null; if (r !== 'sign' && !skipHydrate) await hydrate() }
+  skipHydrate = false
   nav()
   window.scrollTo(0, 0)
   if (!S.me && !pub.includes(r || '')) { location.hash = '#/login'; return }
@@ -520,7 +521,8 @@ function xhrSend(method, url, body, headers, onProgress) {
 }
 // Uploads a finished PDF. Big files go straight to storage with a signed URL (no serverless size limit).
 async function sendPdf(bytes, filename, { name, template } = {}, onProgress) {
-  const start = await api('/api/documents/upload-url', { method: 'POST', body: { size: bytes.length } })
+  const pre = nextUploadUrl; nextUploadUrl = null
+  const start = (pre && await pre.catch(() => null)) || await api('/api/documents/upload-url', { method: 'POST', body: { size: bytes.length } })
   if (!start.ok) throw new Error(start.json?.message || 'Could not start the upload')
   const blob = new Blob([bytes], { type: 'application/pdf' })
   if (start.json.direct) {
@@ -543,6 +545,8 @@ async function previewFirstPage(bytes, el) {
   el.innerHTML = ''; el.appendChild(w); return pdf.numPages
 }
 let uploading = false
+let skipHydrate = false // set right after an upload: we already have the new draft, so the editor opens without a /api/state round trip
+let nextUploadUrl = null
 async function uploadFiles(list) {
   window.hideDrop?.()
   const files = [...list || []]
@@ -552,6 +556,8 @@ async function uploadFiles(list) {
   V.innerHTML = `<div class="upflow"><div class="upcard"><div class="upstat"><span class="spin"></span><div><b id="upmsg">Reading ${files.length === 1 ? esc(files[0].name) : files.length + ' files'}…</b><div class="note" id="upsub">${esc(names.slice(0, 4).join(' · '))}${names.length > 4 ? ' …' : ''}</div></div></div><div class="upbar"><i id="upbar"></i></div></div><div class="pages" id="upprev"></div></div>`
   const msg = m => { const e = $('#upmsg'); if (e) e.textContent = m }
   const bar = f => { const e = $('#upbar'); if (e) e.style.width = Math.round(f * 100) + '%' }
+  // Ask for the signed upload URL while the file is still being read/converted (size is re-checked on completion).
+  nextUploadUrl = api('/api/documents/upload-url', { method: 'POST', body: { size: Math.min(files[0].size || 1, MAX_MB * 1024 * 1024) } }).then(r => r.ok ? r : null)
   try {
     const { docs, errors } = await toPdfs(files, msg)
     let first = null
@@ -562,7 +568,9 @@ async function uploadFiles(list) {
       const results = await Promise.all(docs.map((x, i) => sendPdf(x.bytes, x.name, {}, f => { prog[i] = f * x.bytes.length; bar(prog.reduce((a, b) => a + b, 0) / total) })
         .then(j => { keepBytes(j.id, x.bytes); return j }, e => { errors.push(`${x.name}: ${e.message}`); return null })))
       bar(1); msg('Preparing pages…'); await pages
-      first = results.find(Boolean)?.id || null
+      const made = results.filter(Boolean)
+      first = made[0]?.id || null
+      if (made.length && made.every(x => x.id && Array.isArray(x.signers))) { S.docs = [...made.filter(x => !S.docs.some(y => y.id === x.id)), ...S.docs]; skipHydrate = true }
     }
     if (errors.length) modal(`<h3>${errors.length} file${errors.length === 1 ? '' : 's'} couldn’t be added</h3><ul class="uperr">${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul><p class="note">Works with PDF, Word (.docx), Excel (.xlsx/.xls), CSV, text, RTF, ODT, HTML, and images (JPG, PNG, HEIC, WEBP, GIF, BMP, TIFF).</p><button class="p" onclick="closeModal()">OK</button>`)
     if (first) { toast(docs.length > 1 ? 'Drafts created' : 'Draft created'); location.hash = '#/edit/' + first }
