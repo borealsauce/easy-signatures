@@ -138,7 +138,7 @@ function sortable(t) {
 function table(heads, rows) { return `<div class="tw"><table><thead><tr>${heads.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>` }
 function afterRender() { $$('table').forEach(sortable) }
 
-const NAV = [['#/app', 'Dashboard'], ['#/templates', 'Templates'], ['#/links', 'Signing links'], ['#/bulk', 'Bulk send'], ['#/proposal', 'Proposals'], ['#/settings', 'Settings'], ['#/pricing', 'Pricing']]
+const NAV = [['#/app', 'Dashboard'], ['#/templates', 'Templates'], ['#/links', 'Signing links'], ['#/bulk', 'Bulk send'], ['#/proposal', 'Proposals'], ['#/developer', 'Developer'], ['#/settings', 'Settings'], ['#/pricing', 'Pricing']]
 function meter() {
   const u = S.usage
   if (!u) return ''
@@ -173,7 +173,7 @@ async function route() {
   if (!S.me && !pub.includes(r || '')) { location.hash = '#/login'; return }
   const R = {
     '': landing, pricing, login, signup, phone, contact, forgot, reset: () => resetPw(a), app: dashboard, new: newDoc, edit: () => editor(a),
-    sign: () => signToken(a), inperson: () => inperson(a), cert: () => cert(a), templates, links, form: () => publicForm(a), bulk, proposal, settings
+    sign: () => signToken(a), inperson: () => inperson(a), cert: () => cert(a), templates, links, form: () => publicForm(a), bulk, proposal, developer, settings
   }
   await (R[r] || landing)()
   if (pricingAnchor) document.getElementById('pricing')?.scrollIntoView()
@@ -933,6 +933,63 @@ function proposal() {
     }
   }
   r()
+}
+async function developer() {
+  const keysRes = await api('/api/developer/keys')
+  const hooksRes = await api('/api/developer/webhooks')
+  const keys = keysRes.json?.keys || []
+  const hooks = hooksRes.json?.webhooks || []
+  const revealed = sessionStorage.getItem('eds_new_key')
+  const hookSecret = sessionStorage.getItem('eds_new_hook')
+  if (revealed) sessionStorage.removeItem('eds_new_key')
+  if (hookSecret) sessionStorage.removeItem('eds_new_hook')
+  V.innerHTML = `<h1>Developer</h1><p style="color:var(--mut)">Send documents from a template with an API key, and get notified when a document is signed, declined, or expired.</p>
+  ${revealed ? `<div class="card" style="border-color:var(--acc)"><h3>Copy your API key now</h3><p>This is the only time it will be shown.</p><p class="mono" style="word-break:break-all">${esc(revealed)}</p><button id="ckey">Copy key</button></div>` : ''}
+  <div class="card"><h3>API keys</h3>
+    ${keys.length ? table(['Name', 'Key', 'Last used', ''], keys.map(k => `<tr><td>${esc(k.name)}</td><td class="mono">${esc(k.prefix)}</td><td>${fmt(k.lastUsed)}</td><td><a href="javascript:void 0" data-rk="${k.id}">Revoke</a></td></tr>`)) : '<p class="note">No keys yet.</p>'}
+    <div class="row" style="margin-top:12px"><input id="kname" placeholder="Key name, e.g. Production" style="max-width:240px"><button class="p" id="kgo">Create key</button></div>
+  </div>
+  ${hookSecret ? `<div class="card" style="border-color:var(--acc)"><h3>Copy your webhook secret now</h3><p>Use it to verify the <span class="mono">X-EDS-Signature</span> header (sha256=...).</p><p class="mono" style="word-break:break-all">${esc(hookSecret)}</p></div>` : ''}
+  <div class="card"><h3>Webhooks</h3><p class="note">We’ll POST JSON to your URL for <span class="mono">document.signed</span>, <span class="mono">document.declined</span>, and <span class="mono">document.expired</span>.</p>
+    ${hooks.length ? table(['URL', 'Events', 'Status', ''], hooks.map(h => `<tr><td>${esc(h.url)}</td><td>${esc((h.events || []).join(', '))}</td><td>${h.active ? (h.lastStatus ? h.lastStatus + (h.lastError ? ' · ' + esc(h.lastError) : '') : 'Waiting') : 'Off'}</td><td><a href="javascript:void 0" data-dh="${h.id}">Delete</a></td></tr>`)) : '<p class="note">No webhooks yet.</p>'}
+    <label class="f">Endpoint URL</label><input id="hurl" placeholder="https://example.com/webhooks/eds" style="width:100%">
+    <p style="margin-top:12px"><button class="p" id="hgo">Add webhook</button></p>
+  </div>
+  <div class="card"><h3>Send from a template</h3>
+    <p class="note">POST <span class="mono">/api/v1/documents/send</span> with <span class="mono">Authorization: Bearer YOUR_KEY</span></p>
+    <pre style="white-space:pre-wrap;font-size:12px;background:#f8fafc;padding:12px;border-radius:8px">{
+  "templateId": "YOUR_TEMPLATE_ID",
+  "name": "Acme NDA",
+  "signers": [{ "role": "Client", "name": "Alex Client", "email": "alex@example.com" }]
+}</pre>
+    <p class="note">List templates at <span class="mono">GET /api/v1/templates</span>. Each send uses 1 credit.</p>
+  </div>`
+  const copy = $('#ckey')
+  if (copy) copy.onclick = async () => { try { await navigator.clipboard.writeText(revealed); toast('Key copied') } catch { toast('Copy the key from the box above') } }
+  $('#kgo').onclick = async () => {
+    const r = await api('/api/developer/keys', { method: 'POST', body: { name: $('#kname').value } })
+    if (!r.ok) return toast(r.json?.message || 'Could not create the key')
+    sessionStorage.setItem('eds_new_key', r.json.key)
+    toast('API key created'); developer()
+  }
+  $$('[data-rk]').forEach(el => el.onclick = async () => {
+    if (!confirm('Revoke this key? Anything using it will stop working.')) return
+    const r = await api('/api/developer/keys/' + el.dataset.rk, { method: 'DELETE' })
+    if (!r.ok) return toast(r.json?.message || 'Could not revoke')
+    toast('Key revoked'); developer()
+  })
+  $('#hgo').onclick = async () => {
+    const r = await api('/api/developer/webhooks', { method: 'POST', body: { url: $('#hurl').value } })
+    if (!r.ok) return toast(r.json?.message || 'Could not add the webhook')
+    if (r.json.secret) sessionStorage.setItem('eds_new_hook', r.json.secret)
+    toast('Webhook added'); developer()
+  }
+  $$('[data-dh]').forEach(el => el.onclick = async () => {
+    if (!confirm('Delete this webhook?')) return
+    const r = await api('/api/developer/webhooks/' + el.dataset.dh, { method: 'DELETE' })
+    if (!r.ok) return toast(r.json?.message || 'Could not delete')
+    toast('Webhook deleted'); developer()
+  })
 }
 function settings() {
   const phoneLine = S.smsEnabled ? `<p>${S.usage?.phoneVerified ? 'Phone verified ' + esc(S.usage.phone) : 'Phone not verified'}</p><p><a href="#/phone">Update phone</a></p>` : ''

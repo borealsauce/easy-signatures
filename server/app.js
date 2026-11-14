@@ -21,6 +21,10 @@ import {
 } from './admin.js'
 import { allow } from './ratelimit.js'
 import { streamHelp } from './help.js'
+import {
+  userFromApiKey, listKeys, createKey, revokeKey,
+  listWebhooks, createWebhook, updateWebhook, deleteWebhook, sendFromTemplate
+} from './developer.js'
 import { existsSync } from 'node:fs'
 import { registerSeo } from '../seo/routes.js'
 
@@ -290,6 +294,51 @@ export async function createApp(env = process.env) {
   }))
   app.delete('/api/settings/logo', auth, asyncRoute(async (req, res) => {
     res.json(await removeLogo(ctx, req.user))
+  }))
+  app.get('/api/developer/keys', auth, asyncRoute(async (req, res) => {
+    res.json(await listKeys(ctx, req.user))
+  }))
+  app.post('/api/developer/keys', auth, asyncRoute(async (req, res) => {
+    res.status(201).json(await createKey(ctx, req.user, req.body?.name))
+  }))
+  app.delete('/api/developer/keys/:id', auth, asyncRoute(async (req, res) => {
+    res.json(await revokeKey(ctx, req.user, req.params.id))
+  }))
+  app.get('/api/developer/webhooks', auth, asyncRoute(async (req, res) => {
+    res.json(await listWebhooks(ctx, req.user))
+  }))
+  app.post('/api/developer/webhooks', auth, asyncRoute(async (req, res) => {
+    res.status(201).json(await createWebhook(ctx, req.user, req.body || {}))
+  }))
+  app.patch('/api/developer/webhooks/:id', auth, asyncRoute(async (req, res) => {
+    res.json(await updateWebhook(ctx, req.user, req.params.id, req.body || {}))
+  }))
+  app.delete('/api/developer/webhooks/:id', auth, asyncRoute(async (req, res) => {
+    res.json(await deleteWebhook(ctx, req.user, req.params.id))
+  }))
+  async function apiAuth(req, res, next) {
+    try {
+      const header = req.headers.authorization || ''
+      const token = header.startsWith('Bearer ') ? header.slice(7) : ''
+      const user = await userFromApiKey(ctx, token)
+      if (!user) return res.status(401).json({ error: 'auth', message: 'Invalid or revoked API key.' })
+      if (user.blocked_at) return res.status(403).json({ error: 'account_disabled', message: DISABLED_MESSAGE })
+      req.user = user
+      req.device = { ...req.device, localId: req.device.localId || 'api', cookieId: req.device.cookieId || 'api', allowMissingDevice: true }
+      next()
+    } catch (err) { next(err) }
+  }
+  app.get('/api/v1/templates', apiAuth, asyncRoute(async (req, res) => {
+    const state = await stateFor(ctx, req.user, req.device)
+    res.json({ templates: state.templates.map(t => ({ id: t.id, name: t.name, roles: t.signers.map(s => ({ id: s.id, name: s.name, role: s.role })), fields: (t.fields || []).length })) })
+  }))
+  app.post('/api/v1/documents/send', apiAuth, asyncRoute(async (req, res) => {
+    try {
+      res.status(201).json(await sendFromTemplate(ctx, req.user, req.body || {}, req.device))
+    } catch (err) {
+      if (err.body && err.status) return res.status(err.status).json(err.body)
+      throw err
+    }
   }))
   app.get('/api/brand/:userId/logo', asyncRoute(async (req, res) => {
     const file = await brandLogo(ctx, req.params.userId)

@@ -12,6 +12,7 @@ import { assertReadablePdf, blankPdf, imageToPdf, sealPdf } from './pdf.js'
 import { htmlEmail, isVoipLine } from './providers.js'
 import { DISABLED_MESSAGE } from './admin.js'
 import { checkCode, consumePromo, normalizeCode, promoUsage, redeemCode } from './promo.js'
+import { fireWebhooks } from './webhooks.js'
 
 export const REMIND_OPTIONS = [0, 2, 3, 7]
 export const MAX_AUTO_REMINDERS = 5
@@ -1298,6 +1299,14 @@ export async function declineSign(ctx, token, reason, device) {
       })
     })
   } catch { /* audited already */ }
+  try {
+    await fireWebhooks(ctx, doc.owner_id, 'document.declined', {
+      documentId: doc.id,
+      name: doc.name,
+      reason: why,
+      signer: { name: signer.full_name, email: signer.email }
+    })
+  } catch { /* delivery recorded on the webhook */ }
   return { ok: true, status: 'declined', reason: why }
 }
 
@@ -1361,6 +1370,14 @@ export async function completeDocument(ctx, id) {
       await audit(ctx.db.query.bind(ctx.db), id, { type: 'Completion email failed', actor: 'System', email, meta: { error: String(err.message || err).slice(0, 180) } })
     }
   }
+  try {
+    await fireWebhooks(ctx, doc.owner_id, 'document.signed', {
+      documentId: id,
+      name: doc.name,
+      completed: completedAt,
+      verifyUrl: `${ctx.config.appUrl}/verify/${id}`
+    })
+  } catch { /* delivery recorded on the webhook */ }
   return (await ctx.db.query(`select * from documents where id=$1`, [id])).rows[0]
 }
 
@@ -1629,6 +1646,13 @@ async function expireDocument(ctx, id) {
       })
     } catch (err) { await ctx.logError?.('email.expired_signer', String(err?.message || err)) }
   }
+  try {
+    await fireWebhooks(ctx, doc.owner_id, 'document.expired', {
+      documentId: doc.id,
+      name: doc.name,
+      waiting: names
+    })
+  } catch { /* delivery recorded on the webhook */ }
 }
 
 export async function runMaintenance(ctx) {
