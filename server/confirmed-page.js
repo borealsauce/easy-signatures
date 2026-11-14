@@ -231,13 +231,13 @@ export function confirmedPageHtml() {
     function renderSuccess(email, signedIn) {
       document.title = "You're in! · Easy Digital Signatures"
       if (signedIn) {
-        panel.innerHTML = '<h1>You\\'re in! 🎉</h1>' +
+        panel.innerHTML = '<h1>You\\'re in! 🤙</h1>' +
           '<p class="sub">Email confirmed. Your first document is free — let’s get signing.</p>' +
           '<a class="btn" id="go" href="/#/app">Go to my dashboard</a>' +
           (email ? '<p class="foot">' + esc(email) + '</p>' : '')
         return
       }
-      panel.innerHTML = '<h1>You\\'re in! 🎉</h1>' +
+      panel.innerHTML = '<h1>You\\'re in! 🤙</h1>' +
         '<p class="sub">Email confirmed. Your first document is free — let’s get signing.</p>' +
         '<form id="lf">' +
           '<label class="f" for="em">Email</label>' +
