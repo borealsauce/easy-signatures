@@ -73,6 +73,8 @@ function shellHtml(indexHtml, { path, title, description, robots, canonical, jso
   let html = indexHtml
     .replace(/<link rel="icon" href="data:[\s\S]*?<\/svg>">/, '')
     .replace(/<script src="(https:\/\/[^"]+)"><\/script>/g, '<script defer src="$1"></script>')
+    // Google Fonts CSS shouldn't block first paint of the prerendered page (fonts use display=swap).
+    .replace(/<link href="(https:\/\/fonts\.googleapis\.com\/css2[^"]+)" rel="stylesheet">/, '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="$1" rel="stylesheet" media="print" onload="this.media=\'all\'">')
     .replace(/<title>[^<]*<\/title>/, headTags({ path: canonical || path, title, description, robots, jsonld }))
   if (body) {
     html = html.replace('<body>', '<body class="marketing">').replace('<main id="view"></main>', `<main id="view">${body}</main>`)
