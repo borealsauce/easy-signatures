@@ -22,7 +22,7 @@ export function createEmail(config, mailbox) {
     mode: config.emailMode,
     async send({ to, subject, html, text, attachments, replyTo }) {
       if (!to) return
-      remember(config, mailbox, { type: 'email', to, subject, replyTo: replyTo || '', text: text || html?.replace(/<[^>]+>/g, ' ').slice(0, 500), url: (html || '').match(/https?:\/\/[^\s"<]+/)?.[0] || '' })
+      remember(config, mailbox, { type: 'email', to, subject, replyTo: replyTo || '', text: text || html?.replace(/<[^>]+>/g, ' ').slice(0, 500), url: (html || '').match(/https?:\/\/[^\s"<]+(?:#\/sign\/|\/auth\/|\/verify\/|\/r\/|#\/app|#\/reset\/)[^\s"<]*/)?.[0] || (html || '').match(/https?:\/\/[^\s"<]+/)?.[0] || '' })
       if (config.emailMode !== 'resend') return
       const body = {
         from: config.emailFrom,
@@ -232,10 +232,11 @@ export function createPayments(config) {
 export function htmlEmail({ title, intro, button, href, note, brand }) {
   const color = brand?.color || '#0f766e'
   const company = brand?.company || 'Easy Digital Signatures'
+  const logo = brand?.logoUrl ? `<img src="${escapeHtml(brand.logoUrl)}" alt="" height="32" style="height:32px;max-width:180px;vertical-align:middle;margin-right:10px;background:#fff;border-radius:6px;padding:3px 6px">` : ''
   return `<!doctype html><html><body style="margin:0;background:#f4f7fb;font-family:Inter,Arial,sans-serif;color:#14213d">
   <div style="max-width:560px;margin:0 auto;padding:28px 16px">
     <div style="background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e3e6ee">
-      <div style="background:${color};color:#fff;padding:18px 22px;font-weight:700">${escapeHtml(company)}</div>
+      <div style="background:${color};color:#fff;padding:18px 22px;font-weight:700">${logo}${escapeHtml(company)}</div>
       <div style="padding:22px">
         <h1 style="font-size:20px;margin:0 0 12px">${escapeHtml(title)}</h1>
         <p style="line-height:1.5;color:#334155">${intro}</p>

@@ -569,7 +569,11 @@ function publicUser(user) {
     emailVerified: !!user.email_verified_at,
     phone: user.phone_e164 || '',
     phoneVerified: !!user.phone_verified_at,
-    brand: { company: brand.company || '', color: brand.color || '#0f766e' },
+    brand: {
+      company: brand.company || '',
+      color: brand.color || '#0f766e',
+      logoUrl: brand.logo ? `/api/brand/${user.id}/logo?v=${encodeURIComponent(brand.logo)}` : ''
+    },
     folders: asJson(user.folders, ['All', 'Sales', 'HR', 'Real Estate', 'Legal']),
     proposal: asJson(user.proposal, null),
     reminderDefault: cadence(user.default_remind_days, 3),
@@ -636,6 +640,8 @@ export async function saveSettings(ctx, user, body) {
     company: String(srcBrand?.company || '').slice(0, 80),
     color: /^#[0-9a-fA-F]{6}$/.test(srcBrand?.color || '') ? srcBrand.color : '#0f766e'
   }
+  if (current.logo) brand.logo = current.logo
+  if (current.logoType) brand.logoType = current.logoType
   let folders = Array.isArray(body.folders) ? body.folders.map(f => String(f).slice(0, 40)).filter(Boolean).slice(0, 30) : null
   if (folders) {
     folders = folders.filter(f => f !== 'All')
@@ -655,6 +661,57 @@ export async function saveSettings(ctx, user, body) {
   if (body.senderNudgeDays !== undefined) await ctx.db.query(`update profiles set sender_nudge_days=$2 where id=$1`, [user.id, cadence(body.senderNudgeDays, 0)])
   const next = await ctx.db.query(`select * from profiles where id=$1`, [user.id])
   return publicUser(next.rows[0])
+}
+
+function sniffImage(buf) {
+  const b = Buffer.from(buf || [])
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png'
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg'
+  if (b.length >= 12 && b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP') return 'image/webp'
+  return null
+}
+
+function logoKey(userId) { return `brand/${userId}/logo` }
+
+export async function saveLogo(ctx, user, bytes) {
+  const buf = Buffer.from(bytes || [])
+  if (buf.length < 24) throw fail(400, 'logo', 'That file is too small to be a logo.')
+  if (buf.length > 400 * 1024) throw fail(400, 'logo', 'Use a logo under 400 KB.')
+  const type = sniffImage(buf)
+  if (!type) throw fail(400, 'logo', 'Use a PNG, JPEG, or WebP image.')
+  await ctx.storage.put(logoKey(user.id), buf, type)
+  const current = asJson(user.brand, {})
+  const brand = {
+    company: String(current.company || '').slice(0, 80),
+    color: /^#[0-9a-fA-F]{6}$/.test(current.color || '') ? current.color : '#0f766e',
+    logo: String(Date.now()),
+    logoType: type
+  }
+  await ctx.db.query(`update profiles set brand=$2::jsonb where id=$1`, [user.id, JSON.stringify(brand)])
+  const next = (await ctx.db.query(`select * from profiles where id=$1`, [user.id])).rows[0]
+  return publicUser(next)
+}
+
+export async function removeLogo(ctx, user) {
+  try { await ctx.storage.remove([logoKey(user.id)]) } catch { /* already gone */ }
+  const current = asJson(user.brand, {})
+  const brand = { company: current.company || '', color: current.color || '#0f766e' }
+  await ctx.db.query(`update profiles set brand=$2::jsonb where id=$1`, [user.id, JSON.stringify(brand)])
+  const next = (await ctx.db.query(`select * from profiles where id=$1`, [user.id])).rows[0]
+  return publicUser(next)
+}
+
+export async function brandLogo(ctx, userId) {
+  const row = (await ctx.db.query(`select id, brand from profiles where id=$1`, [userId])).rows[0]
+  if (!row) throw fail(404, 'not_found', 'Logo not found.')
+  const brand = asJson(row.brand, {})
+  if (!brand.logo) throw fail(404, 'not_found', 'Logo not found.')
+  try {
+    const bytes = await ctx.storage.get(logoKey(row.id))
+    return { bytes, type: brand.logoType || sniffImage(bytes) || 'image/png' }
+  } catch {
+    throw fail(404, 'not_found', 'Logo not found.')
+  }
 }
 
 async function ownDoc(q, userId, id) {
@@ -829,9 +886,13 @@ function readyErrors(signers, fields) {
   return null
 }
 
-function brandOf(user) {
-  const brand = asJson(user.brand, {})
-  return { company: brand.company || user.full_name || 'Easy Digital Signatures', color: brand.color || '#0f766e' }
+function brandOf(user, ctx) {
+  const brand = asJson(user?.brand, {})
+  const out = { company: brand.company || user?.full_name || 'Easy Digital Signatures', color: brand.color || '#0f766e' }
+  if (brand.logo && user?.id && ctx?.config?.appUrl) {
+    out.logoUrl = `${ctx.config.appUrl}/api/brand/${user.id}/logo?v=${encodeURIComponent(brand.logo)}`
+  }
+  return out
 }
 
 async function emailSigner(ctx, user, doc, signer, token, accessCode, { reminder = false } = {}) {
@@ -842,7 +903,7 @@ async function emailSigner(ctx, user, doc, signer, token, accessCode, { reminder
     : 'You don’t need an account. The link is unique to you.'
   await ctx.email.send({
     to: signer.email,
-    subject: reminder ? `Reminder: “${doc.name}” is waiting for your signature` : `${brandOf(user).company} sent you “${doc.name}” to sign`,
+    subject: reminder ? `Reminder: “${doc.name}” is waiting for your signature` : `${brandOf(user, ctx).company} sent you “${doc.name}” to sign`,
     text: `${reminder ? 'Reminder: ' : ''}${user.full_name} asked you to sign ${doc.name}. ${href}${accessCode ? ' Access code: ' + accessCode : ''}`,
     html: htmlEmail({
       title: reminder ? `Reminder: ${doc.name}` : doc.name,
@@ -852,7 +913,7 @@ async function emailSigner(ctx, user, doc, signer, token, accessCode, { reminder
       button: signer.role === 'approver' ? 'Review document' : 'Review and sign',
       href,
       note,
-      brand: brandOf(user)
+      brand: brandOf(user, ctx)
     })
   })
 }
@@ -1089,13 +1150,15 @@ export async function signSession(ctx, token, device, { markView }) {
   const events = await loadEvents(ctx.db.query.bind(ctx.db), [doc.id])
   const mapped = mapDoc(fresh, freshSigners, events, ctx.config.jwtSecret, false)
   const me = freshSigners.find(s => s.id === signer.id)
+  const owner = (await ctx.db.query(`select * from profiles where id=$1`, [fresh.owner_id])).rows[0]
   return {
     status: fresh.status,
     consentText: CONSENT_TEXT,
     consentVersion: CONSENT_VERSION,
     accessCodeRequired: !!fresh.idv && !me.signed_at,
     me: mapSigner(me, ctx.config.jwtSecret, false),
-    document: mapped
+    document: mapped,
+    brand: brandOf(owner, ctx)
   }
 }
 
@@ -1231,7 +1294,7 @@ export async function declineSign(ctx, token, reason, device) {
       html: htmlEmail({
         title: 'A recipient declined',
         intro: `${esc(signer.full_name)} declined <b>${esc(doc.name)}</b>.<br>${esc(why)}`,
-        brand: brandOf(owner)
+        brand: brandOf(owner, ctx)
       })
     })
   } catch { /* audited already */ }
@@ -1290,7 +1353,7 @@ export async function completeDocument(ctx, id) {
           intro: `Hi ${esc(name || '')}, <b>${esc(doc.name)}</b> is complete. The sealed PDF is attached. You can confirm the file fingerprint at the link below.`,
           button: 'Verify fingerprint',
           href: `${ctx.config.appUrl}/verify/${id}`,
-          brand: brandOf(owner)
+          brand: brandOf(owner, ctx)
         }),
         attachments: [{ filename, content: Buffer.from(sealed.bytes).toString('base64') }]
       })
@@ -1495,7 +1558,7 @@ async function sendExpiryWarnings(ctx) {
             button: 'Review and sign',
             href,
             note: 'If you already signed, you can ignore this email.',
-            brand: brandOf(owner || {})
+            brand: brandOf(owner || {}, ctx)
           })
         })
       } catch (err) { await ctx.logError?.('email.expiry_warn', String(err?.message || err)) }
@@ -1511,7 +1574,7 @@ async function sendExpiryWarnings(ctx) {
             intro: `<b>${esc(doc.name)}</b> expires ${esc(when)} and is still waiting on ${esc(waiting)}.`,
             button: 'Open dashboard',
             href: `${ctx.config.appUrl}/#/app`,
-            brand: brandOf(owner)
+            brand: brandOf(owner, ctx)
           })
         })
       } catch (err) { await ctx.logError?.('email.expiry_warn_owner', String(err?.message || err)) }
@@ -1546,7 +1609,7 @@ async function expireDocument(ctx, id) {
           intro: `<b>${esc(doc.name)}</b> expired before everyone signed. It was still waiting on ${esc(names)}.`,
           button: 'Open dashboard',
           href: `${ctx.config.appUrl}/#/app`,
-          brand: brandOf(owner)
+          brand: brandOf(owner, ctx)
         })
       })
     } catch (err) { await ctx.logError?.('email.expired_owner', String(err?.message || err)) }
@@ -1561,7 +1624,7 @@ async function expireDocument(ctx, id) {
         html: htmlEmail({
           title: 'This link has expired',
           intro: `The signing link for <b>${esc(doc.name)}</b> has expired. Contact ${esc(owner?.full_name || 'the sender')} if you still need to sign.`,
-          brand: brandOf(owner || {})
+          brand: brandOf(owner || {}, ctx)
         })
       })
     } catch (err) { await ctx.logError?.('email.expired_signer', String(err?.message || err)) }

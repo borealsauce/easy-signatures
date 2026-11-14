@@ -665,7 +665,8 @@ async function signToken(token) {
     await fetch('/api/sign/' + token + '/fields', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Device-Local': deviceLocal() }, body: JSON.stringify({ name: s.name, fields: d.fields.filter(f => f.signer === s.id).map(f => ({ id: f.id, value: f.value })) }) })
   }
   const approver = s.role === 'approver'
-  V.innerHTML = `<div class="signbar"><b>${esc(d.name)}</b><span>· ${esc(s.name)}${s.role === 'in-person' ? ' · signing in person' : ''}</span><span class="sp"></span><span id="prog"></span>${approver ? '' : '<button id="nx" style="background:var(--acc)">Next field</button>'}<button id="fin" class="p" style="background:var(--brand2)">${approver ? 'Approve' : 'Finish'}</button><button id="dec" style="background:#fee2e2">Decline</button><button id="cm">Comments (${d.comments.length})</button></div>
+  const brand = session.brand || {}
+  V.innerHTML = `<div class="signbar" style="border-top:4px solid ${esc(brand.color || 'var(--brand2)')}">${brand.logoUrl ? `<img src="${esc(brand.logoUrl)}" alt="" style="height:28px;max-width:140px;object-fit:contain">` : ''}<b>${esc(brand.company ? brand.company + ' · ' : '')}${esc(d.name)}</b><span>· ${esc(s.name)}${s.role === 'in-person' ? ' · signing in person' : ''}</span><span class="sp"></span><span id="prog"></span>${approver ? '' : '<button id="nx" style="background:var(--acc)">Next field</button>'}<button id="fin" class="p" style="background:var(--brand2)">${approver ? 'Approve' : 'Finish'}</button><button id="dec" style="background:#fee2e2">Decline</button><button id="cm">Comments (${d.comments.length})</button></div>
   <div class="card" id="consent" style="margin-bottom:12px">${session.accessCodeRequired ? `<label class="f">Access code from your email</label><input id="acode" maxlength="6" style="max-width:160px;letter-spacing:3px">` : ''}<label class="row"><input type="checkbox" id="ok"> ${esc(session.consentText)}</label></div><div class="pages" id="pages"></div>`
   await renderPages($('#pages'), d)
   const mine = () => d.fields.filter(f => f.signer === s.id && visible(d.fields, f) && f.type !== 'formula')
@@ -784,7 +785,7 @@ function sigModal(kind, s, d, cb) {
 async function cert(id) {
   const d = doc(id); if (!d) return V.innerHTML = '<p>Not found</p>'
   V.innerHTML = `<div class="row" style="max-width:820px;margin:0 auto 12px"><a href="#/app">← Dashboard</a><span class="sp"></span>${d.status === 'completed' ? `<button class="p" onclick="downloadDoc('${id}')">Download sealed PDF</button>` : `<span class="pill s-${d.status}">${d.status}</span>`}<a class="btn" href="/verify/${id}">Public fingerprint</a></div>
-  <div class="cert"><div class="row"><span class="mark">E</span><h1 style="margin:0">Certificate of Completion</h1></div><p style="color:var(--mut)">Electronic signature record. Compare the complete-file fingerprint at the public verify page.</p>
+  <div class="cert" style="border-top-color:${esc(S.brand?.color || 'var(--brand)')}"><div class="row">${S.brand?.logoUrl ? `<img src="${esc(S.brand.logoUrl)}" alt="" style="height:36px;max-width:160px;object-fit:contain">` : '<span class="mark">E</span>'}<h1 style="margin:0">Certificate of Completion</h1></div><p style="color:var(--mut)">${esc(S.brand?.company || 'Easy Digital Signatures')} electronic signature record. Compare the complete-file fingerprint at the public verify page.</p>
   <div class="grid3" style="grid-template-columns:1fr 1fr;margin:16px 0"><div><b>Document</b><br>${esc(d.name)}</div><div><b>Status</b><br><span class="pill s-${d.status}">${d.status}</span></div><div><b>Document ID</b><br><span class="mono">${d.id}</span></div><div><b>Completed</b><br>${fmt(d.completed)}</div></div>
   <p><b>Original SHA-256</b><br><span class="mono">${d.hashOrig || '—'}</span></p><p><b>Signed content SHA-256</b><br><span class="mono">${d.hashContent || '—'}</span></p><p><b>Complete file SHA-256</b><br><span class="mono">${d.hashFinal || '—'}</span></p>
   <h3>Recipients</h3>${table(['Name', 'Email', 'Role', 'Status', 'Signed at', 'IP'], d.signers.map(s => `<tr><td>${esc(s.name)}</td><td>${esc(s.email)}</td><td>${s.role}</td><td>${s.done ? 'Signed' : s.declined ? 'Declined' + (s.declineReason ? ' — ' + esc(s.declineReason) : '') : s.role === 'cc' ? 'Copied' : 'Pending'}</td><td>${fmt(s.doneAt)}</td><td>${esc(s.signIp || s.viewIp || '—')}</td></tr>`))}
@@ -937,8 +938,13 @@ function settings() {
   const phoneLine = S.smsEnabled ? `<p>${S.usage?.phoneVerified ? 'Phone verified ' + esc(S.usage.phone) : 'Phone not verified'}</p><p><a href="#/phone">Update phone</a></p>` : ''
   V.innerHTML = `<h1>Settings</h1><div class="grid3" style="grid-template-columns:1fr 1fr"><div class="card"><h3>Account</h3><p>${esc(S.me.name)}<br>${esc(S.me.email)}</p>${phoneLine}<button id="out">Log out</button>
   <h3 style="margin-top:16px">Folders</h3><p>${S.folders.slice(1).map(esc).join(' · ') || 'None yet'}</p><button id="addf">+ Folder</button></div>
-  <div class="card"><h3>Branding</h3><label class="f">Company name</label><input id="bc" value="${esc(S.brand.company || '')}" style="width:100%"><label class="f">Accent color</label><input id="bk" type="color" value="${S.brand.color || '#0f766e'}"><p class="note">Used on signer emails and the certificate.</p>
-  <div class="card" style="border-top:5px solid ${S.brand.color || '#0f766e'};margin-top:10px"><b>${esc(S.brand.company || 'Your company')}</b> sent you a document</div>
+  <div class="card"><h3>Branding</h3><label class="f">Company name</label><input id="bc" value="${esc(S.brand.company || '')}" style="width:100%"><label class="f">Accent color</label><input id="bk" type="color" value="${S.brand.color || '#0f766e'}">
+  <label class="f">Logo</label>
+  ${S.brand.logoUrl ? `<p><img src="${esc(S.brand.logoUrl)}" alt="" style="height:40px;max-width:180px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:8px;padding:4px"></p>` : ''}
+  <label class="btn">Upload logo<input id="blogo" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
+  ${S.brand.logoUrl ? ' <button id="rmlogo">Remove</button>' : ''}
+  <p class="note">Shown on signing emails, the signing page, and the certificate. PNG, JPEG, or WebP, under 400 KB.</p>
+  <div class="card" style="border-top:5px solid ${S.brand.color || '#0f766e'};margin-top:10px">${S.brand.logoUrl ? `<img src="${esc(S.brand.logoUrl)}" alt="" style="height:28px;max-width:140px;object-fit:contain;vertical-align:middle;margin-right:8px">` : ''}<b>${esc(S.brand.company || 'Your company')}</b> sent you a document</div>
   <p style="margin-top:16px"><button id="portal">Receipts</button></p><p class="note">${esc(meterText())}</p></div>
   <div class="card" id="promo"><h3>Promo code</h3>${(S.usage?.promoCodes || []).map(c => `<p>${esc(c.code)}: ${c.active ? `${c.remaining} of ${c.granted} free documents left` : 'this code has been turned off'}</p>`).join('')}
   <label class="f">Have a code?</label><div class="row"><input id="pcode" placeholder="e.g. VIP100" style="text-transform:uppercase;max-width:200px"><button class="p" id="pgo">Apply</button></div><div id="pmsg"></div></div>
@@ -959,8 +965,26 @@ function settings() {
   }
   $('#out').onclick = async () => { await api('/api/auth/logout', { method: 'POST' }).catch(() => {}); setToken(''); S.me = null; location.hash = '#/' }
   $('#addf').onclick = async () => { const n = prompt('Folder name'); if (!n) return; S.folders.push(n); await api('/api/settings', { method: 'PUT', body: { brand: S.brand, folders: S.folders } }); route() }
-  const saveBrand = async () => { S.brand = { company: $('#bc').value, color: $('#bk').value }; await api('/api/settings', { method: 'PUT', body: { brand: S.brand, folders: S.folders } }); route() }
+  const saveBrand = async () => {
+    const r = await api('/api/settings', { method: 'PUT', body: { brand: { company: $('#bc').value, color: $('#bk').value }, folders: S.folders } })
+    if (r.ok) { S.brand = r.json.brand || S.brand; S.me = { ...S.me, brand: S.brand }; route() }
+  }
   $('#bc').onchange = saveBrand; $('#bk').onchange = saveBrand
+  $('#blogo').onchange = async e => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const fd = new FormData(); fd.append('file', file)
+    const up = await fetch('/api/settings/logo', { method: 'POST', headers: { Authorization: 'Bearer ' + TOKEN, 'X-Device-Local': deviceLocal() }, body: fd })
+    const json = await up.json().catch(() => ({}))
+    if (!up.ok) return toast(json.message || 'Could not upload the logo')
+    S.brand = json.brand || S.brand; S.me = { ...S.me, brand: S.brand, ...json }; toast('Logo saved'); route()
+  }
+  const rm = $('#rmlogo')
+  if (rm) rm.onclick = async () => {
+    const r = await api('/api/settings/logo', { method: 'DELETE' })
+    if (!r.ok) return toast(r.json?.message || 'Could not remove the logo')
+    S.brand = r.json.brand || { ...S.brand, logoUrl: '' }; S.me = { ...S.me, ...r.json }; toast('Logo removed'); route()
+  }
   $('#portal').onclick = async () => { const r = await api('/api/billing/portal', { method: 'POST' }); if (r.json?.url) location.href = r.json.url; else toast(r.json?.message || 'Receipts appear after your first purchase.') }
 }
 

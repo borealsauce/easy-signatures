@@ -10,7 +10,7 @@ import {
   bulkSend, checkPhone, commentAs, copyAsTemplate, createBlank, createLink, createUpload, instantiateTemplate,
   declineSign, deleteDocument, deviceFrom, fail, finishSign, grantCheckout, login,
   ownerFile, publicStart, remind, resendVerification, runMaintenance,
-  saveDraft, saveSettings, saveSignFields, sendDocument, setLinkActive, signSession,
+  saveDraft, saveSettings, saveLogo, removeLogo, brandLogo, saveSignFields, sendDocument, setLinkActive, signSession,
   signerFile, signup, startPhone, stateFor, userFromAuth, verificationRecord,
   verifyEmailToken, resendByEmail, requestPasswordReset, resetPassword, logout, remindAll, setDocReminders, resendFromLink
 } from './service.js'
@@ -283,6 +283,20 @@ export async function createApp(env = process.env) {
 
   app.put('/api/settings', auth, asyncRoute(async (req, res) => {
     res.json(await saveSettings(ctx, req.user, req.body || {}))
+  }))
+  app.post('/api/settings/logo', auth, upload.single('file'), asyncRoute(async (req, res) => {
+    if (!req.file?.buffer) throw fail(400, 'logo', 'Choose a PNG, JPEG, or WebP image.')
+    res.json(await saveLogo(ctx, req.user, req.file.buffer))
+  }))
+  app.delete('/api/settings/logo', auth, asyncRoute(async (req, res) => {
+    res.json(await removeLogo(ctx, req.user))
+  }))
+  app.get('/api/brand/:userId/logo', asyncRoute(async (req, res) => {
+    const file = await brandLogo(ctx, req.params.userId)
+    res.setHeader('Content-Type', file.type)
+    res.setHeader('Cache-Control', 'public, max-age=86400')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.send(Buffer.from(file.bytes))
   }))
 
   app.post('/api/phone/start', auth, asyncRoute(async (req, res) => {
