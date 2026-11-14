@@ -777,18 +777,57 @@ export async function createBlank(ctx, user, body) {
   return storeNewDoc(ctx, user, { name, template, signers, bytes, folder: body.folder || 'Sales' })
 }
 
+export const UPLOAD_MAX_MB = 25
+const UPLOAD_TYPES_MSG = 'Upload a PDF, PNG, or JPG here. Word, Excel, text, HEIC, and other images are converted to PDF in the browser by the uploader on easydigitalsignatures.com.'
+
 export async function createUpload(ctx, user, { bytes, filename, name, template }) {
   const kind = sniff(bytes)
-  if (!kind) throw fail(400, 'file', 'Upload a PDF, PNG, or JPG.')
-  if (bytes.length > 10 * 1024 * 1024) throw fail(413, 'too_large', 'Files must be 10 MB or smaller.')
+  if (!kind) throw fail(415, 'file_type', UPLOAD_TYPES_MSG)
+  if (bytes.length > UPLOAD_MAX_MB * 1024 * 1024) throw fail(413, 'too_large', `Files must be ${UPLOAD_MAX_MB} MB or smaller.`)
   let pdf = bytes
   if (kind === 'png' || kind === 'jpg') pdf = await imageToPdf(bytes, kind)
   try { await assertReadablePdf(pdf) } catch {
     throw fail(400, 'file', 'That PDF could not be opened. It may be password-protected or damaged.')
   }
-  const base = String(name || filename || 'Document').replace(/\.(pdf|png|jpe?g)$/i, '').slice(0, 160)
   const signers = cleanSigners([{ name: 'Signer 1', email: '', role: 'signer', color: COLORS[0] }])
-  return storeNewDoc(ctx, user, { name: base || 'Document', template: !!template, signers, bytes: pdf, folder: 'Sales' })
+  return storeNewDoc(ctx, user, { name: docTitle(name, filename), template: !!template, signers, bytes: pdf, folder: 'Sales' })
+}
+
+function docTitle(name, filename) {
+  const base = String(name || filename || 'Document').replace(/\.(pdf|png|jpe?g|jfif|heic|heif|webp|gif|bmp|tiff?|docx?|xlsx?|xlsm|ods|odt|csv|txt|rtf|html?)$/i, '').trim().slice(0, 160)
+  return base || 'Document'
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Big files skip the serverless request-size limit: the browser uploads straight to storage
+// with a one-time signed URL, then calls finishDirectUpload so we can check it and create the draft.
+export async function startDirectUpload(ctx, user, { size }) {
+  const n = Number(size) || 0
+  if (n <= 0) throw fail(400, 'file', 'That file is empty.')
+  if (n > UPLOAD_MAX_MB * 1024 * 1024) throw fail(413, 'too_large', `Files must be ${UPLOAD_MAX_MB} MB or smaller.`)
+  if (!ctx.storage.signedUpload) return { direct: false }
+  const id = crypto.randomUUID()
+  const key = `${user.id}/${id}/original.pdf`
+  const signed = await ctx.storage.signedUpload(key)
+  return { direct: true, id, url: signed.url }
+}
+
+export async function finishDirectUpload(ctx, user, { id, name, filename, template }) {
+  if (!UUID_RE.test(String(id || ''))) throw fail(400, 'file', 'Upload not found. Please try again.')
+  const key = `${user.id}/${id}/original.pdf`
+  const taken = await ctx.db.query(`select id from documents where id=$1`, [id])
+  if (taken.rows[0]) throw fail(409, 'exists', 'That upload was already used.')
+  let bytes
+  try { bytes = await ctx.storage.get(key) } catch { throw fail(400, 'file', 'The upload didn’t finish. Please try again.') }
+  const bad = async (status, error, message) => { await ctx.storage.remove([key]).catch(() => {}); return fail(status, error, message) }
+  if (bytes.length > UPLOAD_MAX_MB * 1024 * 1024) throw await bad(413, 'too_large', `Files must be ${UPLOAD_MAX_MB} MB or smaller.`)
+  if (sniff(bytes) !== 'pdf') throw await bad(415, 'file_type', UPLOAD_TYPES_MSG)
+  try { await assertReadablePdf(bytes) } catch {
+    throw await bad(400, 'file', 'That PDF could not be opened. It may be password-protected or damaged.')
+  }
+  const signers = cleanSigners([{ name: 'Signer 1', email: '', role: 'signer', color: COLORS[0] }])
+  return storeNewDoc(ctx, user, { id, key, name: docTitle(name, filename), template: !!template, signers, bytes, folder: 'Sales', stored: true })
 }
 
 function sniff(buf) {
@@ -799,10 +838,10 @@ function sniff(buf) {
   return null
 }
 
-async function storeNewDoc(ctx, user, { name, template, signers, bytes, folder, teamId }) {
-  const id = crypto.randomUUID()
-  const key = `${user.id}/${id}/original.pdf`
-  await ctx.storage.put(key, bytes)
+async function storeNewDoc(ctx, user, { name, template, signers, bytes, folder, teamId, id: givenId, key: givenKey, stored }) {
+  const id = givenId || crypto.randomUUID()
+  const key = givenKey || `${user.id}/${id}/original.pdf`
+  if (!stored) await ctx.storage.put(key, bytes)
   await ctx.db.query(
     `insert into documents (id, owner_id, name, status, folder, is_template, original_path, remind_days, team_id)
      values ($1,$2,$3,'draft',$4,$5,$6,$7,$8)`,
@@ -944,18 +983,20 @@ function brandOf(user, ctx) {
 async function emailSigner(ctx, user, doc, signer, token, accessCode, { reminder = false } = {}) {
   if (!signer.email) return
   const href = `${ctx.config.appUrl}/#/sign/${token}`
+  const first = String(signer.full_name || signer.name || '').trim().split(/\s+/)[0]
+  const hi = first && !/^signer$/i.test(first) ? `Hi ${first}, ` : ''
   const note = accessCode
     ? `Access code: <b>${esc(accessCode)}</b>. You don’t need an account.`
     : 'You don’t need an account. The link is unique to you.'
   await ctx.email.send({
     to: signer.email,
     subject: reminder ? `Reminder: “${doc.name}” is waiting for your ${signer.role === 'approver' ? 'review' : 'signature'}` : `${brandOf(user, ctx).company} sent you “${doc.name}” to ${signer.role === 'approver' ? 'review' : 'sign'}`,
-    text: `${reminder ? 'Reminder: ' : ''}${user.full_name} asked you to ${signer.role === 'approver' ? 'review' : 'sign'} ${doc.name}. ${href}${accessCode ? ' Access code: ' + accessCode : ''}`,
+    text: `${hi}${reminder ? 'reminder: ' : ''}${user.full_name} asked you to ${signer.role === 'approver' ? 'review' : 'sign'} ${doc.name}. ${href}${accessCode ? ' Access code: ' + accessCode : ''}`,
     html: htmlEmail({
       title: reminder ? `Reminder: ${doc.name}` : doc.name,
       intro: reminder
-        ? `${esc(user.full_name)} is still waiting for your signature on <b>${esc(doc.name)}</b>. It only takes a minute.<br><br>${esc(doc.message || '')}`
-        : `${esc(user.full_name)} asked you to review and sign this document.<br><br>${esc(doc.message || '')}`,
+        ? `${esc(hi)}${esc(user.full_name)} is still waiting for your signature on <b>${esc(doc.name)}</b>. It only takes a minute.<br><br>${esc(doc.message || '')}`
+        : `${esc(hi)}${esc(user.full_name)} asked you to ${signer.role === 'approver' ? 'review and approve' : 'review and sign'} this document.<br><br>${esc(doc.message || '')}`,
       button: signer.role === 'approver' ? 'Review document' : 'Review and sign',
       href,
       note,
@@ -1630,10 +1671,10 @@ async function sendExpiryWarnings(ctx) {
         await ctx.email.send({
           to: s.email,
           subject: `Your signing link for “${doc.name}” expires ${when}`,
-          text: `${owner?.full_name || 'Someone'} is still waiting for you to sign ${doc.name}. The link expires ${when}. ${href}`,
+          text: `${s.full_name ? 'Hi ' + s.full_name.split(/\s+/)[0] + ', ' : ''}${owner?.full_name || 'Someone'} is still waiting for you to sign ${doc.name}. The link expires ${when}. ${href}`,
           html: htmlEmail({
             title: `${doc.name} expires ${when}`,
-            intro: `${esc(owner?.full_name || 'The sender')} is still waiting for your signature on <b>${esc(doc.name)}</b>. This link expires ${esc(when)}.`,
+            intro: `${s.full_name ? 'Hi ' + esc(s.full_name.split(/\s+/)[0]) + ', ' : ''}${esc(owner?.full_name || 'The sender')} is still waiting for your signature on <b>${esc(doc.name)}</b>. This link expires ${esc(when)}.`,
             button: 'Review and sign',
             href,
             note: 'If you already signed, you can ignore this email.',

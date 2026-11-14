@@ -7,7 +7,7 @@ import { openDatabase } from './db.js'
 import { createStorage } from './storage.js'
 import { createEmail, createPayments, createSms, htmlEmail } from './providers.js'
 import {
-  bulkSend, checkPhone, commentAs, copyAsTemplate, createBlank, createLink, createUpload, instantiateTemplate,
+  bulkSend, checkPhone, commentAs, copyAsTemplate, createBlank, createLink, createUpload, finishDirectUpload, instantiateTemplate, startDirectUpload,
   declineSign, deleteDocument, deviceFrom, fail, finishSign, grantCheckout, login,
   ownerFile, publicStart, remind, resendVerification, runMaintenance,
   saveDraft, saveSettings, saveLogo, removeLogo, brandLogo, saveSignFields, sendDocument, setLinkActive, signSession,
@@ -107,7 +107,7 @@ export async function createApp(env = process.env) {
     next()
   })
 
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } })
 
   async function auth(req, res, next) {
     try {
@@ -428,6 +428,14 @@ export async function createApp(env = process.env) {
     res.status(201).json(await createBlank(ctx, req.user, req.body || {}))
   }))
 
+  app.post('/api/documents/upload-url', auth, asyncRoute(async (req, res) => {
+    res.json(await startDirectUpload(ctx, req.user, req.body || {}))
+  }))
+
+  app.post('/api/documents/upload-complete', auth, asyncRoute(async (req, res) => {
+    res.status(201).json(await finishDirectUpload(ctx, req.user, req.body || {}))
+  }))
+
   app.post('/api/documents/upload', auth, upload.single('file'), asyncRoute(async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'file', message: 'Choose a file.' })
     res.status(201).json(await createUpload(ctx, req.user, {
@@ -739,7 +747,7 @@ export async function createApp(env = process.env) {
 
   app.use((err, req, res, next) => {
     if (res.headersSent) return next(err)
-    if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'too_large', message: 'Files must be 10 MB or smaller.' })
+    if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'too_large', message: 'Files must be 25 MB or smaller.' })
     const status = err.status || 500
     if (status >= 500) {
       console.error(err)

@@ -51,6 +51,12 @@ function supabaseStorage(config) {
       if (error) throw new Error(error.message)
       return Buffer.from(await data.arrayBuffer())
     },
+    async signedUpload(key) {
+      const supabase = await sb()
+      const { data, error } = await supabase.storage.from('documents').createSignedUploadUrl(safeKey(key), { upsert: true })
+      if (error) throw new Error(error.message)
+      return { url: data.signedUrl }
+    },
     async remove(keys) {
       if (!keys.length) return
       const supabase = await sb()

@@ -5,6 +5,7 @@ import { calc, visible, validate, ROLE_OPTIONS, ROLE_LABELS, roleLabel } from '/
 import { marketingHtml } from '/marketing.js'
 import { logoMarkSvg } from '/shared/logo.js'
 import { mountHelp } from '/help.js'
+import { ACCEPT, MAX_MB, toPdfs } from '/shared/convert.js'
 
 const $ = (s, r = document) => r.querySelector(s)
 const $$ = (s, r = document) => [...r.querySelectorAll(s)]
@@ -130,27 +131,44 @@ function typedSig(name, font = 'Caveat') {
   x.fillStyle = '#1e3a8a'; x.textBaseline = 'middle'; x.fillText(name || 'Signed', 10, 62)
   return c.toDataURL()
 }
+const PRE = new Map() // id -> PDF bytes we just uploaded, so the editor opens without downloading them again
+function keepBytes(id, bytes) { PRE.set(id, bytes); while (PRE.size > 4) PRE.delete(PRE.keys().next().value) }
 async function pdfBytes(d) {
   if (d._bytes) return d._bytes
+  if (PRE.has(d.id)) return (d._bytes = PRE.get(d.id))
   const res = await fetch(d._fileUrl || ('/api/documents/' + d.id + '/file'), { headers: authHeaders(false) })
   if (!res.ok) throw new Error('Could not load the PDF')
   d._bytes = new Uint8Array(await res.arrayBuffer())
   return d._bytes
 }
+// Page 1 renders right away; the rest get placeholders and render as they scroll into view (or in the background).
 async function renderPages(el, d) {
-  el.innerHTML = '<p>Loading document…</p>'
-  const pdf = await pdfjsLib.getDocument({ data: await pdfBytes(d) }).promise
+  el.innerHTML = '<div class="pgload"><span class="spin"></span> Loading document…</div>'
+  const bytes = await pdfBytes(d)
+  const pdf = await pdfjsLib.getDocument({ data: bytes.slice() }).promise // copy: pdf.js hands the buffer to its worker
+  const SC = 1.6, p1 = await pdf.getPage(1), v1 = p1.getViewport({ scale: 1 })
   el.innerHTML = ''
+  const wraps = [], jobs = []
+  const size = (w, vw, vh) => { w.style.width = Math.min(820, vw * 1.35) + 'px'; w.style.aspectRatio = `${vw} / ${vh}`; w.dataset.pw = vw; w.dataset.ph = vh }
   for (let i = 0; i < pdf.numPages; i++) {
-    const p = await pdf.getPage(i + 1), vp = p.getViewport({ scale: 1.6 })
-    const w = document.createElement('div'); w.className = 'page'; w.dataset.page = i
-    w.style.width = Math.min(820, vp.width / 1.6 * 1.35) + 'px'
-    w.dataset.pw = vp.width / 1.6; w.dataset.ph = vp.height / 1.6
-    const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height
-    w.appendChild(c); el.appendChild(w)
-    await p.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise
+    const w = document.createElement('div'); w.className = 'page'; w.dataset.page = i; size(w, v1.width, v1.height)
+    if (i) w.classList.add('pending')
+    el.appendChild(w); wraps.push(w)
   }
+  const render = i => jobs[i] ||= (async () => {
+    const p = i ? await pdf.getPage(i + 1) : p1, vp = p.getViewport({ scale: SC }), w = wraps[i]
+    size(w, vp.width / SC, vp.height / SC)
+    const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height
+    await p.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise
+    w.prepend(c); w.classList.remove('pending')
+  })()
+  await render(0)
   d._pages = pdf.numPages
+  if (pdf.numPages > 1) {
+    const io = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { io.unobserve(e.target); render(+e.target.dataset.page) } }), { rootMargin: '1200px 0px' }) : null
+    wraps.slice(1).forEach(w => io?.observe(w))
+    ;(async () => { for (let i = 1; i < pdf.numPages; i++) { if (!wraps[i].isConnected) return; await render(i); await new Promise(r => setTimeout(r, 16)) } })()
+  }
 }
 function sigOf(d, id) { return d.signers.find(s => s.id === id) }
 async function sha256(b) { const h = await crypto.subtle.digest('SHA-256', b); return [...new Uint8Array(h)].map(x => x.toString(16).padStart(2, '0')).join('') }
@@ -359,7 +377,7 @@ function dashboard() {
   const mx = Math.max(...per, 1)
   const comp = ds.filter(d => d.completed && d.sent)
   const avg = comp.length ? (comp.reduce((a, d) => a + (new Date(d.completed) - new Date(d.sent)), 0) / comp.length / 36e5).toFixed(1) : '—'
-  V.innerHTML = `${phoneBanner()}<div class="row"><h1 style="margin:0">Documents</h1><span class="sp"></span>${meter()}${ds.some(d => ['sent', 'waiting'].includes(d.status)) ? '<button id="rall" title="Email a reminder to everyone who hasn’t signed yet. Doesn’t use credits.">↻ Resend all unsigned</button>' : ''}<a class="btn" href="#/bulk">Bulk send</a><a class="btn p" href="#/new">+ New document</a><label class="btn">⬆ Upload<input type="file" accept="application/pdf,image/png,image/jpeg" multiple hidden onchange="uploadFiles(this.files)"></label></div>
+  V.innerHTML = `${phoneBanner()}<div class="row"><h1 style="margin:0">Documents</h1><span class="sp"></span>${meter()}${ds.some(d => ['sent', 'waiting'].includes(d.status)) ? '<button id="rall" title="Email a reminder to everyone who hasn’t signed yet. Doesn’t use credits.">↻ Resend all unsigned</button>' : ''}<a class="btn" href="#/bulk">Bulk send</a><a class="btn p" href="#/new">+ New document</a><label class="btn">⬆ Upload<input type="file" accept="${ACCEPT}" multiple hidden onchange="uploadFiles(this.files)"></label></div>
   <div class="grid4" style="margin:18px 0">${[['Drafts', c('draft')], ['Awaiting signatures', c('sent') + c('waiting')], ['Completed', c('completed')], ['Avg. hours to complete', avg]].map(([l, v]) => `<div class="card kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('')}</div>
   <div class="card" style="margin-bottom:18px"><h3>Documents sent per month</h3><div class="bar" style="margin:16px 0 22px">${per.map((v, i) => `<div style="height:${v / mx * 100}%" title="${v}"><span>${months[i].toLocaleString('en', { month: 'short' })} · ${v}</span></div>`).join('') || '<p>No documents yet.</p>'}</div></div>
   <div class="row" style="margin-bottom:10px">${S.folders.map(f => `<button class="${f === folder ? 'p' : ''}" data-f="${esc(f)}">📁 ${esc(f)}</button>`).join('')}<span class="sp"></span><input id="q" placeholder="Search documents…"></div><div id="dt"></div>`
@@ -410,36 +428,87 @@ async function downloadDoc(id) {
 }
 
 function newDoc() {
-  V.innerHTML = `<h1>Start a document</h1><div id="dz" class="dz"><div class="ic">⬆️</div><h3>Drag & drop PDFs or images here</h3><p>Multiple files OK · PDF, PNG, JPG · up to 10 MB each</p><label class="btn p lg" style="margin-top:10px">Browse files<input type="file" id="up" accept="application/pdf,image/png,image/jpeg" multiple hidden></label></div>
+  V.innerHTML = `<h1>Start a document</h1><div id="dz" class="dz"><div class="ic">⬆️</div><h3>Drop PDFs, Word docs, or images here</h3><p>PDF · Word · Excel · CSV · text · JPG · PNG · HEIC · screenshots &amp; more · up to ${MAX_MB} MB each. Several photos become one document.</p><div class="row" style="justify-content:center;margin-top:10px"><label class="btn p lg">Browse files<input type="file" id="up" accept="${ACCEPT}" multiple hidden></label><label class="btn lg camb">📷 Photo or camera<input type="file" id="upcam" accept="image/*" multiple hidden></label></div></div>
   <div class="grid3">${S.templates.map(t => `<div class="card"><div class="ic">📄</div><h3>${esc(t.name)}</h3><p>Your template · roles: ${t.signers.map(s => esc(s.name)).join(', ')}</p><br><button class="p" onclick="fromTemplate('${t.id}')">Use template</button></div>`).join('')}
   <div class="card"><div class="ic">🧩</div><h3>Create a template</h3><p>Upload your own PDF or start from a blank page, then place fields by role. Nothing prebuilt.</p><br><button onclick="tplBuilder()">Create template</button></div>
   <div class="card"><div class="ic">🧾</div><h3>Build a proposal</h3><p>Pricing table → PDF → signature.</p><br><a class="btn" href="#/proposal">Open builder</a></div></div>`
   $('#up').onchange = e => uploadFiles(e.target.files)
+  $('#upcam').onchange = e => uploadFiles(e.target.files)
   const dz = $('#dz'); dz.ondragover = e => { e.preventDefault(); dz.classList.add('over') }; dz.ondragleave = () => dz.classList.remove('over')
   dz.ondrop = e => { e.preventDefault(); e.stopPropagation(); dz.classList.remove('over'); uploadFiles(e.dataTransfer.files) }
 }
-async function uploadFiles(list) {
-  const files = [...list || []]
-  if (!files.length) return
-  const errs = []; let first = null
-  for (const f of files) {
-    if (f.size > 10 * 1024 * 1024) { errs.push(`${f.name}: too large (max 10 MB)`); continue }
-    const fd = new FormData(); fd.append('file', f, f.name)
-    const res = await fetch('/api/documents/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + TOKEN, 'X-Device-Local': deviceLocal() }, body: fd })
-    const json = await res.json().catch(() => ({}))
-    if (!res.ok) errs.push(`${f.name}: ${json.message || 'could not upload'}`)
-    else if (!first) first = json.id
+function xhrSend(method, url, body, headers, onProgress) {
+  return new Promise((res, rej) => {
+    const x = new XMLHttpRequest(); x.open(method, url)
+    for (const [k, v] of Object.entries(headers || {})) x.setRequestHeader(k, v)
+    x.upload.onprogress = e => { if (e.lengthComputable) onProgress?.(e.loaded / e.total) }
+    x.onload = () => { let j = {}; try { j = JSON.parse(x.responseText || '{}') } catch {} ; res({ ok: x.status >= 200 && x.status < 300, status: x.status, json: j }) }
+    x.onerror = () => rej(new Error('Network error. Check your connection and try again.'))
+    x.send(body)
+  })
+}
+// Uploads a finished PDF. Big files go straight to storage with a signed URL (no serverless size limit).
+async function sendPdf(bytes, filename, { name, template } = {}, onProgress) {
+  const start = await api('/api/documents/upload-url', { method: 'POST', body: { size: bytes.length } })
+  if (!start.ok) throw new Error(start.json?.message || 'Could not start the upload')
+  const blob = new Blob([bytes], { type: 'application/pdf' })
+  if (start.json.direct) {
+    const put = await xhrSend('PUT', start.json.url, blob, { 'Content-Type': 'application/pdf', 'x-upsert': 'true' }, onProgress)
+    if (!put.ok) throw new Error('The upload didn’t finish. Please try again.')
+    const done = await api('/api/documents/upload-complete', { method: 'POST', body: { id: start.json.id, name, filename, template: !!template } })
+    if (!done.ok) throw new Error(done.json?.message || 'Could not upload')
+    return done.json
   }
-  if (errs.length) modal(`<h3>${errs.length} file(s) not uploaded</h3><ul>${errs.map(e => `<li>${esc(e)}</li>`).join('')}</ul><button class="p" onclick="closeModal()">OK</button>`)
-  if (first) { toast('Draft created'); location.hash = '#/edit/' + first }
+  const fd = new FormData(); fd.append('file', blob, filename.replace(/\.[^.]+$/, '') + '.pdf'); if (name) fd.append('name', name); if (template) fd.append('template', 'true')
+  const r = await xhrSend('POST', '/api/documents/upload', fd, { Authorization: 'Bearer ' + TOKEN, 'X-Device-Local': deviceLocal() }, onProgress)
+  if (!r.ok) throw new Error(r.json?.message || (r.status === 413 ? `Files must be ${MAX_MB} MB or smaller.` : 'Could not upload'))
+  return r.json
+}
+async function previewFirstPage(bytes, el) {
+  const pdf = await pdfjsLib.getDocument({ data: bytes.slice() }).promise, p = await pdf.getPage(1)
+  const vp = p.getViewport({ scale: 1.6 }), c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height
+  await p.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise
+  const w = document.createElement('div'); w.className = 'page'; w.style.width = Math.min(820, vp.width / 1.6 * 1.35) + 'px'; w.appendChild(c)
+  el.innerHTML = ''; el.appendChild(w); return pdf.numPages
+}
+let uploading = false
+async function uploadFiles(list) {
+  window.hideDrop?.()
+  const files = [...list || []]
+  if (!files.length || uploading) return
+  uploading = true
+  const names = files.map(f => f.name)
+  V.innerHTML = `<div class="upflow"><div class="upcard"><div class="upstat"><span class="spin"></span><div><b id="upmsg">Reading ${files.length === 1 ? esc(files[0].name) : files.length + ' files'}…</b><div class="note" id="upsub">${esc(names.slice(0, 4).join(' · '))}${names.length > 4 ? ' …' : ''}</div></div></div><div class="upbar"><i id="upbar"></i></div></div><div class="pages" id="upprev"></div></div>`
+  const msg = m => { const e = $('#upmsg'); if (e) e.textContent = m }
+  const bar = f => { const e = $('#upbar'); if (e) e.style.width = Math.round(f * 100) + '%' }
+  try {
+    const { docs, errors } = await toPdfs(files, msg)
+    let first = null
+    if (docs.length) {
+      const pages = previewFirstPage(docs[0].bytes, $('#upprev')).catch(() => 0) // page 1 shows while the upload runs
+      const prog = docs.map(() => 0), total = docs.reduce((a, x) => a + x.bytes.length, 0)
+      msg(docs.length === 1 ? 'Uploading…' : `Uploading ${docs.length} documents…`)
+      const results = await Promise.all(docs.map((x, i) => sendPdf(x.bytes, x.name, {}, f => { prog[i] = f * x.bytes.length; bar(prog.reduce((a, b) => a + b, 0) / total) })
+        .then(j => { keepBytes(j.id, x.bytes); return j }, e => { errors.push(`${x.name}: ${e.message}`); return null })))
+      bar(1); msg('Preparing pages…'); await pages
+      first = results.find(Boolean)?.id || null
+    }
+    if (errors.length) modal(`<h3>${errors.length} file${errors.length === 1 ? '' : 's'} couldn’t be added</h3><ul class="uperr">${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul><p class="note">Works with PDF, Word (.docx), Excel (.xlsx/.xls), CSV, text, RTF, ODT, HTML, and images (JPG, PNG, HEIC, WEBP, GIF, BMP, TIFF).</p><button class="p" onclick="closeModal()">OK</button>`)
+    if (first) { toast(docs.length > 1 ? 'Drafts created' : 'Draft created'); location.hash = '#/edit/' + first }
+    else route()
+  } catch (e) { toast(e.message || 'Upload failed'); route() } finally { uploading = false }
 }
 ;(() => {
-  const ov = document.createElement('div'); ov.id = 'dropov'; ov.innerHTML = '<div>📄 Drop PDFs to upload</div>'; document.body.appendChild(ov); let n = 0
+  const ov = document.createElement('div'); ov.id = 'dropov'; ov.innerHTML = '<div>📄 Drop PDFs, Word docs, or images</div>'; document.body.appendChild(ov); let n = 0
   const ok = () => /^#\/(app|new)$/.test(location.hash)
+  const hide = () => { n = 0; ov.classList.remove('on') }
+  window.hideDrop = hide
   addEventListener('dragenter', e => { if (!ok() || ![...e.dataTransfer.types].includes('Files')) return; n++; ov.classList.add('on') })
-  addEventListener('dragleave', () => { if (--n <= 0) { n = 0; ov.classList.remove('on') } })
+  addEventListener('dragleave', e => { if (--n <= 0 || !e.relatedTarget) hide() })
   addEventListener('dragover', e => { if (ok()) e.preventDefault() })
-  addEventListener('drop', e => { n = 0; ov.classList.remove('on'); if (!ok() || e.defaultPrevented || !S.me) return; e.preventDefault(); uploadFiles(e.dataTransfer.files) })
+  addEventListener('drop', hide, true) // capture phase: hides even when the drop zone stops the event
+  addEventListener('dragend', hide); addEventListener('hashchange', hide)
+  addEventListener('drop', e => { if (!ok() || e.defaultPrevented || !S.me) return; e.preventDefault(); uploadFiles(e.dataTransfer.files) })
 })()
 
 async function fromTemplate(tid) {
@@ -471,19 +540,23 @@ function tplBuilder() {
   <label class="f">Start from</label>
   <label class="row" style="font-size:14px"><input type="radio" name="tbs" value="up" checked> Upload my own PDF / image</label>
   <label class="row" style="font-size:14px"><input type="radio" name="tbs" value="bl"> Blank page(s) <input id="tbp" type="number" min="1" max="10" value="1" style="width:60px"></label>
-  <input type="file" id="tbf" accept="application/pdf,image/png,image/jpeg" style="margin-top:8px"><br><br>
+  <input type="file" id="tbf" accept="${ACCEPT}" style="margin-top:8px"><br><br>
   <div class="row"><button class="p" id="tbg">Continue to place fields</button><button onclick="closeModal()">Cancel</button></div>`)
-  $('#tbf').onchange = () => { $('[name=tbs][value=up]').checked = true; if (!$('#tbn').value && $('#tbf').files[0]) $('#tbn').value = $('#tbf').files[0].name.replace(/\.(pdf|png|jpe?g)$/i, '') }
+  $('#tbf').onchange = () => { $('[name=tbs][value=up]').checked = true; if (!$('#tbn').value && $('#tbf').files[0]) $('#tbn').value = $('#tbf').files[0].name.replace(/\.[a-z0-9]+$/i, '') }
   $('#tbg').onclick = async () => {
     const name = $('#tbn').value.trim() || 'Untitled template'
     const roles = $('#tbr').value.split(',').map(x => x.trim()).filter(Boolean)
     if ($('[name=tbs]:checked').value === 'up') {
       const f = $('#tbf').files[0]
       if (!f) return toast('Choose a file, or pick Blank page')
-      const fd = new FormData(); fd.append('file', f); fd.append('template', 'true'); fd.append('name', name)
-      const res = await fetch('/api/documents/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + TOKEN, 'X-Device-Local': deviceLocal() }, body: fd })
-      const json = await res.json()
-      if (!res.ok) return toast(json.message || 'Upload failed')
+      const btn = $('#tbg'); btn.disabled = true; btn.textContent = 'Uploading…'
+      let json
+      try {
+        const { docs, errors } = await toPdfs([f], m => { btn.textContent = m })
+        if (!docs[0]) throw new Error(errors[0] || 'Upload failed')
+        json = await sendPdf(docs[0].bytes, f.name, { template: true, name })
+        keepBytes(json.id, docs[0].bytes)
+      } catch (e) { btn.disabled = false; btn.textContent = 'Continue to place fields'; return toast(e.message || 'Upload failed') }
       if (roles.length) {
         json.signers = roles.map((r, i) => ({ id: json.signers[i]?.id || uid(), name: r, email: '', role: 'signer', color: COLORS[i % 6] }))
         json.ordered = true; json.fields = []; json.expiresDays = 30; json.remindDays = S.me?.reminderDefault ?? 3; json.message = json.message || 'Please review and sign.'; json.folder = json.folder || 'Sales'
@@ -496,6 +569,122 @@ function tplBuilder() {
       closeModal(); location.hash = '#/edit/' + res.json.id
     }
   }
+}
+
+// ---------- "Who needs to sign?" step, shown right after a new upload loads ----------
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+// Follows the role list the Recipients panel offers (shared/fields.js), so both places always match.
+const rcpRoles = () => ROLE_OPTIONS.map(r => [r.value, r.value === 'cc' ? 'Needs to view (CC)' : r.label])
+const rcpSkipped = new Set()
+function needsRecipients(d) {
+  if (d.status !== 'draft' || rcpSkipped.has(d.id) || (d.fields || []).length) return false
+  return !d.signers.some(s => (s.email || '').trim())
+}
+function knownContacts() {
+  const m = new Map()
+  for (const x of [...S.docs, ...(S.bulkDocs || [])]) for (const s of x.signers || []) {
+    const e = (s.email || '').trim().toLowerCase()
+    if (EMAIL_RE.test(e) && !m.has(e) && s.name && !/^signer \d+$/i.test(s.name)) m.set(e, { email: s.email.trim(), name: s.name.trim() })
+  }
+  if (S.me?.email) m.delete(S.me.email.toLowerCase())
+  return [...m.values()].slice(0, 300)
+}
+function recipientsStep(d, done) {
+  $('.rcp')?.remove()
+  const me = { name: S.me?.name || '', email: S.me?.email || '' }
+  const fresh = s => !s.email && /^signer \d+$/i.test(s.name || '')
+  let rows = d.signers.filter(s => !fresh(s)).map(s => ({ id: s.id, name: s.name, email: s.email || '', role: s.role, color: s.color }))
+  if (!rows.length) rows = [{ id: uid(), name: '', email: '', role: 'signer' }]
+  let ordered = !!d.ordered && rows.length > 1, showErr = false
+  const contacts = knownContacts()
+  const ov = document.createElement('div'); ov.className = 'rcp'; document.body.appendChild(ov)
+  const colorFor = (r, i) => r.color || COLORS[i % COLORS.length]
+  const av = (r, i) => `<span class="rav" style="background:${colorFor(r, i)}">${esc(r.name.trim() ? initialsOf(r.name) : (r.email ? r.email[0].toUpperCase() : '?'))}</span>`
+  const errs = (r, i) => ({
+    name: !r.name.trim() ? 'Enter a name' : '',
+    email: r.role === 'in-person' && !r.email.trim() ? '' : !r.email.trim() ? 'Enter an email' : !EMAIL_RE.test(r.email.trim()) ? 'Check this email' : rows.findIndex(x => x.email.trim().toLowerCase() === r.email.trim().toLowerCase()) !== i ? 'Already added' : ''
+  })
+  const draw = () => {
+    ov.innerHTML = `<div class="rcpbox" role="dialog" aria-modal="true" aria-labelledby="rcpt">
+      <div class="rcphead"><div><h2 id="rcpt">Who needs to sign?</h2><p>Add everyone who signs or gets a copy. You can change this later in the Recipients panel.</p></div><button class="rcpx" data-a="close" aria-label="Close">✕</button></div>
+      <div class="rcpbody">
+        <label class="rcptog"><input type="checkbox" id="rcpord" ${ordered ? 'checked' : ''}><span class="sw"></span><span><b>Set signing order</b><small>${ordered ? 'Drag ⠿ to reorder. Each person gets the link after the one above finishes.' : 'Everyone gets the link at the same time.'}</small></span></label>
+        <div class="rcplist">${rows.map((r, i) => { const e = showErr ? errs(r, i) : {}; return `<div class="rrow${r.role === 'cc' ? ' cc' : ''}" data-i="${i}">
+          ${ordered ? `<span class="rgrip" title="Drag to reorder" data-grip="${i}">⠿</span><span class="rnum">${i + 1}</span>` : ''}${av(r, i)}
+          <div class="rf"><input data-k="name" value="${esc(r.name)}" placeholder="Full name" autocomplete="off" list="rcp-names" class="${e.name ? 'bad' : ''}" aria-label="Full name">${e.name ? `<small class="rerr">${e.name}</small>` : ''}</div>
+          <div class="rf re"><input data-k="email" type="email" value="${esc(r.email)}" placeholder="${r.role === 'in-person' ? 'Email (optional)' : 'Email address'}" autocomplete="off" list="rcp-emails" class="${e.email ? 'bad' : ''}" aria-label="Email">${e.email ? `<small class="rerr">${e.email}</small>` : ''}</div>
+          <select data-k="role" aria-label="Role">${rcpRoles().concat(rcpRoles().some(([v]) => v === r.role) ? [] : [[r.role, r.role === 'cc' ? 'Needs to view (CC)' : roleLabel(r.role)]]).map(([v, l]) => `<option value="${v}" ${v === r.role ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          <button class="rdel" data-del="${i}" title="Remove" aria-label="Remove recipient"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2zm-3 6h12l-1 12H7L6 9zm4 2v8h2v-8h-2zm4 0v8h2v-8h-2z"/></svg></button>
+        </div>` }).join('')}</div>
+        <div class="rcpadd"><button data-a="add">+ Add recipient</button>${rcpRoles().some(([v]) => v === 'cc') ? '<button data-a="cc">+ Add CC</button>' : ''}${me.email && !rows.some(r => r.email.trim().toLowerCase() === me.email.toLowerCase()) ? `<button data-a="me" class="rme">✍️ I'm signing too</button>` : ''}</div>
+        <datalist id="rcp-emails">${contacts.map(c => `<option value="${esc(c.email)}">${esc(c.name)}</option>`).join('')}</datalist>
+        <datalist id="rcp-names">${contacts.map(c => `<option value="${esc(c.name)}">${esc(c.email)}</option>`).join('')}</datalist>
+      </div>
+      <div class="rcpfoot"><button class="rlink" data-a="self">Skip, just me</button><span class="sp"></span><button class="p lg" data-a="go">Continue to place fields →</button></div>
+    </div>`
+    $$('.rrow', ov).forEach(row => {
+      const i = +row.dataset.i, r = rows[i]
+      $$('[data-k]', row).forEach(inp => {
+        inp.oninput = () => {
+          r[inp.dataset.k] = inp.value
+          if (inp.dataset.k === 'email') { const c = contacts.find(c => c.email.toLowerCase() === inp.value.trim().toLowerCase()); if (c && !r.name.trim()) { r.name = c.name; $('[data-k=name]', row).value = c.name } }
+          if (inp.dataset.k === 'name') { const c = contacts.find(c => c.name.toLowerCase() === inp.value.trim().toLowerCase()); if (c && !r.email.trim()) { r.email = c.email; $('[data-k=email]', row).value = c.email } }
+          $('.rav', row).outerHTML = av(r, i)
+        }
+        if (inp.tagName === 'SELECT') inp.onchange = () => { r.role = inp.value; draw() }
+      })
+    })
+    $$('[data-del]', ov).forEach(b => b.onclick = () => { rows.splice(+b.dataset.del, 1); if (!rows.length) rows.push({ id: uid(), name: '', email: '', role: 'signer' }); draw() })
+    $$('[data-grip]', ov).forEach(g => g.onpointerdown = e => dragRow(e, +g.dataset.grip))
+    $('#rcpord', ov).onchange = e => { ordered = e.target.checked; draw() }
+  }
+  const dragRow = (e, from) => {
+    e.preventDefault()
+    const list = $('.rcplist', ov), row = list.children[from]; row.classList.add('drag'); let to = from
+    const mv = m => {
+      const kids = [...list.children]; to = kids.length
+      for (let k = 0; k < kids.length; k++) { if (k === from) continue; const b = kids[k].getBoundingClientRect(); if (m.clientY < b.top + b.height / 2) { to = k; break } }
+      row.style.transform = `translateY(${m.clientY - e.clientY}px)`
+    }
+    const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); const [x] = rows.splice(from, 1); rows.splice(to > from ? to - 1 : to, 0, x); draw() }
+    addEventListener('pointermove', mv); addEventListener('pointerup', up)
+  }
+  const close = () => { ov.remove(); removeEventListener('keydown', key) }
+  const commit = list => {
+    const keep = new Set(list.map(r => r.id))
+    const used = new Set()
+    d.signers = list.map((r, i) => {
+      const old = d.signers.find(s => s.id === r.id)
+      let color = r.color || COLORS[i % COLORS.length]; if (used.has(color)) color = COLORS.find(c => !used.has(c)) || color; used.add(color)
+      return { ...(old || {}), id: r.id, name: r.name.trim(), email: r.email.trim(), role: r.role, color, done: false }
+    })
+    const firstSigner = d.signers.find(s => s.role !== 'cc') || d.signers[0]
+    d.fields = (d.fields || []).map(f => keep.has(f.signer) ? f : { ...f, signer: firstSigner.id })
+    d.ordered = ordered && d.signers.length > 1
+    const ord = $('#ord'); if (ord) ord.checked = d.ordered
+    rcpSkipped.add(d.id); save(); close(); done()
+  }
+  const key = e => { if (e.key === 'Escape') { rcpSkipped.add(d.id); close() } }
+  addEventListener('keydown', key)
+  ov.onclick = e => {
+    const a = e.target.closest('[data-a]')?.dataset.a
+    if (e.target === ov || a === 'close') { rcpSkipped.add(d.id); return close() }
+    if (a === 'add') { rows.push({ id: uid(), name: '', email: '', role: 'signer' }); draw(); $$('.rrow [data-k=name]', ov).at(-1)?.focus() }
+    if (a === 'cc') { rows.push({ id: uid(), name: '', email: '', role: 'cc' }); draw(); $$('.rrow [data-k=name]', ov).at(-1)?.focus() }
+    if (a === 'me') { const blank = rows.find(r => !r.name.trim() && !r.email.trim()); const r = blank || { id: uid(), role: 'signer' }; Object.assign(r, { name: me.name, email: me.email, role: 'signer' }); if (!blank) rows.push(r); draw() }
+    if (a === 'self') { const r = d.signers.find(s => (s.email || '').toLowerCase() === me.email.toLowerCase()) || d.signers[0] || {}; ordered = false; commit([{ id: r.id || uid(), name: me.name || 'Me', email: me.email, role: 'signer', color: r.color || COLORS[0] }]); toast('Just you — place your fields, then send it to yourself to sign') }
+    if (a === 'go') {
+      const list = rows.filter(r => r.name.trim() || r.email.trim())
+      if (!list.length) { showErr = true; rows = [{ id: uid(), name: '', email: '', role: 'signer' }]; draw(); return toast('Add at least one person, or choose “Skip, just me”') }
+      rows = list
+      if (rows.some((r, i) => errs(r, i).name || errs(r, i).email)) { showErr = true; draw(); $('.rrow .bad', ov)?.focus(); return }
+      if (!rows.some(r => r.role !== 'cc')) { showErr = true; draw(); return toast('Add at least one signer — CC recipients only get a copy') }
+      commit(rows)
+      const s1 = d.signers.find(s => s.role !== 'cc'); toast(`Now drag fields onto the page for ${s1.name.split(' ')[0]}`)
+    }
+  }
+  draw()
+  setTimeout(() => $('.rrow [data-k=name]', ov)?.focus(), 50)
 }
 
 let sel = null
@@ -511,7 +700,7 @@ async function editor(id) {
   ${d.tpl ? '<div class="card" style="margin-bottom:12px;padding:10px 14px;font-size:13px"><b>Template builder.</b> Recipients here are roles. Real names and emails are filled in each time you use the template.</div>' : ''}
   <div class="editor"><div class="panel"><h4>Fields — drag onto page</h4><div class="ftools">${Object.entries(FT).map(([k, [i, l]]) => `<div class="ftool" data-t="${k}">${i} ${l}</div>`).join('')}</div><p style="font-size:12px;color:var(--mut)">Click a field, then click the page. Shift+click keeps placing. Esc cancels.</p></div>
   <div class="pages" id="pages"></div>
-  <div class="panel"><h4>${d.tpl ? 'Roles' : 'Who needs to sign?'}</h4><label class="row" style="font-size:13px"><input type="checkbox" id="ord" ${d.ordered ? 'checked' : ''}> Sign in order — one after another</label><div id="sg"></div>${locked ? '' : '<button onclick="addSigner()" style="width:100%">+ Add recipient</button>'}
+  <div class="panel"><h4 class="rcph">${d.tpl ? 'Roles' : 'Who needs to sign?'}${d.tpl || locked ? '' : '<button class="rcpedit" onclick="editRecipients()">Edit</button>'}</h4><label class="row" style="font-size:13px"><input type="checkbox" id="ord" ${d.ordered ? 'checked' : ''}> Sign in order — one after another</label><div id="sg"></div>${locked ? '' : '<button onclick="addSigner()" style="width:100%">+ Add recipient</button>'}
   <h4 style="margin-top:16px">Field properties</h4><div id="props"><p style="font-size:13px;color:var(--mut)">Select a field.</p></div>
   <h4 style="margin-top:16px">Settings</h4><label class="f">Folder</label><select id="fo">${S.folders.slice(1).map(f => `<option ${f === d.folder ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select>
   <label class="f">Expires after (days)</label><input id="ex" type="number" min="1" max="365" value="${d.expiresDays}" style="width:100%"><p class="note" style="font-size:12px">The signing link closes after this many days. Unsigned signers and you get a warning email 2 days before.</p><label class="f">Automatic reminders</label>${remindSelect('rm', d.remindDays, 'style="width:100%"')}<p class="note" style="font-size:12px">Emails only people who haven’t signed. Up to 5 reminders; stops when signed, voided or expired.${locked && !d.tpl ? ` Sent ${d.autoReminders || 0} automatic so far.${d.lastReminded ? ' Last reminded ' + fmt(d.lastReminded) + '.' : ''}` : ''}</p>
@@ -519,7 +708,7 @@ async function editor(id) {
   ${locked && d.signers.some(s => s.token) ? `<h4>Signing links</h4>${d.signers.filter(s => s.token).map(s => `<p style="font-size:12px"><b>${esc(s.name)}</b> ${s.role === 'in-person' ? '<span class="note">(in person)</span>' : ''}<br><a href="#/${s.role === 'in-person' ? 'inperson/' + d.id : 'sign/' + s.token}">${s.role === 'in-person' ? 'Hand this device' : 'Open link'}</a></p>`).join('')}` : ''}</div></div>`
   window.addSigner = () => { d.signers.push({ id: uid(), name: 'Signer ' + (d.signers.length + 1), email: '', role: 'signer', color: COLORS[d.signers.length % 6], done: false }); save(); drawS() }
   const drawS = () => {
-    $('#sg').innerHTML = d.signers.map((s, i) => `<div style="border:1px solid ${s.id === cur ? s.color : 'var(--line)'};border-radius:8px;padding:6px;margin-bottom:6px" data-s="${s.id}"><div class="signer"><span class="dot" style="background:${s.color}"></span><b style="font-size:12px">${d.ordered ? i + 1 + '.' : ''}</b><input value="${esc(s.name)}" data-k="name" placeholder="${d.tpl ? 'Role name' : 'Full name'}" ${locked ? 'disabled' : ''}>${i > 0 && !locked ? `<span style="cursor:pointer" data-up="${i}">↑</span><span style="cursor:pointer" data-del="${i}">✕</span>` : ''}</div><div class="signer"><input value="${esc(s.email || '')}" data-k="email" placeholder="${s.role === 'in-person' ? 'Email optional' : 'email@example.com'}" ${locked ? 'disabled' : ''}><div class="role-dd"><button type="button" class="role-dd-btn" data-k="role" data-role="${s.role}" ${locked ? 'disabled' : ''} aria-haspopup="listbox" aria-expanded="false" title="${esc((ROLE_LABELS.find(o => o.value === s.role) || ROLE_OPTIONS[0]).hint)}">${esc(roleLabel(s.role))}<span class="caret">▾</span></button></div></div>${s.role === 'in-person' ? '<p class="note">No email needed — you’ll hand them this device after you send.</p>' : s.role === 'approver' ? '<p class="note">Approves or declines with a reason. No signature fields needed.</p>' : s.role === 'cc' ? '<p class="note">Gets a copy of the finished document. They don’t sign.</p>' : ''}${d.tpl || s.role === 'cc' || s.role === 'approver' ? '' : `<div class="asig"><img data-ps="sig" src="${s.name.trim() ? typedSig(s.name) : ''}"><img data-ps="ini" src="${s.name.trim() ? typedSig(initialsOf(s.name)) : ''}"><small data-ps="txt">${s.name.trim() ? initialsOf(s.name) : ''}</small></div>`}</div>`).join('')
+    $('#sg').innerHTML = d.signers.map((s, i) => `<div style="border:1px solid ${s.id === cur ? s.color : 'var(--line)'};border-radius:8px;padding:6px;margin-bottom:6px" data-s="${s.id}"><div class="signer"><span class="rav sm" style="background:${s.color}">${esc(s.name.trim() ? initialsOf(s.name) : '?')}</span><b style="font-size:12px">${d.ordered ? i + 1 + '.' : ''}</b><input value="${esc(s.name)}" data-k="name" placeholder="${d.tpl ? 'Role name' : 'Full name'}" ${locked ? 'disabled' : ''}>${i > 0 && !locked ? `<span style="cursor:pointer" data-up="${i}">↑</span><span style="cursor:pointer" data-del="${i}">✕</span>` : ''}</div><div class="signer"><input value="${esc(s.email || '')}" data-k="email" placeholder="${s.role === 'in-person' ? 'Email optional' : 'email@example.com'}" ${locked ? 'disabled' : ''}><div class="role-dd"><button type="button" class="role-dd-btn" data-k="role" data-role="${s.role}" ${locked ? 'disabled' : ''} aria-haspopup="listbox" aria-expanded="false" title="${esc((ROLE_LABELS.find(o => o.value === s.role) || ROLE_OPTIONS[0]).hint)}">${esc(roleLabel(s.role))}<span class="caret">▾</span></button></div></div>${s.role === 'in-person' ? '<p class="note">No email needed — you’ll hand them this device after you send.</p>' : s.role === 'approver' ? '<p class="note">Approves or declines with a reason. No signature fields needed.</p>' : s.role === 'cc' ? '<p class="note">Gets a copy of the finished document. They don’t sign.</p>' : ''}${d.tpl || s.role === 'cc' || s.role === 'approver' ? '' : `<div class="asig"><img data-ps="sig" src="${s.name.trim() ? typedSig(s.name) : ''}"><img data-ps="ini" src="${s.name.trim() ? typedSig(initialsOf(s.name)) : ''}"><small data-ps="txt">${s.name.trim() ? initialsOf(s.name) : ''}</small></div>`}</div>`).join('')
     $$('[data-s]').forEach(el => {
       el.onclick = e => { if (e.target.closest('input,select,button,.role-dd')) return; cur = el.dataset.s; drawS() }
       const nm = $('[data-k=name]', el)
@@ -540,14 +729,15 @@ async function editor(id) {
     d.fields.forEach(f => {
       const pg = $(`.page[data-page="${f.page}"]`); if (!pg) return
       const s = sigOf(d, f.signer) || d.signers[0]
-      const el = document.createElement('div'); el.className = 'fld' + (sel === f.id ? ' sel' : ''); el.dataset.id = f.id
+      const el = document.createElement('div'); el.className = 'fld ed' + (sel === f.id ? ' sel' : ''); el.dataset.id = f.id
       Object.assign(el.style, { left: f.x * 100 + '%', top: f.y * 100 + '%', width: f.w * 100 + '%', height: f.h * 100 + '%', borderColor: s.color, color: s.color, background: s.color + '22' })
       const v = f.type === 'formula' ? '= ' + calc(d.fields, f) : f.value
-      el.innerHTML = (v && String(v).startsWith('data:') ? `<img src="${v}">` : v === true ? '✔' : v ? esc(v) : `${FT[f.type][0]} ${esc(f.label)}${f.required ? '*' : ''}`) + (locked ? '' : '<span class="x">×</span>' + (sel === f.id ? '<span class="h hl"></span><span class="h hr"></span><span class="h ht"></span>' : ''))
+      el.innerHTML = '<span class="fc">' + (v && String(v).startsWith('data:') ? `<img src="${v}">` : v === true ? '✔' : v ? esc(v) : `${FT[f.type][0]} ${esc(f.label)}${f.required ? '*' : ''}`) + '</span>' + (locked ? '' : '<span class="x" role="button" aria-label="Delete field" title="Delete field (Delete key)">✕</span>' + (sel === f.id ? '<span class="h hl"></span><span class="h hr"></span><span class="h ht"></span>' : ''))
       pg.appendChild(el)
       if (locked) return
+      if (el.offsetWidth < 56 || el.offsetHeight < 20) el.classList.add('tiny')
       el.onpointerdown = e => {
-        if (e.target.classList.contains('x')) { d.fields = d.fields.filter(x => x.id !== f.id); save(); drawF(); return }
+        if (e.target.closest('.x')) { e.preventDefault(); e.stopPropagation(); delField(f.id); return }
         const was = sel === f.id; sel = f.id; props(); if (!was) { el.classList.add('sel'); el.insertAdjacentHTML('beforeend', '<span class="h hl"></span><span class="h hr"></span><span class="h ht"></span>') }
         const cl = e.target.classList, mode = cl.contains('hl') ? 'l' : cl.contains('hr') ? 'r' : cl.contains('ht') ? 't' : 'm'
         const r = pg.getBoundingClientRect(); const PW = +pg.dataset.pw || 612, PH = +pg.dataset.ph || 792, [mw, mh] = MIN[f.type] || [30, 16], minW = mw / PW, minH = mh / PH
@@ -579,6 +769,7 @@ async function editor(id) {
     on('#pa', e => f.signer = e.value); on('#pl', e => f.label = e.value); on('#pr', e => f.required = e.checked); on('#pv', e => f.valid = e.value)
     on('#po', e => f.options = e.value.split(',').map(s => s.trim()).filter(Boolean)); on('#pf', e => f.formula = e.value); on('#pm', e => f.amount = +e.value); on('#pc', e => f.cond = e.value || null)
   }
+  const delField = id => { d.fields = d.fields.filter(x => x.id !== id); if (sel === id) sel = null; save(); drawF(); props() }
   drawS(); await renderPages($('#pages'), d); drawF(); if (locked) return
   const addAt = (t, pg, fx, fy) => {
     let [, l, w, h] = FT[t]; const PW = +pg.dataset.pw || 612, PH = +pg.dataset.ph || 792
@@ -612,9 +803,15 @@ async function editor(id) {
   $('#pages').onpointerleave = () => { if (ghost) ghost.style.display = 'none' }
   $('#pages').onclick = e => { if (!armed || (e.target.closest('.fld') && !e.target.closest('.ghost'))) return; const pg = e.target.closest('.page'); if (!pg) return; const r = pg.getBoundingClientRect(); addAt(armed, pg, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); if (!e.shiftKey) disarm() }
   $('#pages').oncontextmenu = e => { if (armed) { e.preventDefault(); disarm() } }
-  const onKey = e => { if (e.key === 'Escape' && armed) disarm() }
+  const onKey = e => {
+    if (e.key === 'Escape' && armed) disarm()
+    const a = document.activeElement
+    if ((e.key === 'Delete' || e.key === 'Backspace') && sel && !$('.rcp') && !(a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable)) && d.fields.some(x => x.id === sel)) { e.preventDefault(); delField(sel) }
+  }
   addEventListener('keydown', onKey)
-  addEventListener('hashchange', () => { removeEventListener('keydown', onKey); disarm() }, { once: true })
+  addEventListener('hashchange', () => { removeEventListener('keydown', onKey); disarm(); $('.rcp')?.remove() }, { once: true })
+  window.editRecipients = () => recipientsStep(d, () => { cur = d.signers.find(s => s.role !== 'cc')?.id || d.signers[0]?.id; drawS(); drawF(); props() })
+  if (!d.tpl && needsRecipients(d)) window.editRecipients()
   $('#dn').onchange = e => { d.name = e.target.value; save() }
   $('#ord').onchange = e => { d.ordered = e.target.checked; save(); drawS() }
   $('#fo').onchange = e => { d.folder = e.target.value; save() }
