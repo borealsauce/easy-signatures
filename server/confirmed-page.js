@@ -21,40 +21,59 @@ export function confirmedPageHtml() {
     body {
       font-family: Inter, system-ui, sans-serif;
       color: var(--paper);
-      background: #06141E;
+      background: #05080C;
       min-height: 100vh;
       display: grid;
       place-items: center;
       padding: 28px 16px;
       overflow-x: hidden;
     }
-    .bg {
-      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    .scene {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background: #05080C;
+    }
+    .aurora {
+      position: absolute; inset: -25%;
+      filter: blur(48px);
+      opacity: .95;
       background:
-        radial-gradient(ellipse 70% 80% at 70% 0%, rgba(20,184,166,.22), transparent 55%),
-        radial-gradient(ellipse 50% 50% at 8% 90%, rgba(13,148,136,.16), transparent 50%),
-        radial-gradient(ellipse 40% 40% at 90% 80%, rgba(94,234,212,.1), transparent 50%),
-        linear-gradient(180deg, #06141E 0%, #0A1C28 60%, #0C2430 100%);
+        radial-gradient(ellipse 55% 35% at 28% 22%, rgba(20,196,176,.38), transparent 62%),
+        radial-gradient(ellipse 45% 40% at 78% 18%, rgba(56,189,248,.20), transparent 58%),
+        radial-gradient(ellipse 50% 45% at 62% 78%, rgba(13,148,136,.22), transparent 60%),
+        radial-gradient(ellipse 40% 35% at 18% 72%, rgba(45,212,191,.12), transparent 55%),
+        radial-gradient(ellipse 30% 28% at 88% 68%, rgba(125,211,252,.08), transparent 55%);
+      animation: aurora 22s ease-in-out infinite alternate;
     }
-    .bg::before {
-      content: ""; position: absolute; inset: 0;
-      background-image: radial-gradient(rgba(255,255,255,.13) 1px, transparent 1px);
-      background-size: 18px 18px;
-      mask-image: radial-gradient(ellipse 80% 80% at 50% 30%, #000 20%, transparent 75%);
+    .aurora2 {
+      position: absolute; inset: -20%;
+      filter: blur(60px);
+      background:
+        radial-gradient(ellipse 40% 28% at 50% 0%, rgba(153,246,228,.18), transparent 55%),
+        radial-gradient(ellipse 35% 30% at 40% 60%, rgba(8,47,73,.4), transparent 60%);
+      animation: aurora 28s ease-in-out infinite alternate-reverse;
     }
-    #fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
-    .scribble {
-      position: fixed; z-index: 1; pointer-events: none; overflow: visible;
-      opacity: .55;
+    @keyframes aurora {
+      0% { transform: translate(0, 0) rotate(0deg) scale(1); }
+      100% { transform: translate(3%, -4%) rotate(6deg) scale(1.08); }
     }
-    .scribble path { fill: none; stroke: #5EEAD4; stroke-linecap: round; stroke-linejoin: round; }
-    .s1 { left: 6%; top: 14%; width: 220px; animation: drift 14s ease-in-out infinite; }
-    .s2 { right: 5%; top: 22%; width: 180px; animation: drift 16s ease-in-out infinite reverse; }
-    .s3 { left: 10%; bottom: 12%; width: 200px; animation: drift 18s 1s ease-in-out infinite; }
-    .s4 { right: 8%; bottom: 16%; width: 240px; animation: drift 15s .6s ease-in-out infinite reverse; }
-    @keyframes drift {
-      0%, 100% { transform: translate(0, 0) rotate(-4deg); }
-      50% { transform: translate(12px, -18px) rotate(3deg); }
+    .vignette {
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 65% 65% at 50% 45%, transparent 30%, rgba(2,6,10,.55) 100%);
+    }
+    .grain {
+      position: fixed; inset: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 1; mix-blend-mode: overlay; opacity: .14;
+    }
+    .sparkle {
+      position: fixed; z-index: 2; pointer-events: none;
+      width: 3px; height: 3px; border-radius: 50%;
+      background: #F0FFFC;
+      box-shadow: 0 0 8px 2px rgba(94,234,212,.75);
+      animation: twinkle 3.6s ease-in-out infinite;
+    }
+    @keyframes twinkle {
+      0%, 100% { opacity: .15; transform: scale(.6); }
+      50% { opacity: .9; transform: scale(1); }
     }
     .wrap { position: relative; z-index: 3; width: min(440px, 100%); }
     .card {
@@ -73,7 +92,7 @@ export function confirmedPageHtml() {
       font-weight: 700; font-size: 15px; letter-spacing: -.02em;
       margin-bottom: 28px;
     }
-    .brand svg { display: block; flex-shrink: 0; }
+    .brand svg, .brand .logo-mark { display: block; flex-shrink: 0; }
     h1 {
       font-family: "Inter Tight", Inter, sans-serif;
       font-size: clamp(28px, 7vw, 42px);
@@ -110,29 +129,41 @@ export function confirmedPageHtml() {
     .foot { margin-top: 18px; font-size: 13.5px; color: rgba(226,232,240,.7); }
     .foot a { color: #5EEAD4; text-decoration: none; font-weight: 550; }
     .foot a:hover { text-decoration: underline; }
-    body.invalid .bg {
-      background:
-        radial-gradient(ellipse 70% 80% at 70% 0%, rgba(20,184,166,.1), transparent 55%),
-        linear-gradient(180deg, #06141E 0%, #0A1C28 60%, #0C2430 100%);
-    }
-    body.invalid .scribble { opacity: .22; animation: none; }
+    body.invalid .aurora, body.invalid .aurora2 { opacity: .35; animation: none; }
+    body.invalid .sparkle { animation: none; opacity: .2; }
+    body.invalid .grain { opacity: .08; }
     @media (max-width: 560px) {
       body { padding: 20px 14px; }
       .card { padding: 32px 20px 24px; border-radius: 20px; }
-      .s1, .s2, .s3, .s4 { width: 120px; opacity: .35; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .scribble { animation: none; }
+      .aurora, .aurora2, .sparkle { animation: none; }
+      .sparkle { opacity: .45; }
     }
   </style>
 </head>
 <body>
-  <div class="bg" aria-hidden="true"></div>
-  <canvas id="fx" aria-hidden="true"></canvas>
-  <svg class="scribble s1" viewBox="0 0 220 70" aria-hidden="true"><path d="M8 48c22-28 42 18 68-8 22-22 38-32 86-6" stroke-width="2.2"/><path d="M28 58h72" stroke-width="1.6" opacity=".65"/></svg>
-  <svg class="scribble s2" viewBox="0 0 180 60" aria-hidden="true"><path d="M6 34c18-22 36 14 58-6 20-18 40-8 70 4" stroke-width="2"/></svg>
-  <svg class="scribble s3" viewBox="0 0 200 60" aria-hidden="true"><path d="M10 38c28-24 44 20 74-4 26-20 48-22 96 6" stroke-width="2.1"/><path d="M40 50h64" stroke-width="1.5" opacity=".6"/></svg>
-  <svg class="scribble s4" viewBox="0 0 240 70" aria-hidden="true"><path d="M12 44c26-32 58 22 92-10 28-26 54-8 120 8" stroke-width="2.3"/></svg>
+  <div class="scene" aria-hidden="true">
+    <div class="aurora"></div>
+    <div class="aurora2"></div>
+    <div class="vignette"></div>
+  </div>
+  <span class="sparkle" style="left:12%; top:18%; animation-delay:-.4s"></span>
+  <span class="sparkle" style="left:22%; top:62%; width:2px; height:2px; animation-delay:-1.6s; animation-duration:4.2s"></span>
+  <span class="sparkle" style="left:8%; top:42%; animation-delay:-2.2s"></span>
+  <span class="sparkle" style="left:78%; top:16%; animation-delay:-.8s"></span>
+  <span class="sparkle" style="left:86%; top:38%; width:2px; height:2px; animation-delay:-2.8s; animation-duration:3.2s"></span>
+  <span class="sparkle" style="left:72%; top:72%; animation-delay:-1.1s"></span>
+  <span class="sparkle" style="left:90%; top:64%; width:2px; height:2px; animation-delay:-3s"></span>
+  <span class="sparkle" style="left:18%; top:80%; animation-delay:-2.5s; animation-duration:4.8s"></span>
+  <span class="sparkle" style="left:48%; top:10%; width:2px; height:2px; animation-delay:-1.9s"></span>
+  <span class="sparkle" style="left:58%; top:86%; animation-delay:-.2s"></span>
+  <span class="sparkle" style="left:34%; top:14%; animation-delay:-3.4s; width:2px; height:2px"></span>
+  <span class="sparkle" style="left:94%; top:24%; animation-delay:-.6s"></span>
+  <svg class="grain" aria-hidden="true">
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" seed="8" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter>
+    <rect width="100%" height="100%" filter="url(#grain)"></rect>
+  </svg>
   <main class="wrap">
     <div class="card">
       <a class="brand" href="/" aria-label="${BRAND_NAME}">
@@ -144,67 +175,12 @@ export function confirmedPageHtml() {
   </main>
   <script>
     const panel = document.getElementById('panel')
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
     function esc(s) {
       return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
     }
     function emailOk(v) { return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(String(v || '').trim()) }
     function paramsFrom(str) { return new URLSearchParams(String(str || '').replace(/^[?#]/, '')) }
-
-    function burst() {
-      if (reduce) return
-      const canvas = document.getElementById('fx')
-      const ctx = canvas.getContext('2d')
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      const size = () => {
-        canvas.width = innerWidth * dpr
-        canvas.height = innerHeight * dpr
-        canvas.style.width = innerWidth + 'px'
-        canvas.style.height = innerHeight + 'px'
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      }
-      size()
-      window.addEventListener('resize', size)
-      const colors = ['#14C4B0','#5EEAD4','#99F6E4','#F8FAFC','#F59E0B','#2DD4BF','#A7F3D0','#5EEAD4']
-      const cx = innerWidth / 2, cy = Math.min(innerHeight * 0.32, 280)
-      const bits = Array.from({ length: 130 }, (_, i) => {
-        const a = Math.random() * Math.PI * 2
-        const sp = 3.2 + Math.random() * 9
-        return {
-          x: cx, y: cy,
-          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 3.5,
-          w: 4 + Math.random() * 7, h: 6 + Math.random() * 10,
-          rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.28,
-          color: colors[i % colors.length],
-          circle: Math.random() < 0.28,
-          a: 1, g: 0.11 + Math.random() * 0.08
-        }
-      })
-      let n = 0
-      const tick = () => {
-        n++
-        ctx.clearRect(0, 0, innerWidth, innerHeight)
-        let live = false
-        for (const p of bits) {
-          p.x += p.vx; p.y += p.vy; p.vy += p.g; p.vx *= 0.992; p.rot += p.vr
-          if (n > 70) p.a -= 0.014
-          if (p.a <= 0) continue
-          live = true
-          ctx.save()
-          ctx.globalAlpha = Math.max(0, p.a)
-          ctx.translate(p.x, p.y)
-          ctx.rotate(p.rot)
-          ctx.fillStyle = p.color
-          if (p.circle) { ctx.beginPath(); ctx.ellipse(0, 0, p.w / 2, p.h / 2, 0, 0, Math.PI * 2); ctx.fill() }
-          else ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h)
-          ctx.restore()
-        }
-        if (live) requestAnimationFrame(tick)
-        else ctx.clearRect(0, 0, innerWidth, innerHeight)
-      }
-      requestAnimationFrame(tick)
-    }
 
     async function api(path, opt) {
       opt = opt || {}
@@ -337,7 +313,6 @@ export function confirmedPageHtml() {
         return
       }
       renderSuccess(email, sessionOn)
-      burst()
     }
 
     start()

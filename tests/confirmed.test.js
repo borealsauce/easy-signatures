@@ -50,6 +50,9 @@ test('email confirmation lands on a celebratory page', async (t) => {
   assert.match(html, /prefers-reduced-motion/)
   assert.match(html, /Resend confirmation/)
   assert.match(html, /Go to my dashboard/)
+  assert.match(html, /class="aurora"/)
+  assert.match(html, /class="sparkle"/)
+  assert.doesNotMatch(html, /scribble|function burst/)
 
   const bad = await fetch(base + '/auth/verify')
   assert.equal(bad.status, 200)
