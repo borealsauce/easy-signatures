@@ -19,9 +19,9 @@ body.marketing main { max-width: none; margin: 0; padding: 0; }
   background-size: 18px 18px;
   mask-image: radial-gradient(ellipse 80% 80% at 50% 20%, #000 20%, transparent 75%);
 }
-.mkt header nav { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; width: min(1120px, calc(100% - 32px)); margin: 0 auto; height: 68px; }
-.mkt .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 21px; letter-spacing: -0.03em; color: #F8FAFC; flex-shrink: 0; white-space: nowrap; }
-.mkt .logo-mark { width: 32px; height: 32px; flex-shrink: 0; display: block; }
+.mkt header nav { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; width: min(1120px, calc(100% - 32px)); margin: 0 auto; height: 76px; }
+.mkt .logo { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 27px; letter-spacing: -0.03em; color: #F8FAFC; flex-shrink: 0; white-space: nowrap; }
+.mkt .logo-mark { width: 42px; height: 42px; flex-shrink: 0; display: block; }
 .mkt .nav-links { display: flex; align-items: center; gap: 22px; font-size: 14px; font-weight: 500; color: rgba(248,250,252,0.82); }
 .mkt header nav .nav-links { position: absolute; left: 50%; transform: translateX(-50%); }
 .mkt .btn { display: inline-flex; align-items: center; justify-content: center; height: 38px; padding: 0 16px; border-radius: 999px; font-size: 13.5px; font-weight: 600; border: 0; cursor: pointer; font-family: inherit; }
@@ -132,6 +132,8 @@ body.marketing main { max-width: none; margin: 0; padding: 0; }
 @media (max-width: 980px) {
   .mkt header nav .nav-links { position: static; transform: none; flex-wrap: wrap; justify-content: flex-end; }
   .mkt header nav { height: auto; padding: 14px 0; gap: 10px; }
+  .mkt .logo { font-size: 24px; gap: 11px; }
+  .mkt .logo-mark { width: 38px; height: 38px; }
   .mkt h1 { font-size: 40px; }
   .mkt .hero { padding-bottom: 48px; }
   .mkt .demo { flex-direction: column; align-items: stretch; gap: 12px; margin-top: 20px; width: min(680px, calc(100% - 32px)); }
@@ -148,12 +150,12 @@ body.marketing main { max-width: none; margin: 0; padding: 0; }
   .mkt h1 { font-size: 34px; }
   .mkt .plan .amt { font-size: 36px; }
   .mkt .foot { flex-direction: column; align-items: flex-start; }
-  .mkt .logo { font-size: 18px; gap: 8px; }
-  .mkt .logo-mark { width: 28px; height: 28px; }
+  .mkt .logo { font-size: 23px; gap: 10px; }
+  .mkt .logo-mark { width: 36px; height: 36px; }
 }
 @media (max-width: 400px) {
-  .mkt .logo { font-size: 16px; gap: 7px; }
-  .mkt .logo-mark { width: 26px; height: 26px; }
+  .mkt .logo { font-size: 20px; gap: 8px; }
+  .mkt .logo-mark { width: 32px; height: 32px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .mkt .drag-float { animation: none; transform: translate(200px, 110px) rotate(-4deg); }
