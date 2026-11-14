@@ -264,7 +264,7 @@ function signup() {
   <label class="f">Full name</label><input id="nm" autocomplete="name" style="width:100%">
   <label class="f">Email</label><input id="em" type="email" autocomplete="email" style="width:100%">
   <label class="f">Password</label><input id="pw" type="password" autocomplete="new-password" style="width:100%">
-  <label class="f">Promo code (optional)</label><input id="pc" autocomplete="off" style="width:100%;text-transform:uppercase" placeholder="e.g. VIP100">
+  <label class="f">Promo code (optional)</label><input id="pc" autocomplete="off" style="width:100%;text-transform:uppercase" placeholder="Enter code">
   <br><br><button class="p" id="go">Create account</button><div id="smsg"></div>
   <p><a href="#/login">I already have an account</a></p></div>`
   $('#go').onclick = async () => {
@@ -947,7 +947,7 @@ function settings() {
   <div class="card" style="border-top:5px solid ${S.brand.color || '#0f766e'};margin-top:10px">${S.brand.logoUrl ? `<img src="${esc(S.brand.logoUrl)}" alt="" style="height:28px;max-width:140px;object-fit:contain;vertical-align:middle;margin-right:8px">` : ''}<b>${esc(S.brand.company || 'Your company')}</b> sent you a document</div>
   <p style="margin-top:16px"><button id="portal">Receipts</button></p><p class="note">${esc(meterText())}</p></div>
   <div class="card" id="promo"><h3>Promo code</h3>${(S.usage?.promoCodes || []).map(c => `<p>${esc(c.code)}: ${c.active ? `${c.remaining} of ${c.granted} free documents left` : 'this code has been turned off'}</p>`).join('')}
-  <label class="f">Have a code?</label><div class="row"><input id="pcode" placeholder="e.g. VIP100" style="text-transform:uppercase;max-width:200px"><button class="p" id="pgo">Apply</button></div><div id="pmsg"></div></div>
+  <label class="f">Have a code?</label><div class="row"><input id="pcode" placeholder="Enter code" style="text-transform:uppercase;max-width:200px"><button class="p" id="pgo">Apply</button></div><div id="pmsg"></div></div>
   <div class="card"><h3>Reminders</h3><label class="f">Default automatic reminders for new documents</label>${remindSelect('rdef', S.me.reminderDefault ?? 3, 'style="width:100%"')}
   <p class="note">Signers who haven’t signed get a reminder on this schedule, up to 5 times. You can change it on each document.</p>
   <label class="f" style="margin-top:12px">Email me a follow-up about documents still waiting</label>${remindSelect('rnud', S.me.senderNudgeDays ?? 0, 'style="width:100%"')}
