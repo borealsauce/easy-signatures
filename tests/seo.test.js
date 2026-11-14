@@ -35,9 +35,12 @@ test('SEO pages are server-rendered with unique meta, canonical, JSON-LD, and ar
     }
     for (const legal of ['/privacy', '/terms']) assert.match(await (await fetch(base + legal)).text(), /Last updated Nov 14, 2026/)
     assert.match(await (await fetch(base + '/')).text(), /href="\/privacy"/)
+    const privacyHtml = await (await fetch(base + '/privacy')).text()
+    for (const re of [/CCPA\/CPRA/, /Right to delete/, /Data processing summary/, /<b>Vercel<\/b>/, /<b>Supabase<\/b>/, /<b>Resend<\/b>/, /<b>Stripe<\/b>/, /18 and older/]) assert.match(privacyHtml, re)
     const terms = await (await fetch(base + '/terms')).text()
     assert.match(terms, /Acceptance of Terms/)
     assert.match(terms, /greater of \(a\) \$50/)
+    for (const re of [/AAA\) under its Consumer Arbitration Rules/, /Class-action waiver/, /Jury-trial waiver/, /30-day opt-out/, /Small claims/, /laws of the State of California/, /San Diego County/, /No identity verification/, /wills, codicils/, /at least 18 years old/, /Acceptable use and abuse policy/, /DMCA/, /SHA-256/, /Force majeure/, /No waiver/, /Assignment/, /Entire agreement/, /continued access to or use/, /support@easydigitalsignatures\.com/, /applies to claims brought in arbitration, in small claims court/]) assert.match(terms, re)
     assert.match(terms, /six \(6\) months/)
     assert.match(await (await fetch(base + '/signature-generator')).text(), /By using this tool you agree to our/)
     const noTerms = await fetch(base + '/api/auth/signup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'No Terms', email: 'noterms@example.com', password: 'correct-horse' }) })
@@ -46,7 +49,7 @@ test('SEO pages are server-rendered with unique meta, canonical, JSON-LD, and ar
     const ok = await fetch(base + '/api/auth/signup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Yes Terms', email: 'yesterms@example.com', password: 'correct-horse', acceptTerms: true }) })
     assert.equal(ok.status, 201)
     const row = (await ctx.db.query(`select terms_version, terms_accepted_at from profiles where email='yesterms@example.com'`)).rows[0]
-    assert.equal(row.terms_version, '2026-11-14')
+    assert.equal(row.terms_version, '2026-11-14.2')
     assert.ok(row.terms_accepted_at)
     const home = await (await fetch(base + '/')).text()
     assert.match(home, /Use of this site constitutes acceptance of our/)

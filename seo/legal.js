@@ -1,11 +1,13 @@
 // Privacy policy and terms of service. Generic by design; have a lawyer review before relying on them.
 const UPDATED = 'Last updated Nov 14, 2026'
+export const SUPPORT_EMAIL = 'support@easydigitalsignatures.com'
+const MAIL = `<a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>`
 const doc = inner => `<article class="card"><div class="prose"><p class="byline">${UPDATED}</p>${inner}</div></article>`
 
 export const PRIVACY = {
   path: '/privacy',
   title: 'Privacy Policy | Easy Digital Signatures',
-  description: 'How Easy Digital Signatures collects, uses, stores, and deletes personal information and documents, and which service providers process it.',
+  description: 'How Easy Digital Signatures collects, uses, stores, and deletes personal information and documents, which subprocessors handle it, and your California privacy rights.',
   eyebrow: 'Legal', crumb: 'Privacy policy', h1: 'Privacy policy',
   lede: UPDATED,
   compactHero: true, noHeroCta: true, noBottomCta: true,
@@ -29,15 +31,15 @@ export const PRIVACY = {
 <li>To answer support requests and improve the service.</li>
 <li>To meet legal obligations.</li></ul>
 <p>We don’t sell personal information, and we don’t use your documents to train AI models.</p>
-<h2>Service providers (processors)</h2>
-<p>We share information only with providers that help us run the service, under their own terms and security programs:</p>
-<ul><li><b>Supabase:</b> authentication, database, and file storage.</li>
-<li><b>Stripe:</b> payment processing and checkout.</li>
-<li><b>Resend:</b> sending account and signing emails.</li>
-<li><b>Vercel:</b> website hosting, serverless computing, and cookie-free analytics.</li>
-<li><b>xAI:</b> answering questions typed into the help chat (only the chat messages are sent).</li>
-<li><b>Twilio:</b> phone verification by text message, only if that feature is turned on.</li></ul>
-<p>We may also disclose information if required by law, to protect the rights and safety of users or the public, or as part of a sale or transfer of the service.</p>
+<h2>Data processing summary and subprocessors</h2>
+<p>We act as the business (controller) for account data, and process documents and signer data on behalf of the sender who uploads them. We use these subprocessors to run the service, each under its own terms and security program. Data is processed in the United States.</p>
+<div class="tbl-wrap"><table><thead><tr><th>Subprocessor</th><th>Purpose</th><th>Data involved</th></tr></thead><tbody>
+<tr><td><b>Vercel</b></td><td>Website hosting, serverless computing, cookie-free analytics</td><td>Requests, IP addresses, page views, data passing through the app</td></tr>
+<tr><td><b>Supabase</b></td><td>Authentication, database, file storage</td><td>Account details, documents, signing data, audit records</td></tr>
+<tr><td><b>Resend</b></td><td>Sending account, signing, reminder, and completion emails</td><td>Names, email addresses, email content</td></tr>
+<tr><td><b>Stripe</b></td><td>Payment processing and checkout</td><td>Purchase details, billing email, payment card data (handled by Stripe)</td></tr>
+</tbody></table></div>
+<p>We also use <b>xAI</b> to answer questions typed into the help chat (only the chat messages are sent) and <b>Twilio</b> for phone verification by text message, only if that feature is turned on. We may disclose information if required by law, to protect the rights and safety of users or the public, or as part of a sale or transfer of the service.</p>
 <h2>Who can see a document</h2>
 <p>A document is visible to the sender and to the people the sender adds as signers or recipients. Anyone with a document’s verification link can see its name, completion date, and SHA-256 fingerprints, but not its contents.</p>
 <h2>Retention</h2>
@@ -48,69 +50,129 @@ export const PRIVACY = {
 <p>Data is encrypted in transit, signing links use long random tokens, and access to stored documents requires your account or a valid signing link. No system is perfectly secure, so please protect your password and signing links.</p>
 <h2>Your choices and rights</h2>
 <p>You can update your account details, delete drafts and templates, or ask us for a copy, correction, or deletion of your personal information through the <a href="/contact">contact form</a>. Depending on where you live, you may have additional rights under local law; we’ll honor requests as the law requires.</p>
+<h2 id="california">Your California privacy rights (CCPA/CPRA)</h2>
+<p>If you are a California resident, the California Consumer Privacy Act, as amended by the California Privacy Rights Act, gives you these rights, subject to legal exceptions:</p>
+<ul><li><b>Right to know and access:</b> the categories and specific pieces of personal information we collected about you, the sources, the purposes, and the categories of third parties we disclose it to.</li>
+<li><b>Right to delete</b> personal information we collected from you.</li>
+<li><b>Right to correct</b> inaccurate personal information.</li>
+<li><b>Right to opt out of sale or sharing:</b> we don’t sell personal information or share it for cross-context behavioral advertising, and haven’t done so in the past 12 months.</li>
+<li><b>Right to limit use of sensitive personal information:</b> we use account login credentials only to provide the service, and don’t use sensitive personal information to infer characteristics about you.</li>
+<li><b>Right to non-discrimination:</b> we won’t treat you differently for exercising these rights.</li></ul>
+<p><b>Categories we collect</b> (described above): identifiers (name, email, IP address, device identifiers), commercial information (purchases), internet activity (audit and usage events), documents and signatures you provide, and account login credentials. We collect them from you, from senders who add you as a signer, and automatically from your device, for the purposes listed in “How we use information”, and disclose them only to the subprocessors listed above. We keep each category for the periods described in “Retention”.</p>
+<p><b>How to make a request:</b> use our <a href="/contact">contact form</a> or email ${MAIL}. We’ll verify your request by confirming control of your account email, and respond within 45 days (extendable by 45 more days where the law allows). An authorized agent may submit a request with your signed permission, and we may ask you to confirm your identity directly. For documents a sender uploaded, we may refer your request to that sender.</p>
 <h2>Children</h2>
-<p>The service isn’t meant for children under 13 (or the minimum age in your country), and we don’t knowingly collect their information.</p>
+<p>The service is only for people 18 and older. We don’t knowingly collect personal information from anyone under 18, and we’ll delete it if we learn we have.</p>
 <h2>Changes</h2>
 <p>We may update this policy. We’ll change the “Last updated” date and, for significant changes, notify account holders by email or on the site.</p>
 <h2>Contact</h2>
-<p>Questions about privacy? Use our <a href="/contact">contact form</a>.</p>`)
+<p>Questions about privacy? Use our <a href="/contact">contact form</a> or email ${MAIL}.</p>`)
 }
 
 export const TERMS = {
   path: '/terms',
   title: 'Terms of Service | Easy Digital Signatures',
-  description: 'The terms for using Easy Digital Signatures, including electronic consent, acceptable use, credits and refunds, and limitation of liability.',
+  description: 'The terms for using Easy Digital Signatures: acceptance by use, electronic consent, excluded documents, acceptable use, credits and refunds, liability limits, arbitration, and more.',
   eyebrow: 'Legal', crumb: 'Terms of service', h1: 'Terms of service',
   lede: UPDATED,
   compactHero: true, noHeroCta: true, noBottomCta: true,
   body: doc(`<p>These terms govern your use of Easy Digital Signatures at easydigitalsignatures.com (“the service”), operated by the owner of this website (“we”, “us”). These terms apply together with our <a href="/privacy">privacy policy</a>.</p>
 <div class="note" id="acceptance" role="note"><h2 style="margin-top:0">Acceptance of Terms</h2>
-<p><b>By accessing or using this website or any of our services in any way, whether free or paid, you accept these Terms, including the disclaimers, limitation of liability, time limit for claims, and indemnity below.</b> This includes simply visiting the site; using the free signature generator or any other free tool; sending a free document; using an account with free, trial, or promotional credits; signing, reviewing, or declining a document as a signer, even if you never create an account; using our API, webhooks, or other developer features; and buying or using paid credits.</p>
-<p style="margin-bottom:0">If you don’t agree, don’t access or use the site or services. If you use the services on behalf of a business or other organization, you accept these Terms for it and confirm you have authority to do so.</p></div>
+<p><b>By accessing or using this website or any of our services in any way, whether free or paid, you accept these Terms, including the disclaimers, limitation of liability, time limit for claims, indemnity, and arbitration agreement below.</b> This includes simply visiting the site; using the free signature generator or any other free tool; sending a free document; using an account with free, trial, or promotional credits; signing, reviewing, approving, or declining a document as a signer or approver, even if you never create an account; using our API, webhooks, or other developer features; and buying or using paid credits.</p>
+<p>If you don’t agree, don’t access or use the site or services. If you use the services on behalf of a business or other organization, you accept these Terms for it and confirm you have authority to do so.</p>
+<p style="margin-bottom:0"><b>Arbitration notice:</b> Section 19 requires most disputes to be resolved by binding individual arbitration and waives class actions and jury trials. You can opt out within 30 days, as explained in Section 19.</p></div>
 <h2>1. The service</h2>
-<p>The service lets account holders upload documents, place fields, send them to others for electronic signature, and download completed PDFs with an audit certificate. Signers don’t need an account. We may change, add, or remove features over time.</p>
-<h2>2. Consent to do business electronically</h2>
+<p>The service lets account holders upload documents, place fields, send them to others for electronic signature or approval, and download completed PDFs with an audit certificate. Signers don’t need an account. We may change, add, or remove features over time.</p>
+<h2>2. Eligibility</h2>
+<p>You must be at least 18 years old and able to form a binding contract to use the service, including to sign a document. By using the service, you confirm that you meet these requirements. We may close any account we believe belongs to someone under 18.</p>
+<h2>3. Consent to do business electronically</h2>
 <p>By using the service, you agree to receive records, notices, and disclosures electronically and to sign documents with electronic signatures, which you intend to have the same effect as handwritten signatures under the U.S. Electronic Signatures in Global and National Commerce Act (ESIGN) and state laws based on the Uniform Electronic Transactions Act (UETA). Signers confirm this consent on the signing page before they sign.</p>
 <p>To use the service you need a device with a current web browser, an email address, and the ability to view and save PDF files. You may ask the sender of a document for a paper copy, and you may withdraw your consent to electronic signing by not signing, declining the document, or contacting the sender. Withdrawing consent doesn’t affect documents already signed.</p>
-<h2>3. Your responsibilities</h2>
+<h2>4. We are a platform only</h2>
+<ul><li><b>Not a party.</b> We provide software that lets you send and sign documents. We aren’t a party to any document, agreement, or transaction made through the service, and we have no obligations under them.</li>
+<li><b>No legal advice.</b> We don’t provide legal services, legal forms, or legal advice. Guides, templates, and other information on the site are general and aren’t a substitute for advice from a lawyer licensed where you are.</li>
+<li><b>No identity verification.</b> We don’t verify the identity, authority, or capacity of senders, signers, or approvers. An email address or phone number on a document doesn’t confirm who used it.</li>
+<li><b>Enforceability is your responsibility.</b> You alone are responsible for deciding whether electronic signing is appropriate for a document, for following any laws that apply to it, and for whether it is valid and enforceable.</li></ul>
+<h2>5. Documents you may not sign with the service</h2>
+<p>Don’t use the service for documents that the law excludes from electronic signing or that need special formalities, including:</p>
+<ul><li>wills, codicils, and testamentary trusts, and other trusts where electronic signing isn’t allowed;</li>
+<li>family-law documents, such as those for adoption, divorce, child custody, or other family matters;</li>
+<li>court orders, notices, and official court documents, including briefs, pleadings, and other writings required to be executed in connection with court proceedings;</li>
+<li>notices of cancellation or termination of utility services (including water, heat, and power);</li>
+<li>notices of default, acceleration, repossession, foreclosure, or eviction, or the right to cure, under a credit agreement secured by or a rental agreement for a primary residence;</li>
+<li>notices of cancellation or termination of health or life insurance benefits (other than annuities);</li>
+<li>product recall notices and notices of material failure of a product that risks health or safety;</li>
+<li>documents required to accompany the transport or handling of hazardous materials, pesticides, or other toxic or dangerous materials; and</li>
+<li>any other document excluded from electronic signing under ESIGN, UETA as adopted in the relevant state, or other applicable law, or that requires notarization, witnesses, or delivery methods the service doesn’t provide.</li></ul>
+<h2>6. Your responsibilities</h2>
 <ul><li>You’re responsible for the content of documents you send and for getting any consents or disclosures the law requires from your signers.</li>
-<li>Some documents can’t be signed electronically or need extra steps such as notarization, witnesses, or specific delivery methods. Deciding whether electronic signing is appropriate for a document is your responsibility.</li>
 <li>Keep your password and signing links confidential. You’re responsible for activity in your account.</li>
-<li>Give accurate information and use your real name and email address.</li></ul>
-<h2>4. Acceptable use</h2>
+<li>Give accurate information and use your real name and email address.</li>
+<li>Download and keep copies of your completed documents.</li></ul>
+<h2>7. Acceptable use and abuse policy</h2>
 <p>You may not use the service to:</p>
-<ul><li>break any law or help anyone else break it, including fraud, forgery, or impersonation;</li>
+<ul><li>commit or help anyone commit fraud, forgery, or identity theft, or sign or send a document in someone else’s name without their authority;</li>
+<li>impersonate any person or organization, or misrepresent your affiliation with them;</li>
+<li>upload, send, or store illegal content, or content that is defamatory, threatening, harassing, hateful, obscene, or exploits minors;</li>
+<li>infringe anyone’s copyright, trademark, privacy, or other rights;</li>
 <li>send spam, phishing, malware, or documents to people who didn’t expect them;</li>
-<li>upload content that infringes others’ rights or is abusive, harassing, or exploitative;</li>
+<li>break any law or help anyone else break it;</li>
 <li>create multiple accounts or use other tricks to get more free documents, or abuse promo codes;</li>
-<li>probe, overload, scrape, or interfere with the service or its security.</li></ul>
-<p>We may suspend or close accounts and void pending documents that violate these terms.</p>
-<h2>5. Payments, credits, and refunds</h2>
+<li>probe, overload, scrape, reverse engineer, or interfere with the service or its security.</li></ul>
+<p>We may, at our discretion and without notice or refund, investigate suspected violations, remove content, void pending documents, suspend or close accounts, forfeit credits obtained through abuse, and report activity to law enforcement. To report abuse, use our <a href="/contact">contact form</a> or email ${MAIL}.</p>
+<h2>8. Payments, credits, and refunds</h2>
 <ul><li>Your first document may be free, subject to fraud-prevention checks. After that, sending a document uses one credit.</li>
 <li>Credits are sold in packs at the prices shown on the site when you buy. Payments are processed by Stripe. Prices may change, but changes don’t affect credits you already bought.</li>
 <li><b>Credits are non-refundable once used.</b> If you believe you were charged in error, or want to ask about a refund of unused credits, contact us within 30 days of purchase and we’ll review it.</li>
 <li>Credits have no cash value and can’t be transferred between accounts. Promotional credits may be limited, may expire, and may be turned off at any time.</li>
 <li>Voiding, expiring, or declining a sent document doesn’t return its credit, unless the site says otherwise.</li></ul>
-<h2>6. Your content</h2>
+<h2>9. Your content</h2>
 <p>You keep ownership of your documents. You give us permission to store, process, and transmit them only as needed to provide the service. See the <a href="/privacy">privacy policy</a> for retention and deletion.</p>
-<h2>7. Not legal advice</h2>
-<p>We provide software, not legal services. Guides and information on the site are general and aren’t legal advice. We don’t provide legal forms and aren’t a party to the agreements you sign.</p>
-<h2>8. Availability</h2>
-<p>We work to keep the service available, but it may be interrupted for maintenance, outages, or reasons beyond our control. Download and keep copies of your completed documents.</p>
-<h2>9. Disclaimer of warranties</h2>
-<p>This section applies to everyone who uses the site or services, including free, trial, promotional, signer, and API use. The service is provided “as is” and “as available”, without warranties of any kind, express or implied, including merchantability, fitness for a particular purpose, and non-infringement, to the fullest extent the law allows. We don’t warrant that any document signed through the service will be enforceable in every situation.</p>
-<h2>10. Limitation of liability</h2>
-<p>This section applies to every user and every kind of use, whether free or paid, including visitors, users of free tools, free-document and promotional-credit users, signers without an account, and API users. To the fullest extent the law allows, we won’t be liable for any indirect, incidental, special, consequential, or punitive damages, or for lost profits, revenue, data, or business opportunities, arising from your use of the service. Our total liability for all claims relating to the site or services, combined, is limited to the greater of (a) $50 or (b) the amount you paid us in the 12 months before the event giving rise to the claim. If you paid nothing, including if you used only free or promotional features, our total liability is limited to $50. Some places don’t allow these limits, so they may not apply to you.</p>
-<h2>11. Indemnity</h2>
-<p>This section applies to every user, whether free or paid. You agree to defend, indemnify, and hold us harmless from claims, losses, and expenses (including reasonable attorneys’ fees) arising from documents you send, your violation of these terms, or your violation of anyone else’s rights.</p>
-<h2>12. Termination</h2>
-<p>You can stop using the service and ask us to close your account at any time. We may suspend or end access for violations of these terms or to protect the service. Sections that by their nature should survive termination, including payments, disclaimers, limitation of liability, and indemnity, will survive.</p>
-<h2>13. Time limit to bring claims</h2>
-<p>To the fullest extent permitted by law, any claim or cause of action arising out of or relating to the site, the services, or these Terms must be filed within six (6) months after the claim or cause of action arises, or it is permanently barred. If this six-month period is held unenforceable for a particular claim, the claim must be filed within the shortest period permitted by applicable law.</p>
-<h2>14. Severability</h2>
-<p>If any part of these Terms is held invalid or unenforceable, that part will be enforced to the maximum extent permitted and modified only as much as needed to make it enforceable, and the rest of these Terms will remain in full effect.</p>
-<h2>15. Changes</h2>
-<p>We may update these terms. We’ll change the “Last updated” date and, for significant changes, notify account holders. Continuing to use the service after changes take effect means you accept them.</p>
-<h2>16. Contact</h2>
-<p>Questions about these terms? Use our <a href="/contact">contact form</a>.</p>`)
+<h2>10. Copyright complaints (DMCA)</h2>
+<p>We respect intellectual property rights and respond to notices of alleged infringement under the Digital Millennium Copyright Act (17 U.S.C. § 512). Our designated agent for notices is the Copyright Agent, Easy Digital Signatures, at ${MAIL}. A notice must include:</p>
+<ol><li>your physical or electronic signature;</li>
+<li>identification of the copyrighted work you claim is infringed;</li>
+<li>identification of the material you claim is infringing, with enough information for us to locate it;</li>
+<li>your name, address, telephone number, and email address;</li>
+<li>a statement that you have a good-faith belief that the use isn’t authorized by the copyright owner, its agent, or the law; and</li>
+<li>a statement, under penalty of perjury, that the information in your notice is accurate and that you are the copyright owner or authorized to act on the owner’s behalf.</li></ol>
+<p>When we receive a valid notice, we will remove or disable access to the material and notify the user who provided it. That user may send a counter-notice to the same address with their signature, identification of the removed material and where it appeared, a statement under penalty of perjury that they have a good-faith belief it was removed by mistake or misidentification, and their name, address, telephone number, and consent to the jurisdiction of the federal court for their district (or, outside the U.S., any district where we may be found). We may restore the material 10 to 14 business days after receiving a valid counter-notice unless the complaining party tells us it has filed a court action. We will terminate the accounts of repeat infringers in appropriate circumstances. Knowingly false notices or counter-notices may create liability under 17 U.S.C. § 512(f).</p>
+<h2>11. Tamper evidence and audit trail</h2>
+<p>Completed documents include an audit trail of key events (such as sending, viewing, signing, and declining, with timestamps, IP addresses, and browser details) and SHA-256 hash fingerprints that can be used to detect later changes to the file. These features are provided “as is” as supporting evidence only. We don’t guarantee that they will be accepted by any court or other party, that they prove a signer’s identity or intent, or that the records will remain available, so keep your own copies.</p>
+<h2>12. Availability</h2>
+<p>We work to keep the service available, but it may be interrupted for maintenance, outages, or reasons beyond our control.</p>
+<h2>13. Disclaimer of warranties</h2>
+<p>This section applies to everyone who uses the site or services, including free, trial, promotional, signer, and API use. The service is provided “as is” and “as available”, without warranties of any kind, express or implied, including merchantability, fitness for a particular purpose, title, and non-infringement, to the fullest extent the law allows. We don’t warrant that the service will be uninterrupted, secure, or error-free, or that any document signed through the service will be valid or enforceable in any situation.</p>
+<h2>14. Limitation of liability</h2>
+<p>This section applies to every user and every kind of use, whether free or paid, including visitors, users of free tools, free-document and promotional-credit users, signers and approvers without an account, and API users. To the fullest extent the law allows, we won’t be liable for any indirect, incidental, special, consequential, exemplary, or punitive damages, or for lost profits, revenue, data, or business opportunities, arising from your use of the service or any document signed through it, even if we were told they were possible. Our total liability for all claims relating to the site or services, combined, is limited to the greater of (a) $50 or (b) the amount you paid us in the 12 months before the event giving rise to the claim. If you paid nothing, including if you used only free or promotional features, our total liability is limited to $50. Some places don’t allow these limits, so they may not apply to you.</p>
+<h2>15. Indemnity</h2>
+<p>This section applies to every user, whether free or paid. You agree to defend, indemnify, and hold us harmless from claims, losses, and expenses (including reasonable attorneys’ fees) arising from documents you send or sign, your content, your violation of these terms, or your violation of anyone else’s rights.</p>
+<h2>16. Termination</h2>
+<p>You can stop using the service and ask us to close your account at any time. We may suspend or end access for violations of these terms or to protect the service. Sections that by their nature should survive termination, including payments, platform-only terms, disclaimers, limitation of liability, indemnity, the time limit for claims, and dispute resolution, will survive.</p>
+<h2>17. Time limit to bring claims</h2>
+<p>To the fullest extent permitted by law, any claim or cause of action arising out of or relating to the site, the services, or these Terms must be filed within six (6) months after the claim or cause of action arises, or it is permanently barred. This limit applies to claims brought in arbitration, in small claims court, and in any other forum. If this six-month period is held unenforceable for a particular claim, the claim must be filed within the shortest period permitted by applicable law.</p>
+<h2>18. Governing law and venue</h2>
+<p>These Terms and any dispute arising out of or relating to them or the service are governed by the laws of the State of California, without regard to its conflict-of-law rules, except that the Federal Arbitration Act governs Section 19. Any dispute that isn’t subject to arbitration, and any action to compel arbitration or to confirm or vacate an award, must be brought exclusively in the state or federal courts located in San Diego County, California, and you and we consent to the personal jurisdiction of those courts.</p>
+<h2 id="arbitration">19. Dispute resolution: binding arbitration and waivers</h2>
+<p><b>Please read this section carefully. It affects your rights.</b></p>
+<ul><li><b>Arbitration.</b> Except as stated below, you and we agree that any dispute, claim, or controversy arising out of or relating to these Terms, the site, or the service, including questions about the scope or enforceability of this section, will be resolved only by final and binding individual arbitration administered by the American Arbitration Association (AAA) under its Consumer Arbitration Rules then in effect (available at adr.org). Payment of filing, administration, and arbitrator fees will follow those rules. The arbitration may be held by video, phone, or written submissions, or in person in San Diego County, California or the county where you live. The arbitrator may award the same individual relief a court could, but only to the individual party seeking relief and only as needed for that party’s individual claim.</li>
+<li><b>Class-action waiver.</b> You and we may bring claims against each other only in an individual capacity, not as a plaintiff or class member in any purported class, collective, consolidated, or representative proceeding. The arbitrator may not consolidate claims of more than one person or preside over any class or representative proceeding.</li>
+<li><b>Jury-trial waiver.</b> To the extent any dispute proceeds in court rather than arbitration, you and we waive any right to a jury trial.</li>
+<li><b>Small claims.</b> Either party may instead bring an individual claim in small claims court in San Diego County, California or the county where you live, if it qualifies and stays there on an individual basis.</li>
+<li><b>Intellectual property and injunctions.</b> Either party may seek an injunction in court to stop actual or threatened infringement or misuse of intellectual property or unauthorized access to the service.</li>
+<li><b>30-day opt-out.</b> You may opt out of this arbitration agreement by emailing ${MAIL} within 30 days after you first accept these Terms (for example, by first using the site), with the subject line “Arbitration Opt-Out” and your name and the email address you use with the service. Opting out doesn’t affect any other part of these Terms, including the class-action waiver, the jury-trial waiver, and the time limit for claims.</li>
+<li><b>If something is unenforceable.</b> If the class-action waiver is found unenforceable for a claim, that claim (and only that claim) will be decided in court under Section 18, not in arbitration. If any claim for public injunctive relief can’t be arbitrated under applicable law, it will be decided in court after any arbitrable claims are resolved. If any other part of this section is found unenforceable, the rest of it remains in effect.</li>
+<li><b>Changes.</b> If we change this section, the change won’t apply to a dispute we already had notice of before the change took effect.</li></ul>
+<h2>20. Force majeure</h2>
+<p>We aren’t liable for any delay or failure to perform caused by events beyond our reasonable control, including natural disasters, fire, flood, pandemics, war, terrorism, civil unrest, labor disputes, government action, power or internet failures, failures of hosting, email, payment, or other third-party providers, and cyberattacks.</p>
+<h2>21. General terms</h2>
+<ul><li><b>Entire agreement.</b> These Terms, together with our privacy policy and any terms shown at checkout, are the entire agreement between you and us about the service and replace any earlier agreements or statements about it.</li>
+<li><b>No waiver.</b> If we don’t enforce a provision, or delay enforcing it, that doesn’t waive our right to enforce it later.</li>
+<li><b>Assignment.</b> You may not assign or transfer these Terms or your account without our written consent. We may assign or transfer these Terms, in whole or in part, without your consent, including in connection with a merger, acquisition, or sale of the service.</li>
+<li><b>Severability.</b> If any part of these Terms is held invalid or unenforceable, that part will be enforced to the maximum extent permitted and modified only as much as needed to make it enforceable, and the rest of these Terms will remain in full effect.</li>
+<li><b>No third-party beneficiaries.</b> These Terms don’t give rights to anyone other than you and us.</li>
+<li><b>Notices.</b> We may give you notices by email to your account address or by posting them on the site.</li></ul>
+<h2>22. Changes to these terms</h2>
+<p>We may modify these Terms at any time by posting the updated version on this page and changing the “Last updated” date. For significant changes, we’ll also try to notify account holders by email or on the site. Changes take effect when posted unless we say otherwise. Your continued access to or use of the site or services after changes take effect means you accept the updated Terms. If you don’t agree, stop using the site and services.</p>
+<h2>23. Contact</h2>
+<p>Questions about these terms? Use our <a href="/contact">contact form</a> or email ${MAIL}.</p>`)
 }
