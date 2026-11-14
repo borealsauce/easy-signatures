@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createApp } from '../server/app.js'
-import { ROLE_OPTIONS } from '../shared/fields.js'
+import { ROLE_OPTIONS, roleLabel } from '../shared/fields.js'
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
@@ -71,10 +71,11 @@ async function verifiedUser({ email, password = 'correct-horse', name = 'Pat Own
   return { email, auth, ip, device, phone, name }
 }
 
-test('role options describe signer, approver, and CC', () => {
-  assert.deepEqual(ROLE_OPTIONS.map(r => r.value), ['signer', 'approver', 'in-person', 'cc'])
+test('role menu offers only signer and approver', () => {
+  assert.deepEqual(ROLE_OPTIONS.map(r => r.value), ['signer', 'approver'])
   assert.ok(ROLE_OPTIONS.find(r => r.value === 'approver').hint.toLowerCase().includes('no signature'))
-  assert.ok(ROLE_OPTIONS.find(r => r.value === 'cc').hint.toLowerCase().includes('copy'))
+  assert.equal(roleLabel('in-person'), 'In person')
+  assert.equal(roleLabel('cc'), 'CC')
 })
 
 test('approver goes first, needs no fields, and is recorded in the audit trail', { timeout: 60000 }, async t => {
