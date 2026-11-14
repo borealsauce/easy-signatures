@@ -22,7 +22,7 @@ export function createEmail(config, mailbox) {
     mode: config.emailMode,
     async send({ to, subject, html, text, attachments, replyTo }) {
       if (!to) return
-      remember(config, mailbox, { type: 'email', to, subject, replyTo: replyTo || '', text: text || html?.replace(/<[^>]+>/g, ' ').slice(0, 500), url: (html || '').match(/https?:\/\/[^\s"<]+(?:#\/sign\/|\/auth\/|\/verify\/|\/r\/|#\/app|#\/reset\/)[^\s"<]*/)?.[0] || (html || '').match(/https?:\/\/[^\s"<]+/)?.[0] || '' })
+      remember(config, mailbox, { type: 'email', to, subject, replyTo: replyTo || '', text: text || html?.replace(/<[^>]+>/g, ' ').slice(0, 500), url: (html || '').match(/https?:\/\/[^\s"<]+(?:#\/sign\/|\/auth\/|\/verify\/|\/r\/|#\/app|#\/reset\/|#\/team-invite\/)[^\s"<]*/)?.[0] || (html || '').match(/https?:\/\/[^\s"<]+/)?.[0] || '' })
       if (config.emailMode !== 'resend') return
       const body = {
         from: config.emailFrom,

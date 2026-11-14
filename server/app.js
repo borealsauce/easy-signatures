@@ -15,6 +15,10 @@ import {
   verifyEmailToken, resendByEmail, requestPasswordReset, resetPassword, logout, remindAll, setDocReminders, resendFromLink
 } from './service.js'
 import { confirmedPageHtml } from './confirmed-page.js'
+import {
+  teamState, createTeam, renameTeam, transferCredits, inviteToTeam, revokeInvite,
+  acceptInvite, acceptPendingById, removeMember, leaveTeam, setTemplateShare
+} from './teams.js'
 import { adminCreateCode, adminListCodes, adminSetActive, isAdmin, redeemCode } from './promo.js'
 import {
   DISABLED_MESSAGE, adminActivity, adminAdjustCredits, adminDeleteUser, adminHealth, adminIncome, adminListDocuments,
@@ -345,6 +349,36 @@ export async function createApp(env = process.env) {
       if (err.body && err.status) return res.status(err.status).json(err.body)
       throw err
     }
+  }))
+  app.get('/api/team', auth, asyncRoute(async (req, res) => {
+    res.json(await teamState(ctx, req.user))
+  }))
+  app.post('/api/team', auth, asyncRoute(async (req, res) => {
+    res.status(201).json(await createTeam(ctx, req.user, req.body?.name))
+  }))
+  app.patch('/api/team', auth, asyncRoute(async (req, res) => {
+    res.json(await renameTeam(ctx, req.user, req.body?.name))
+  }))
+  app.post('/api/team/credits', auth, asyncRoute(async (req, res) => {
+    res.json(await transferCredits(ctx, req.user, req.body?.amount))
+  }))
+  app.post('/api/team/invites', auth, asyncRoute(async (req, res) => {
+    res.status(201).json(await inviteToTeam(ctx, req.user, req.body?.email, req.body?.role))
+  }))
+  app.delete('/api/team/invites/:id', auth, asyncRoute(async (req, res) => {
+    res.json(await revokeInvite(ctx, req.user, req.params.id))
+  }))
+  app.post('/api/team/invites/accept', auth, asyncRoute(async (req, res) => {
+    res.json(req.body?.token ? await acceptInvite(ctx, req.user, req.body.token) : await acceptPendingById(ctx, req.user, req.body?.id))
+  }))
+  app.post('/api/team/leave', auth, asyncRoute(async (req, res) => {
+    res.json(await leaveTeam(ctx, req.user))
+  }))
+  app.delete('/api/team/members/:id', auth, asyncRoute(async (req, res) => {
+    res.json(await removeMember(ctx, req.user, req.params.id))
+  }))
+  app.post('/api/documents/:id/share', auth, asyncRoute(async (req, res) => {
+    res.json(await setTemplateShare(ctx, req.user, req.params.id, !!req.body?.share))
   }))
   app.get('/api/brand/:userId/logo', asyncRoute(async (req, res) => {
     const file = await brandLogo(ctx, req.params.userId)

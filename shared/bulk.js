@@ -100,13 +100,21 @@ export function parseBulkRecipients(text) {
 }
 
 export function bulkCapacity(usage = {}) {
+  if (usage.billTeam) {
+    const team = Number(usage.teamCredits || 0)
+    return { credits: 0, promo: 0, free: 0, team, total: team }
+  }
   const credits = Number(usage.credits || 0)
   const promo = Number(usage.promoCredits || 0)
   const free = usage.freeAvailable ? 1 : 0
-  return { credits, promo, free, total: credits + promo + free }
+  return { credits, promo, free, team: 0, total: credits + promo + free }
 }
 
 export function allowanceLabel(usage) {
+  if (usage.billTeam) {
+    const n = Number(usage.teamCredits || 0)
+    return n ? `${n} team credit${n === 1 ? '' : 's'}` : 'no team credits left'
+  }
   const cap = bulkCapacity(usage)
   const parts = [
     cap.free ? '1 free document' : '',

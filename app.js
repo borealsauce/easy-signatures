@@ -138,13 +138,14 @@ function sortable(t) {
 function table(heads, rows) { return `<div class="tw"><table><thead><tr>${heads.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>` }
 function afterRender() { $$('table').forEach(sortable) }
 
-const NAV = [['#/app', 'Dashboard'], ['#/templates', 'Templates'], ['#/links', 'Signing links'], ['#/bulk', 'Bulk send'], ['#/proposal', 'Proposals'], ['#/developer', 'Developer'], ['#/settings', 'Settings'], ['#/pricing', 'Pricing']]
+const NAV = [['#/app', 'Dashboard'], ['#/templates', 'Templates'], ['#/links', 'Signing links'], ['#/bulk', 'Bulk send'], ['#/proposal', 'Proposals'], ['#/team', 'Team'], ['#/developer', 'Developer'], ['#/settings', 'Settings'], ['#/pricing', 'Pricing']]
 function meter() {
   const u = S.usage
   if (!u) return ''
   const bits = []
   if (u.promoCredits) bits.push(`${u.promoCredits} promo doc${u.promoCredits === 1 ? '' : 's'}`)
   if (u.credits) bits.push(`${u.credits} credit${u.credits === 1 ? '' : 's'}`)
+  if (u.teamCredits) bits.push(`${u.teamCredits} team credit${u.teamCredits === 1 ? '' : 's'}`)
   if (u.freeAvailable) bits.push('1 free document')
   if (!bits.length) bits.push('Buy documents')
   return `<a class="meter" href="#/pricing">${bits.join(' · ')}</a>`
@@ -165,7 +166,7 @@ async function route() {
   const hash = location.hash || '#/'
   const pricingAnchor = hash === '#pricing'
   const [, r, a] = (pricingAnchor ? '#/' : hash).split('/')
-  const pub = ['', 'pricing', 'login', 'signup', 'sign', 'form', 'phone', 'contact', 'forgot', 'reset']
+  const pub = ['', 'pricing', 'login', 'signup', 'sign', 'form', 'phone', 'contact', 'forgot', 'reset', 'team-invite']
   document.body.classList.toggle('marketing', (r || '') === '')
   if (S.me) { await flushNow(); activeId = null; if (r !== 'sign') await hydrate() }
   nav()
@@ -173,7 +174,7 @@ async function route() {
   if (!S.me && !pub.includes(r || '')) { location.hash = '#/login'; return }
   const R = {
     '': landing, pricing, login, signup, phone, contact, forgot, reset: () => resetPw(a), app: dashboard, new: newDoc, edit: () => editor(a),
-    sign: () => signToken(a), inperson: () => inperson(a), cert: () => cert(a), templates, links, form: () => publicForm(a), bulk, proposal, developer, settings
+    sign: () => signToken(a), inperson: () => inperson(a), cert: () => cert(a), templates, links, form: () => publicForm(a), bulk, proposal, team, 'team-invite': () => teamInvite(a), developer, settings
   }
   await (R[r] || landing)()
   if (pricingAnchor) document.getElementById('pricing')?.scrollIntoView()
@@ -230,6 +231,8 @@ function login() {
     setToken(res.json.token)
     await hydrate()
     if (sessionStorage.getItem('eds_buy')) { await resumeBuy(); return }
+    const invite = sessionStorage.getItem('eds_team_invite')
+    if (invite) { sessionStorage.removeItem('eds_team_invite'); location.hash = '#/team-invite/' + invite; return }
     location.hash = (!S.smsEnabled || S.usage?.phoneVerified) ? '#/app' : '#/phone'
   }
 }
@@ -793,8 +796,15 @@ async function cert(id) {
 }
 
 function templates() {
-  V.innerHTML = `<div class="row"><h1>Templates</h1><span class="sp"></span><button class="p" onclick="tplBuilder()">+ Create template</button></div><p style="color:var(--mut)">Templates have roles, not people. You build them from a blank page or your own file. We don’t ship prebuilt legal forms.</p>
-  ${S.templates.length ? table(['Name', 'Roles', 'Fields', 'Actions'], S.templates.map(t => `<tr><td>${esc(t.name)}</td><td>${t.signers.map(s => esc(s.name)).join(', ')}</td><td>${(t.fields || []).length}</td><td><a href="javascript:fromTemplate('${t.id}')">Use</a> · <a href="javascript:editTpl('${t.id}')">Edit</a> · <a href="javascript:mkLink('${t.id}')">Signing link</a> · <a href="javascript:delTpl('${t.id}')">Delete</a></td></tr>`)) : `<div class="card" style="text-align:center;padding:48px 20px"><h2>No templates yet</h2><p style="color:var(--mut)">Upload your PDF or start from a blank page, place fields for each role, and save.</p><button class="p lg" onclick="tplBuilder()">Create template</button></div>`}`
+  const mine = t => !t.ownerId || t.ownerId === S.me.id
+  V.innerHTML = `<div class="row"><h1>Templates</h1><span class="sp"></span><button class="p" onclick="tplBuilder()">+ Create template</button></div><p style="color:var(--mut)">Templates have roles, not people. You build them from a blank page or your own file. We don’t ship prebuilt legal forms.${S.usage?.team ? ' Share a template with your team so anyone can use it, billed from the shared credit pool.' : ''}</p>
+  ${S.templates.length ? table(['Name', 'Roles', 'Fields', 'Actions'], S.templates.map(t => `<tr><td>${esc(t.name)}${t.shared ? ' <span class="pill s-draft">team</span>' : ''}${!mine(t) ? ' <span class="note">shared with you</span>' : ''}</td><td>${t.signers.map(s => esc(s.name)).join(', ')}</td><td>${(t.fields || []).length}</td><td><a href="javascript:fromTemplate('${t.id}')">Use</a>${mine(t) ? ` · <a href="javascript:editTpl('${t.id}')">Edit</a> · <a href="javascript:mkLink('${t.id}')">Signing link</a>${S.usage?.team ? ` · <a href="javascript:shareTpl('${t.id}', ${t.shared ? 'false' : 'true'})">${t.shared ? 'Unshare' : 'Share with team'}</a>` : ''} · <a href="javascript:delTpl('${t.id}')">Delete</a>` : ''}</td></tr>`)) : `<div class="card" style="text-align:center;padding:48px 20px"><h2>No templates yet</h2><p style="color:var(--mut)">Upload your PDF or start from a blank page, place fields for each role, and save.</p><button class="p lg" onclick="tplBuilder()">Create template</button></div>`}`
+}
+async function shareTpl(id, share) {
+  const r = await api('/api/documents/' + id + '/share', { method: 'POST', body: { share } })
+  if (!r.ok) return toast(r.json?.message || 'Could not update sharing')
+  toast(share ? 'Shared with your team' : 'Stopped sharing')
+  await hydrate(); templates()
 }
 async function mkLink(tid) {
   const res = await api('/api/links', { method: 'POST', body: { templateId: tid } })
@@ -823,7 +833,7 @@ function bulk() {
   let recipients = []
   let issues = []
   const refresh = () => {
-    const cost = bulkCostSummary(recipients.length, S.usage)
+    const tid = $('#bt')?.value; const tpl = S.templates.find(x => x.id === tid); const cost = bulkCostSummary(recipients.length, { ...S.usage, billTeam: !!(tpl && tpl.teamId) })
     const have = allowanceLabel(S.usage)
     $('#berr').innerHTML = issues.map(e => `<p class="banner">${esc(e.message)}</p>`).join('')
     if (!recipients.length) {
@@ -991,6 +1001,82 @@ async function developer() {
     toast('Webhook deleted'); developer()
   })
 }
+async function team() {
+  const r = await api('/api/team')
+  const team = r.json?.team
+  const pending = r.json?.pendingInvites || []
+  if (!r.ok) return toast(r.json?.message || 'Could not load your team')
+  if (!team) {
+    V.innerHTML = `<h1>Team</h1><p style="color:var(--mut)">Share templates and a credit pool with coworkers. Each person still has their own account and sent documents.</p>
+    ${pending.length ? `<div class="card"><h3>Invites waiting for you</h3>${pending.map(p => `<p><b>${esc(p.name)}</b> invited you as ${esc(p.role)}. <button class="p" data-join="${p.id}">Join</button></p>`).join('')}</div>` : ''}
+    <div class="card"><h3>Create a team</h3><label class="f">Team name</label><input id="tn" placeholder="e.g. Northwind Legal" style="max-width:280px"><p style="margin-top:12px"><button class="p" id="tgo">Create team</button></p></div>`
+    $('#tgo').onclick = async () => {
+      const res = await api('/api/team', { method: 'POST', body: { name: $('#tn').value } })
+      if (!res.ok) return toast(res.json?.message || 'Could not create the team')
+      toast('Team created'); team()
+    }
+    $$('[data-join]').forEach(el => el.onclick = async () => {
+      const res = await api('/api/team/invites/accept', { method: 'POST', body: { id: el.dataset.join } })
+      if (!res.ok) return toast(res.json?.message || 'Could not accept')
+      toast('You’re on the team'); team()
+    })
+    return
+  }
+  const manager = team.role === 'owner' || team.role === 'admin'
+  V.innerHTML = `<h1>${esc(team.name)}</h1><p style="color:var(--mut)">Shared pool: <b>${team.credits}</b> credit${team.credits === 1 ? '' : 's'}. You’re ${esc(team.role)}.</p>
+  <div class="card"><h3>Credits</h3><p class="note">Move credits from your personal balance into the shared pool, or back out if you’re an owner or admin. Purchases still go to your own account first.</p>
+    <div class="row"><input id="camt" type="number" min="1" value="1" style="max-width:100px"><button class="p" id="cin">Move in</button>${manager ? '<button id="cout">Move back to me</button>' : ''}</div>
+  </div>
+  <div class="card"><h3>Members</h3>${table(['Name', 'Email', 'Role', ''], team.members.map(m => `<tr><td>${esc(m.name)}</td><td>${esc(m.email)}</td><td>${esc(m.role)}</td><td>${manager && m.role !== 'owner' && m.id !== S.me.id ? `<a href="javascript:void 0" data-rm="${m.id}">Remove</a>` : ''}</td></tr>`))}</div>
+  ${manager ? `<div class="card"><h3>Invite someone</h3><div class="row"><input id="iem" type="email" placeholder="coworker@example.com" style="max-width:260px"><select id="irole"><option value="member">Member</option><option value="admin">Admin</option></select><button class="p" id="igo">Send invite</button></div>
+    ${team.invites?.length ? table(['Email', 'Role', 'Expires', ''], team.invites.map(i => `<tr><td>${esc(i.email)}</td><td>${esc(i.role)}</td><td>${fmt(i.expires)}</td><td><a href="javascript:void 0" data-rev="${i.id}">Revoke</a></td></tr>`)) : '<p class="note">No pending invites.</p>'}</div>` : ''}
+  <p><button id="tleave">${team.role === 'owner' ? 'Delete team' : 'Leave team'}</button></p>`
+  const move = async (amount) => {
+    const res = await api('/api/team/credits', { method: 'POST', body: { amount } })
+    if (!res.ok) return toast(res.json?.message || 'Could not move credits')
+    toast('Credits updated'); await hydrate(); team()
+  }
+  $('#cin').onclick = () => move(Number($('#camt').value || 0))
+  const cout = $('#cout'); if (cout) cout.onclick = () => move(-Number($('#camt').value || 0))
+  const igo = $('#igo')
+  if (igo) igo.onclick = async () => {
+    const res = await api('/api/team/invites', { method: 'POST', body: { email: $('#iem').value, role: $('#irole').value } })
+    if (!res.ok) return toast(res.json?.message || 'Could not send the invite')
+    toast('Invite sent'); team()
+  }
+  $$('[data-rm]').forEach(el => el.onclick = async () => {
+    if (!confirm('Remove this person from the team?')) return
+    const res = await api('/api/team/members/' + el.dataset.rm, { method: 'DELETE' })
+    if (!res.ok) return toast(res.json?.message || 'Could not remove')
+    toast('Removed'); team()
+  })
+  $$('[data-rev]').forEach(el => el.onclick = async () => {
+    const res = await api('/api/team/invites/' + el.dataset.rev, { method: 'DELETE' })
+    if (!res.ok) return toast(res.json?.message || 'Could not revoke')
+    toast('Invite revoked'); team()
+  })
+  $('#tleave').onclick = async () => {
+    if (!confirm(team.role === 'owner' ? 'Delete this team? Shared templates will become private again.' : 'Leave this team?')) return
+    const res = await api('/api/team/leave', { method: 'POST' })
+    if (!res.ok) return toast(res.json?.message || 'Could not leave')
+    toast(team.role === 'owner' ? 'Team deleted' : 'You left the team'); await hydrate(); team()
+  }
+}
+async function teamInvite(token) {
+  if (!S.me) {
+    if (token) sessionStorage.setItem('eds_team_invite', token)
+    V.innerHTML = `<div class="card" style="max-width:460px;margin:auto;text-align:center"><h1>You’re invited</h1><p>Log in or create an account with the email this invite was sent to, then we’ll add you to the team.</p><p><a class="btn p" href="#/login">Log in</a> <a class="btn" href="#/signup">Create account</a></p></div>`
+    return
+  }
+  const r = await api('/api/team/invites/accept', { method: 'POST', body: { token } })
+  if (!r.ok) {
+    V.innerHTML = `<div class="card" style="max-width:460px;margin:auto;text-align:center"><h1>Invite</h1><p>${esc(r.json?.message || 'That invite could not be accepted.')}</p><p><a class="btn p" href="#/team">Go to Team</a></p></div>`
+    return
+  }
+  sessionStorage.removeItem('eds_team_invite')
+  toast('You’re on the team')
+  location.hash = '#/team'
+}
 function settings() {
   const phoneLine = S.smsEnabled ? `<p>${S.usage?.phoneVerified ? 'Phone verified ' + esc(S.usage.phone) : 'Phone not verified'}</p><p><a href="#/phone">Update phone</a></p>` : ''
   V.innerHTML = `<h1>Settings</h1><div class="grid3" style="grid-template-columns:1fr 1fr"><div class="card"><h3>Account</h3><p>${esc(S.me.name)}<br>${esc(S.me.email)}</p>${phoneLine}<button id="out">Log out</button>
@@ -1054,7 +1140,9 @@ function meterText() {
   if (promo) return [promo, u.freeAvailable ? '1 free document' : '', u.credits ? `${u.credits} credits` : ''].filter(Boolean).join(', then ')
   if (u.freeAvailable && u.credits) return `1 free document, then ${u.credits} credits`
   if (u.freeAvailable) return '1 free document ready'
-  return `${u.credits || 0} document credits`
+  const team = u.teamCredits ? `${u.teamCredits} team credit${u.teamCredits === 1 ? '' : 's'}` : ''
+  const personal = `${u.credits || 0} document credits`
+  return team ? `${personal}, plus ${team}` : personal
 }
 function adoptPath() {
   const map = { '/contact': '#/contact', '/signup': '#/signup', '/login': '#/login', '/pricing': '#pricing', '/app': '#/app' }

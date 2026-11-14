@@ -13,6 +13,7 @@ import { htmlEmail, isVoipLine } from './providers.js'
 import { DISABLED_MESSAGE } from './admin.js'
 import { checkCode, consumePromo, normalizeCode, promoUsage, redeemCode } from './promo.js'
 import { fireWebhooks } from './webhooks.js'
+import { membershipFor, consumeTeamCredit, canUseTemplate, sharedTemplates } from './teams.js'
 
 export const REMIND_OPTIONS = [0, 2, 3, 7]
 export const MAX_AUTO_REMINDERS = 5
@@ -132,6 +133,9 @@ function mapDoc(row, signers, events, secret, reveal) {
     expiresAt: row.sent_at ? new Date(new Date(row.sent_at).getTime() + Number(row.expires_days) * 864e5).toISOString() : null,
     completed: iso(row.completed_at),
     billingSource: row.billing_source,
+    ownerId: row.owner_id,
+    teamId: row.team_id || null,
+    shared: !!row.team_id,
     fields: asJson(row.fields, []),
     comments: asJson(row.comments, []),
     signers: signers.map(s => mapSigner(s, secret, reveal)),
@@ -548,12 +552,15 @@ export async function usageFor(ctx, user, device) {
     limit: ctx.config.ipFreeLimit,
     phoneRequired: phoneRequired(ctx)
   })
+  const membership = await membershipFor(ctx.db.query.bind(ctx.db), user.id)
   return {
     freeAvailable: !!free.ok,
     freeReason: free.ok ? null : free.error,
     freeMessage: free.ok ? 'Your free document is ready to send.' : free.message,
     credits: num(ent?.credits),
     ...(await promoUsage(ctx.db.query.bind(ctx.db), user.id)),
+    teamCredits: membership?.credits || 0,
+    team: membership ? { id: membership.teamId, name: membership.name, role: membership.role, credits: membership.credits } : null,
     emailVerified: !!user.email_verified_at,
     phoneVerified: !!user.phone_verified_at,
     phone: user.phone_e164 || '',
@@ -617,12 +624,30 @@ export async function stateFor(ctx, user, device) {
     evBy.get(e.document_id).push(e)
   }
   const mapped = docs.rows.map(d => mapDoc(d, byDoc.get(d.id) || [], evBy.get(d.id) || [], ctx.config.jwtSecret, true))
+  const shared = await sharedTemplates(ctx.db.query.bind(ctx.db), user.id)
+  let sharedMapped = []
+  if (shared.length) {
+    const sids = shared.map(d => d.id)
+    const sharedSigners = await loadByIds(ctx.db.query.bind(ctx.db), `select * from signers where document_id in (__IN__) order by sort_index`, sids)
+    const sharedEvents = await loadByIds(ctx.db.query.bind(ctx.db), `select * from audit_events where document_id in (__IN__) order by created_at`, sids)
+    const sBy = new Map()
+    for (const s of sharedSigners) {
+      if (!sBy.has(s.document_id)) sBy.set(s.document_id, [])
+      sBy.get(s.document_id).push(s)
+    }
+    const eBy = new Map()
+    for (const e of sharedEvents) {
+      if (!eBy.has(e.document_id)) eBy.set(e.document_id, [])
+      eBy.get(e.document_id).push(e)
+    }
+    sharedMapped = shared.map(d => mapDoc(d, sBy.get(d.id) || [], eBy.get(d.id) || [], ctx.config.jwtSecret, true))
+  }
   const links = await ctx.db.query(`select * from signing_links where owner_id=$1 order by created_at desc`, [user.id])
   return {
     me: publicUser(user),
     usage: await usageFor(ctx, user, device),
     documents: mapped.filter(d => !d.tpl),
-    templates: mapped.filter(d => d.tpl),
+    templates: mapped.filter(d => d.tpl).concat(sharedMapped),
     links: links.rows.map(l => ({
       id: l.id,
       name: l.name,
@@ -721,6 +746,14 @@ async function ownDoc(q, userId, id) {
   return row.rows[0]
 }
 
+async function loadAccessibleTemplate(q, userId, id) {
+  const row = await q(`select * from documents where id=$1`, [id])
+  const doc = row.rows[0]
+  if (!doc || !doc.is_template) throw fail(404, 'not_found', 'Template not found.')
+  if (!await canUseTemplate(q, userId, doc)) throw fail(404, 'not_found', 'Template not found.')
+  return doc
+}
+
 export async function createBlank(ctx, user, body) {
   const name = String(body.name || 'Untitled document').slice(0, 160)
   const template = !!body.template
@@ -754,14 +787,14 @@ function sniff(buf) {
   return null
 }
 
-async function storeNewDoc(ctx, user, { name, template, signers, bytes, folder }) {
+async function storeNewDoc(ctx, user, { name, template, signers, bytes, folder, teamId }) {
   const id = crypto.randomUUID()
   const key = `${user.id}/${id}/original.pdf`
   await ctx.storage.put(key, bytes)
   await ctx.db.query(
-    `insert into documents (id, owner_id, name, status, folder, is_template, original_path, remind_days)
-     values ($1,$2,$3,'draft',$4,$5,$6,$7)`,
-    [id, user.id, name, folder || 'Sales', template, key, cadence(user.default_remind_days, 3)]
+    `insert into documents (id, owner_id, name, status, folder, is_template, original_path, remind_days, team_id)
+     values ($1,$2,$3,'draft',$4,$5,$6,$7,$8)`,
+    [id, user.id, name, folder || 'Sales', template, key, cadence(user.default_remind_days, 3), teamId || null]
   )
   await ctx.db.tx(q => insertSigners(q, id, signers))
   await ctx.db.query(
@@ -809,8 +842,7 @@ async function getOwned(ctx, user, id) {
 }
 
 export async function instantiateTemplate(ctx, user, templateId) {
-  const template = await ownDoc(ctx.db.query.bind(ctx.db), user.id, templateId)
-  if (!template.is_template) throw fail(400, 'template', 'That is not a template.')
+  const template = await loadAccessibleTemplate(ctx.db.query.bind(ctx.db), user.id, templateId)
   const old = await loadSigners(ctx.db.query.bind(ctx.db), templateId)
   const bytes = await ctx.storage.get(template.original_path)
   const next = cleanSigners(old.map(s => ({ name: s.full_name, email: '', role: s.role, color: s.color })))
@@ -819,7 +851,8 @@ export async function instantiateTemplate(ctx, user, templateId) {
     template: false,
     signers: next,
     bytes,
-    folder: template.folder
+    folder: template.folder,
+    teamId: template.team_id || null
   })
   const fields = asJson(template.fields, []).map((f, i) => ({
     ...f,
@@ -939,6 +972,19 @@ export async function sendDocument(ctx, user, id, device) {
       if (!profile.email_verified_at) throw fail(403, 'email_unverified', FREE_MESSAGES.email_unverified)
       const ent = (await q(`select * from entitlements where user_id=$1 for update`, [user.id])).rows[0]
       let source = doc.billing_source
+      if (!source && doc.team_id) {
+        const used = await consumeTeamCredit(q, user.id, doc.team_id)
+        if (used.ok) source = `team:${doc.team_id}`
+        else {
+          return {
+            ok: false,
+            status: 402,
+            error: 'payment_required',
+            reason: 'team_credits',
+            message: 'Your team is out of credits. An owner or admin can move credits from their account into the shared pool.'
+          }
+        }
+      }
       if (!source) {
         const promoCode = await consumePromo(q, user.id)
         if (promoCode) source = `promo:${promoCode}`
@@ -1417,8 +1463,8 @@ export async function setLinkActive(ctx, user, id, active) {
   return { ok: true }
 }
 
-async function cloneFromTemplate(ctx, template, { name, email }) {
-  const owner = (await ctx.db.query(`select * from profiles where id=$1`, [template.owner_id])).rows[0]
+async function cloneFromTemplate(ctx, template, { name, email }, asUser = null) {
+  const owner = asUser || (await ctx.db.query(`select * from profiles where id=$1`, [template.owner_id])).rows[0]
   const signers = await loadSigners(ctx.db.query.bind(ctx.db), template.id)
   const signing = signers.filter(s => s.role !== 'cc')
   if (signing.length !== 1) throw fail(400, 'template', 'Public links and bulk send need a template with one signer.')
@@ -1428,7 +1474,8 @@ async function cloneFromTemplate(ctx, template, { name, email }) {
     template: false,
     signers: [{ id: crypto.randomUUID(), name, email, role: signing[0].role, color: signing[0].color }],
     bytes,
-    folder: template.folder
+    folder: template.folder,
+    teamId: template.team_id || null
   })
   const fields = asJson(template.fields, []).filter(f => f.signer === signing[0].id).map(f => ({
     ...f,
@@ -1466,8 +1513,7 @@ export async function publicStart(ctx, linkId, { name, email }, device) {
 }
 
 export async function bulkSend(ctx, user, { templateId, recipients }, device) {
-  const template = await ownDoc(ctx.db.query.bind(ctx.db), user.id, templateId)
-  if (!template.is_template) throw fail(400, 'template', 'Choose a template.')
+  const template = await loadAccessibleTemplate(ctx.db.query.bind(ctx.db), user.id, templateId)
   const people = (recipients || []).map(r => ({
     name: String(r.name || '').trim().slice(0, 120),
     email: String(r.email || '').trim().toLowerCase()
@@ -1476,7 +1522,9 @@ export async function bulkSend(ctx, user, { templateId, recipients }, device) {
   if (people.length > 100) throw fail(400, 'recipients', 'Send at most 100 at a time.')
   if (people.some(p => !emailOk(p.email))) throw fail(400, 'email', 'Each recipient needs a valid email.')
   const usage = await usageFor(ctx, user, device)
-  const capacity = usage.credits + (usage.promoCredits || 0) + (usage.freeAvailable ? 1 : 0)
+  const capacity = template.team_id
+    ? (usage.teamCredits || 0)
+    : usage.credits + (usage.promoCredits || 0) + (usage.freeAvailable ? 1 : 0)
   const cost = { copies: people.length, creditsEach: 1, creditsUsed: people.length, available: capacity, need: Math.max(0, people.length - capacity) }
   if (capacity < people.length) {
     return {
@@ -1490,13 +1538,15 @@ export async function bulkSend(ctx, user, { templateId, recipients }, device) {
   }
   const links = []
   for (const person of people) {
-    const cloned = await cloneFromTemplate(ctx, template, person)
+    const cloned = await cloneFromTemplate(ctx, template, person, user)
     const sent = await sendDocument(ctx, user, cloned.id, device)
     if (!sent.ok) return { ...sent, sent: links.length, links, cost: { ...cost, creditsUsed: links.length } }
     links.push({ name: person.name, email: person.email, url: sent.links?.[0]?.url })
   }
   const after = await usageFor(ctx, user, device)
-  const remaining = (after.credits || 0) + (after.promoCredits || 0) + (after.freeAvailable ? 1 : 0)
+  const remaining = template.team_id
+    ? (after.teamCredits || 0)
+    : (after.credits || 0) + (after.promoCredits || 0) + (after.freeAvailable ? 1 : 0)
   return { ok: true, sent: links.length, links, cost: { ...cost, remaining } }
 }
 
