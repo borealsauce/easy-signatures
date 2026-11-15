@@ -102,6 +102,37 @@ Credits are added only after Stripe tells the server the session is paid. The re
 
 The chat answers from `content/help-faq.md` only. It does not see customer documents.
 
+
+## 4c. Cloud import (optional)
+
+Users can pick a file from Google Drive or Dropbox on the “Start a document” page. Each button stays hidden until its environment variables are set. After a file is chosen, it goes through the same conversion, size, and type checks as a local upload.
+
+### Dropbox Chooser
+
+1. Open [https://www.dropbox.com/developers/apps](https://www.dropbox.com/developers/apps) and create an app (Scoped access; Chooser only needs the **App key**, not the secret).
+2. In the app’s Settings, under **Chooser / Saver / Embedder domains**, add `easydigitalsignatures.com`, `www.easydigitalsignatures.com`, and `localhost`.
+3. Copy the **App key**.
+4. Set `DROPBOX_APP_KEY` on the Vercel project for Production and Preview, then redeploy.
+
+### Google Picker
+
+1. Create a Google Cloud project at [https://console.cloud.google.com/projectcreate](https://console.cloud.google.com/projectcreate) (for example “Easy Digital Signatures”).
+2. Enable [Google Picker API](https://console.cloud.google.com/apis/library/picker.googleapis.com) and [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com).
+3. Configure the OAuth consent screen at [https://console.cloud.google.com/auth/overview](https://console.cloud.google.com/auth/overview). App name can be Easy Digital Signatures, operated by Boreal MT LLC. Add the scope `https://www.googleapis.com/auth/drive.file`. While the app is in Testing, only listed test users can use the picker.
+4. At [https://console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials), create:
+   - An **API key**. Application restriction: HTTP referrers `https://easydigitalsignatures.com/*`, `https://www.easydigitalsignatures.com/*`, and `http://localhost:3000/*`. API restriction: Google Picker API (and Drive API if offered).
+   - An **OAuth 2.0 Client ID** of type Web application. Authorized JavaScript origins: `https://easydigitalsignatures.com`, `https://www.easydigitalsignatures.com`, and `http://localhost:3000`.
+5. Copy the **Project number** (not the project ID) from [https://console.cloud.google.com/iam-admin/settings](https://console.cloud.google.com/iam-admin/settings). That is the Picker app ID.
+6. Set these on the Vercel project for Production and Preview, then redeploy:
+
+| Variable | Value |
+|---|---|
+| `GOOGLE_PICKER_CLIENT_ID` | The OAuth client ID (`….apps.googleusercontent.com`) |
+| `GOOGLE_PICKER_API_KEY` | The browser API key |
+| `GOOGLE_PICKER_APP_ID` | The Cloud project number |
+
+The Google button appears only when all three are set. The Dropbox button appears when `DROPBOX_APP_KEY` is set.
+
 ## 5. The rest of the environment
 
 | Variable | Value |
@@ -114,6 +145,10 @@ The chat answers from `content/help-faq.md` only. It does not see customer docum
 | `AI_API_KEY` | Optional. Help chat stays hidden without it. |
 | `AI_BASE_URL` | Optional. Default `https://api.x.ai/v1`. |
 | `AI_MODEL` | Optional. Default `grok-3`. |
+| `DROPBOX_APP_KEY` | Optional. Dropbox import button stays hidden without it. See §4c. |
+| `GOOGLE_PICKER_CLIENT_ID` | Optional. Google Drive button stays hidden until this, the API key, and the app ID are all set. See §4c. |
+| `GOOGLE_PICKER_API_KEY` | Optional. See §4c. |
+| `GOOGLE_PICKER_APP_ID` | Optional. Google Cloud project number. See §4c. |
 | `TRUST_PROXY` | `1` on Vercel |
 | `IP_FREE_LIMIT` | Optional. Default `3` free documents per IP per 30 days. Offices share an IP, so this is a threshold, not a hard block, and it never blocks a paid send. |
 | `SIGNUP_PER_HOUR` | Optional. Default `5`. |

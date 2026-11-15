@@ -58,7 +58,12 @@ export function loadConfig(env = process.env) {
     aiModel: env.AI_MODEL || 'grok-3',
     cronSecret: env.CRON_SECRET || '',
     adminEmails: String(env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean),
-    vercel: env.VERCEL === '1'
+    vercel: env.VERCEL === '1',
+    // Public client identifiers for optional cloud import. Buttons stay hidden until these are set.
+    dropboxAppKey: String(env.DROPBOX_APP_KEY || '').trim(),
+    googlePickerClientId: String(env.GOOGLE_PICKER_CLIENT_ID || '').trim(),
+    googlePickerApiKey: String(env.GOOGLE_PICKER_API_KEY || '').trim(),
+    googlePickerAppId: String(env.GOOGLE_PICKER_APP_ID || '').trim()
   }
   config.authMode = config.supabaseUrl && config.supabaseServiceKey ? 'supabase' : 'local'
   config.emailMode = config.resendKey ? 'resend' : 'dev'

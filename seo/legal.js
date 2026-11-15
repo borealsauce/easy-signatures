@@ -1,5 +1,5 @@
 // Privacy policy and terms of service. Generic by design; have a lawyer review before relying on them.
-const UPDATED = 'Last updated Nov 14, 2026'
+const UPDATED = 'Last updated Nov 15, 2026'
 export const SUPPORT_EMAIL = 'support@easydigitalsignatures.com'
 const MAIL = `<a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a>`
 const doc = inner => `<article class="card"><div class="prose"><p class="byline">${UPDATED}</p>${inner}</div></article>`
@@ -15,7 +15,7 @@ export const PRIVACY = {
 <h2>Information we collect</h2>
 <h3>Account holders (senders)</h3>
 <ul><li><b>Account details:</b> your name, email address, and password. Passwords are handled by our authentication provider and we never see them in plain text.</li>
-<li><b>Documents and signing data:</b> files you upload, fields you place, signer names and email addresses you enter, messages, templates, and branding such as a logo or company name.</li>
+<li><b>Documents and signing data:</b> files you upload (including a file you choose from Google Drive or Dropbox, if you use those buttons), fields you place, signer names and email addresses you enter, messages, templates, and branding such as a logo or company name. If you pick a file from Google Drive or Dropbox, those companies’ file pickers run in your browser, and we receive only the file you select.</li>
 <li><b>Purchases:</b> which credit packs you bought, amounts, and payment status. Card details are entered on Stripe’s checkout page and are not stored by us.</li>
 <li><b>Support:</b> messages you send through the contact form and questions you type into the help chat.</li></ul>
 <h3>Signers</h3>

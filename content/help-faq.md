@@ -17,7 +17,8 @@ This assistant explains how to use the website. It is not a lawyer and cannot se
 ## Upload
 
 - From the dashboard, choose New document.
-- Drag in a PDF, PNG, or JPG, or start from a blank page. Files can be up to 10 MB.
+- Drag in a PDF, Word doc, spreadsheet, or image, or start from a blank page. Files can be up to 25 MB.
+- If Google Drive or Dropbox buttons are shown, you can pick a file from there instead of uploading from your computer.
 - Photos are turned into a one-page PDF.
 
 ## Place fields

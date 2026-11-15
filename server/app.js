@@ -7,7 +7,7 @@ import { openDatabase } from './db.js'
 import { createStorage } from './storage.js'
 import { createEmail, createPayments, createSms, htmlEmail } from './providers.js'
 import {
-  bulkSend, checkPhone, commentAs, copyAsTemplate, createBlank, createLink, createUpload, finishDirectUpload, instantiateTemplate, startDirectUpload,
+  bulkSend, checkPhone, commentAs, copyAsTemplate, createBlank, createLink, createUpload, finishDirectUpload, instantiateTemplate, startDirectUpload, UPLOAD_MAX_MB,
   declineSign, deleteDocument, deviceFrom, fail, finishSign, grantCheckout, login,
   ownerFile, publicStart, remind, resendVerification, runMaintenance,
   saveDraft, saveSettings, saveFavorites, saveLogo, removeLogo, brandLogo, saveSignFields, sendDocument, setLinkActive, signSession,
@@ -26,6 +26,7 @@ import {
   adminListUsers, adminSetBlocked, adminSupport, adminUserDetail, adminVoidDocument, logError
 } from './admin.js'
 import { allow } from './ratelimit.js'
+import { dropboxImportUrl, fetchDropboxFile, safeImportName } from './cloud-import.js'
 import { streamHelp } from './help.js'
 import {
   userFromApiKey, listKeys, createKey, revokeKey,
@@ -126,7 +127,7 @@ export async function createApp(env = process.env) {
   })
 
   app.get('/api/config', (req, res) => {
-    res.json({
+    const body = {
       authMode: config.authMode,
       stripeMode: config.stripeMode,
       smsMode: config.smsMode,
@@ -136,7 +137,14 @@ export async function createApp(env = process.env) {
       publishableKey: config.stripePublishableKey || '',
       helpChat: !!config.aiKey,
       prices: { doc1: 1, doc10: 5, doc50: 10, credits: { doc1: 1, doc10: 10, doc50: 50 } }
-    })
+    }
+    if (config.dropboxAppKey) body.dropboxAppKey = config.dropboxAppKey
+    if (config.googlePickerClientId && config.googlePickerApiKey && config.googlePickerAppId) {
+      body.googlePickerClientId = config.googlePickerClientId
+      body.googlePickerApiKey = config.googlePickerApiKey
+      body.googlePickerAppId = config.googlePickerAppId
+    }
+    res.json(body)
   })
 
   app.get('/api/dev/mailbox', (req, res) => {
@@ -437,6 +445,23 @@ export async function createApp(env = process.env) {
 
   app.post('/api/documents/upload-complete', auth, asyncRoute(async (req, res) => {
     res.status(201).json(await finishDirectUpload(ctx, req.user, req.body || {}))
+  }))
+
+  // CORS fallback after the Dropbox Chooser. The file then goes through the same browser conversion + upload pipeline.
+  app.post('/api/documents/import-fetch', auth, asyncRoute(async (req, res) => {
+    if (!await allow(db, `import-fetch:${req.user.id}`, { limit: 30, windowMs: 60 * 60 * 1000 })) {
+      return res.status(429).json({ error: 'rate_limit', message: 'Too many cloud imports. Try again in a bit.' })
+    }
+    if (!dropboxImportUrl(req.body?.url)) throw fail(400, 'url', 'That Dropbox link isn’t valid.')
+    const file = await fetchDropboxFile(req.body.url, {
+      maxBytes: UPLOAD_MAX_MB * 1024 * 1024,
+      name: req.body?.name
+    })
+    const filename = safeImportName(file.name)
+    res.setHeader('Content-Type', file.type || 'application/octet-stream')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.send(file.bytes)
   }))
 
   app.post('/api/documents/upload', auth, upload.single('file'), asyncRoute(async (req, res) => {

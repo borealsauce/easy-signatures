@@ -33,7 +33,7 @@ test('SEO pages are server-rendered with unique meta, canonical, JSON-LD, and ar
       assert.equal(v.status, 404, bad)
       assert.match(await v.text(), /couldn’t find that document/)
     }
-    for (const legal of ['/privacy', '/terms']) assert.match(await (await fetch(base + legal)).text(), /Last updated Nov 14, 2026/)
+    for (const legal of ['/privacy', '/terms']) assert.match(await (await fetch(base + legal)).text(), /Last updated Nov 15, 2026/)
     assert.match(await (await fetch(base + '/')).text(), /href="\/privacy"/)
     const privacyHtml = await (await fetch(base + '/privacy')).text()
     for (const re of [/CCPA\/CPRA/, /Right to delete/, /Data processing summary/, /<b>Vercel<\/b>/, /<b>Supabase<\/b>/, /<b>Resend<\/b>/, /<b>Stripe<\/b>/, /18 and older/]) assert.match(privacyHtml, re)

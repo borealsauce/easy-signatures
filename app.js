@@ -499,13 +499,193 @@ async function downloadDoc(id) {
   a.download = (doc(id)?.name || 'document').replace(/[^\w\-]+/g, '_') + '_signed.pdf'; a.click()
 }
 
+
+const DROPBOX_CHOOSER_EXTS = ['.pdf', '.docx', '.xlsx', '.xls', '.ods', '.csv', '.txt', '.rtf', '.odt', '.html', '.htm', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tif', '.tiff', '.heic', '.heif']
+const GOOGLE_PICKER_MIMES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/vnd.oasis.opendocument.spreadsheet',
+  'application/vnd.oasis.opendocument.text',
+  'text/csv', 'text/plain', 'text/rtf', 'text/html',
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/tiff', 'image/heic', 'image/heif',
+  'application/vnd.google-apps.document',
+  'application/vnd.google-apps.spreadsheet',
+  'application/vnd.google-apps.drawing',
+  'application/vnd.google-apps.presentation'
+].join(',')
+
+function googlePickerReady() {
+  return !!(S.googlePickerClientId && S.googlePickerApiKey && S.googlePickerAppId)
+}
+function cloudImportButtons() {
+  const d = S.dropboxAppKey ? '<button type="button" class="btn lg" id="fromdbx">Dropbox</button>' : ''
+  const g = googlePickerReady() ? '<button type="button" class="btn lg" id="fromgdrive">Google Drive</button>' : ''
+  return d + g
+}
+function loadScript(src, attrs = {}) {
+  return new Promise((res, rej) => {
+    if (attrs.id && document.getElementById(attrs.id)) return res()
+    const s = document.createElement('script')
+    s.src = src
+    s.async = true
+    for (const [k, v] of Object.entries(attrs)) s.setAttribute(k, v)
+    s.onload = () => res()
+    s.onerror = () => rej(new Error('Could not load a needed script. Check your connection and try again.'))
+    document.head.appendChild(s)
+  })
+}
+
+async function importFromDropbox() {
+  if (!S.dropboxAppKey) return
+  try {
+    if (!window.Dropbox?.choose) {
+      await loadScript('https://www.dropbox.com/static/api/2/dropins.js', { id: 'dropboxjs', 'data-app-key': S.dropboxAppKey })
+    }
+    if (!window.Dropbox?.choose) throw new Error('Dropbox could not be loaded. Please try again.')
+    const picked = await new Promise((resolve, reject) => {
+      window.Dropbox.choose({
+        success: files => resolve(files || []),
+        cancel: () => resolve([]),
+        linkType: 'direct',
+        multiselect: true,
+        extensions: DROPBOX_CHOOSER_EXTS,
+        folderselect: false,
+        sizeLimit: MAX_MB * 1024 * 1024
+      })
+    })
+    if (!picked.length) return
+    const files = []
+    const errors = []
+    for (const item of picked) {
+      try { files.push(await dropboxItemToFile(item)) }
+      catch (e) { errors.push(`${item.name || 'File'}: ${e.message}`) }
+    }
+    if (files.length) await uploadFiles(files)
+    if (errors.length) modal(`<h3>${errors.length} file${errors.length === 1 ? '' : 's'} couldn’t be added</h3><ul class="uperr">${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul><button class="p" onclick="closeModal()">OK</button>`)
+  } catch (e) { toast(e.message || 'Could not open Dropbox') }
+}
+
+async function dropboxItemToFile(item) {
+  const name = item.name || 'document'
+  try {
+    const res = await fetch(item.link)
+    if (res.ok) {
+      const blob = await res.blob()
+      if (blob.size && !/text\/html/i.test(blob.type || '')) return new File([blob], name, { type: blob.type || 'application/octet-stream' })
+    }
+  } catch { /* CORS or network: fall through to the same-origin proxy */ }
+  const res = await fetch('/api/documents/import-fetch', {
+    method: 'POST',
+    headers: { ...authHeaders(), 'content-type': 'application/json' },
+    body: JSON.stringify({ url: item.link, name, source: 'dropbox' })
+  })
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}))
+    throw new Error(j.message || 'Could not download that Dropbox file.')
+  }
+  const blob = await res.blob()
+  return new File([blob], name, { type: blob.type || 'application/octet-stream' })
+}
+
+async function importFromGoogleDrive() {
+  if (!googlePickerReady()) return
+  try {
+    const token = await googleAccessToken()
+    const docs = await openGooglePicker(token)
+    if (!docs.length) return
+    const files = []
+    const errors = []
+    for (const doc of docs) {
+      try { files.push(await googleDocToFile(doc, token)) }
+      catch (e) { errors.push(`${doc.name || 'File'}: ${e.message}`) }
+    }
+    if (files.length) await uploadFiles(files)
+    if (errors.length) modal(`<h3>${errors.length} file${errors.length === 1 ? '' : 's'} couldn’t be added</h3><ul class="uperr">${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul><button class="p" onclick="closeModal()">OK</button>`)
+  } catch (e) {
+    const msg = e.message || 'Could not open Google Drive'
+    if (/popup_closed|popup_blocked|access_denied|cancelled|canceled/i.test(msg)) return
+    toast(msg)
+  }
+}
+
+async function googleAccessToken() {
+  await loadScript('https://accounts.google.com/gsi/client', { id: 'google-gis' })
+  if (!window.google?.accounts?.oauth2) throw new Error('Google sign-in could not be loaded. Please try again.')
+  return new Promise((resolve, reject) => {
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: S.googlePickerClientId,
+      scope: 'https://www.googleapis.com/auth/drive.file',
+      callback: resp => {
+        if (resp?.access_token) resolve(resp.access_token)
+        else reject(new Error(resp?.error_description || resp?.error || 'Google Drive access was not granted.'))
+      },
+      error_callback: err => reject(new Error(err?.message || err?.type || 'Google sign-in was cancelled'))
+    })
+    client.requestAccessToken({ prompt: '' })
+  })
+}
+
+async function openGooglePicker(token) {
+  await loadScript('https://apis.google.com/js/api.js', { id: 'google-gapi' })
+  if (!window.gapi?.load) throw new Error('Google Drive could not be loaded. Please try again.')
+  await new Promise((resolve, reject) => window.gapi.load('picker', { callback: resolve, onerror: () => reject(new Error('Google Drive could not be loaded. Please try again.')) }))
+  if (!window.google?.picker) throw new Error('Google Drive could not be loaded. Please try again.')
+  const view = new google.picker.DocsView(google.picker.ViewId.DOCS)
+    .setIncludeFolders(true)
+    .setSelectFolderEnabled(false)
+    .setMimeTypes(GOOGLE_PICKER_MIMES)
+  return new Promise(resolve => {
+    const picker = new google.picker.PickerBuilder()
+      .addView(view)
+      .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+      .setOAuthToken(token)
+      .setDeveloperKey(S.googlePickerApiKey)
+      .setAppId(String(S.googlePickerAppId))
+      .setOrigin(location.origin)
+      .setTitle('Select a document to sign')
+      .setCallback(data => {
+        if (data.action === google.picker.Action.PICKED) resolve((data.docs || []).map(d => ({
+          id: d.id,
+          name: d.name,
+          mimeType: d.mimeType
+        })))
+        else if (data.action === google.picker.Action.CANCEL) resolve([])
+      })
+      .build()
+    picker.setVisible(true)
+  })
+}
+
+function googleExport(mime) {
+  if (!String(mime || '').startsWith('application/vnd.google-apps.')) return null
+  return { mime: 'application/pdf', ext: '.pdf' }
+}
+
+async function googleDocToFile(doc, token) {
+  const exp = googleExport(doc.mimeType)
+  const url = exp
+    ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(doc.id)}/export?mimeType=${encodeURIComponent(exp.mime)}`
+    : `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(doc.id)}?alt=media`
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } })
+  if (!res.ok) throw new Error('Could not download that Google Drive file.')
+  const blob = await res.blob()
+  if (!blob.size) throw new Error('That Google Drive file was empty.')
+  const base = (doc.name || 'document').replace(/\.[^.]+$/, '')
+  const name = exp ? base + exp.ext : (doc.name || 'document')
+  return new File([blob], name, { type: exp?.mime || blob.type || 'application/octet-stream' })
+}
+
 function newDoc() {
-  V.innerHTML = `<h1>Start a document</h1><div id="dz" class="dz"><div class="ic">⬆️</div><h3>Drop PDFs, Word docs, or images here</h3><p>PDF · Word · Excel · CSV · text · JPG · PNG · HEIC · screenshots &amp; more · up to ${MAX_MB} MB each. Several photos become one document.</p><div class="row" style="justify-content:center;margin-top:10px"><label class="btn p lg">Browse files<input type="file" id="up" accept="${ACCEPT}" multiple hidden></label><label class="btn lg camb">📷 Photo or camera<input type="file" id="upcam" accept="image/*" multiple hidden></label></div></div>
+  V.innerHTML = `<h1>Start a document</h1><div id="dz" class="dz"><div class="ic">⬆️</div><h3>Drop PDFs, Word docs, or images here</h3><p>PDF · Word · Excel · CSV · text · JPG · PNG · HEIC · screenshots &amp; more · up to ${MAX_MB} MB each. Several photos become one document.</p><div class="cloud-btns"><label class="btn p lg">Browse files<input type="file" id="up" accept="${ACCEPT}" multiple hidden></label><label class="btn lg camb">📷 Photo or camera<input type="file" id="upcam" accept="image/*" multiple hidden></label>${cloudImportButtons()}</div></div>
   <div class="grid3">${S.templates.map(t => `<div class="card"><div class="ic">📄</div><h3>${esc(t.name)}</h3><p>Your template · roles: ${t.signers.map(s => esc(s.name)).join(', ')}</p><br><button class="p" onclick="fromTemplate('${t.id}')">Use template</button></div>`).join('')}
   <div class="card"><div class="ic">🧩</div><h3>Create a template</h3><p>Upload your own PDF or start from a blank page, then place fields by role. Nothing prebuilt.</p><br><button onclick="tplBuilder()">Create template</button></div>
   <div class="card"><div class="ic">🧾</div><h3>Build a proposal</h3><p>Pricing table → PDF → signature.</p><br><a class="btn" href="#/proposal">Open builder</a></div></div>`
   $('#up').onchange = e => uploadFiles(e.target.files)
   $('#upcam').onchange = e => uploadFiles(e.target.files)
+  $('#fromdbx')?.addEventListener('click', importFromDropbox)
+  $('#fromgdrive')?.addEventListener('click', importFromGoogleDrive)
   const dz = $('#dz'); dz.ondragover = e => { e.preventDefault(); dz.classList.add('over') }; dz.ondragleave = () => dz.classList.remove('over')
   dz.ondrop = e => { e.preventDefault(); e.stopPropagation(); dz.classList.remove('over'); uploadFiles(e.dataTransfer.files) }
 }
@@ -1559,6 +1739,10 @@ async function boot() {
   try {
     const cfg = await fetch('/api/config').then(r => r.json())
     S.smsEnabled = cfg.smsEnabled !== false
+    S.dropboxAppKey = cfg.dropboxAppKey || ''
+    S.googlePickerClientId = cfg.googlePickerClientId || ''
+    S.googlePickerApiKey = cfg.googlePickerApiKey || ''
+    S.googlePickerAppId = cfg.googlePickerAppId || ''
   } catch { S.smsEnabled = true }
   const params = new URLSearchParams(location.search)
   if (TOKEN) {
