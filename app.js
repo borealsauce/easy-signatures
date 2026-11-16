@@ -307,7 +307,12 @@ async function route() {
 }
 window.onhashchange = () => { route().catch(e => toast(e.message || 'Something went wrong')) }
 
-function landing() { V.innerHTML = marketingHtml({ loggedIn: !!S.me, smsEnabled: S.smsEnabled !== false }) }
+function landing() {
+  // The server already rendered this exact page for logged-out visitors; skip re-rendering it on first load.
+  const pre = V.dataset.pre; delete V.dataset.pre
+  if (pre != null && !S.me && pre === String(+(S.smsEnabled !== false)) && V.firstElementChild) return
+  V.innerHTML = marketingHtml({ loggedIn: !!S.me, smsEnabled: S.smsEnabled !== false })
+}
 
 function pricing() { location.hash = '#pricing' }
 

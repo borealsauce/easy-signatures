@@ -74,7 +74,7 @@ const ASSETS = {
 }
 
 // Inject SEO head tags (and optionally the prerendered homepage) into the SPA's index.html.
-function shellHtml(indexHtml, { path, title, description, robots, canonical, jsonld = [], body = '' }, css = {}) {
+function shellHtml(indexHtml, { path, title, description, robots, canonical, jsonld = [], body = '', pre = '' }, css = {}) {
   let html = indexHtml
     // Inline the app's own stylesheets so first paint doesn't wait on three extra requests.
     .replace(/<link rel="stylesheet" href="\/(app|home|help)\.css">/g, (m, name) => css[name] ? `<style>${css[name]}</style>` : m)
@@ -84,7 +84,7 @@ function shellHtml(indexHtml, { path, title, description, robots, canonical, jso
     .replace(/<link href="(https:\/\/fonts\.googleapis\.com\/css2[^"]+)" rel="stylesheet">/, '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="$1" rel="stylesheet" media="print" onload="this.media=\'all\'">')
     .replace(/<title>[^<]*<\/title>/, headTags({ path: canonical || path, title, description, robots, jsonld }))
   if (body) {
-    html = html.replace('<body>', '<body class="marketing">').replace('<main id="view"></main>', `<main id="view">${body}</main>`)
+    html = html.replace('<body>', '<body class="marketing">').replace('<main id="view"></main>', `<main id="view"${pre !== '' ? ` data-pre="${pre}"` : ''}>${body}</main>`)
   }
   return html
 }
@@ -96,7 +96,7 @@ export function registerSeo(app, { root, config }) {
   const homeLd = [ORG_LD, WEBSITE_LD, APP_LD, faqLd(HOME_FAQ)]
   const css = {}
   for (const name of ['app', 'home', 'help']) { try { css[name] = readFileSync(join(root, name + '.css'), 'utf8').replace(/<\/style/gi, '') } catch {} }
-  const homeHtml = shellHtml(indexHtml, { ...HOME, jsonld: homeLd, body: homeBody }, css)
+  const homeHtml = shellHtml(indexHtml, { ...HOME, jsonld: homeLd, body: homeBody, pre: smsEnabled ? '1' : '0' }, css)
 
   const send = (res, html, type = 'text/html; charset=utf-8', cache = HTML_CACHE) => {
     res.setHeader('Content-Type', type)
