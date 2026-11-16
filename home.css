@@ -80,7 +80,7 @@ body.marketing main { max-width: none; margin: 0; padding: 0; }
 .mkt .cursor { position: absolute; right: -16px; bottom: -18px; width: 20px; height: 20px; }
 .mkt .pricing, .mkt .workspace { padding: 72px 0 28px; }
 .mkt h2 { font-family: "Inter Tight", Inter, sans-serif; font-size: 32px; font-weight: 600; letter-spacing: -0.03em; margin: 0; }
-.mkt .lede { margin: 8px 0 28px; color: #64748B; font-size: 15.5px; }
+.mkt .lede { margin: 8px 0 28px; color: #475569; font-size: 15.5px; }
 .mkt .price-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .mkt .plan { background: #fff; border: 1px solid #E2E8F0; border-radius: 16px; padding: 22px 18px 20px; display: flex; flex-direction: column; }
 .mkt .plan.featured { background: #0E6B62; color: #F0FDFA; border: 0; }
@@ -114,7 +114,7 @@ body.marketing main { max-width: none; margin: 0; padding: 0; }
 .mkt .activity h4 { margin-bottom: 8px; }
 .mkt .act { padding: 8px 0; border-top: 1px solid #F8FAFC; font-size: 13px; }
 .mkt .act .name { font-weight: 550; }
-.mkt .act .meta, .mkt .act .when { color: #94A3B8; font-size: 12px; }
+.mkt .act .meta, .mkt .act .when { color: #64748B; font-size: 12px; }
 .mkt .pill { font-size: 11px; font-weight: 650; padding: 3px 8px; border-radius: 99px; }
 .mkt .pill-ok { background: #CCFBF1; color: #0F766E; }
 .mkt .pill-wait { background: #FEF3C7; color: #92400E; }

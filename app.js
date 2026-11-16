@@ -396,7 +396,7 @@ function signup() {
   <label class="f" for="nm">Your name <span class="note">(signers see this)</span></label><input id="nm" autocomplete="name" required style="width:100%">
   <label class="f" for="em">Email</label><input id="em" type="email" autocomplete="email" inputmode="email" required style="width:100%">
   <label class="f" for="pw">Password <span class="note">(8+ characters)</span></label><input id="pw" type="password" autocomplete="new-password" minlength="8" required style="width:100%">
-  <p style="margin:10px 0 0"><a href="javascript:void 0" id="pcl" class="tap">Have a promo code?</a></p>
+  <p style="margin:10px 0 0"><button type="button" id="pcl" class="tap" style="background:none;border:0;padding:5px 0;color:var(--teal,#0f766e);text-decoration:underline;font:inherit;font-size:14px;cursor:pointer">Have a promo code?</button></p>
   <div id="pcw" class="hidden"><label class="f" for="pc">Promo code</label><input id="pc" autocomplete="off" style="width:100%;text-transform:uppercase" placeholder="Enter code"></div>
   <label for="tos" style="margin-top:14px;display:flex;flex-wrap:nowrap;align-items:flex-start;gap:10px;font-size:14px"><input type="checkbox" id="tos" style="margin:1px 0 0;width:20px;height:20px;flex-shrink:0;padding:0"> <span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a></span></label>
   <br><button class="p" id="go" type="submit" style="width:100%">Create free account</button><div id="smsg" role="alert"></div>

@@ -77,7 +77,7 @@ export function marketingHtml({ loggedIn, smsEnabled = true }) {
         <article class="plan"><h3>10 documents</h3><div class="amt">$5</div><p class="desc">50¢ per document</p><ul><li>Use them whenever you send</li><li>Apple Pay and Google Pay at checkout</li></ul><button class="btn btn-ghost" onclick="buy('doc10')">Buy 10</button></article>
         <article class="plan featured"><h3>50 documents · Best value</h3><div class="amt">$10</div><p class="desc">20¢ per document</p><ul><li>Use them whenever you send</li><li>Apple Pay and Google Pay at checkout</li></ul><button class="btn" onclick="buy('doc50')">Buy 50</button></article>
       </div>
-      <p style="margin:14px 0 0;font-size:13px;color:#64748B;text-align:center">By purchasing, you agree to our <a href="/terms" style="color:#0F766E;text-decoration:underline">Terms</a>. Credits are non-refundable once used.</p>
+      <p style="margin:14px 0 0;font-size:13px;color:#475569;text-align:center">By purchasing, you agree to our <a href="/terms" style="color:#0F766E;text-decoration:underline">Terms</a>. Credits are non-refundable once used.</p>
     </div>
   </section>
   <section class="workspace">
