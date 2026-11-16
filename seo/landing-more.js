@@ -47,7 +47,7 @@ export const MORE_PAGES = [
 <h3>You’re technical and want zero software cost</h3><p>Self-hosting an open-source signer (DocuSeal, OpenSign, Documenso) costs nothing in licenses, but you run the server, email delivery, backups, and updates yourself.</p>
 <h3>You need enterprise features</h3><p>CRM integrations, SSO, SMS delivery, ID verification, or compliance programs usually mean a paid plan from a larger provider. See our <a href="/docusign-alternative">DocuSign alternative</a> page for when DocuSign itself is the better fit.</p>`),
       card(`<h2>What you get with Easy Digital Signatures</h2>${FEATURES}<h3>How it works</h3>${HOW_IT_WORKS}`),
-      card(`<h2>Our pricing</h2>${PRICING_BLOCK}<p>More detail: <a href="/e-signature-pricing">e-signature pricing</a> and our <a href="/blog/e-signature-cost-comparison">cost comparison</a>.</p>`)
+      card(`<h2>Our pricing</h2>${PRICING_BLOCK}<p>More detail: <a href="/e-signature-pricing">e-signature pricing</a>, our <a href="/blog/e-signature-cost-comparison">cost comparison</a>, and the <a href="/best-free-e-signature-software">best free e-signature software (2026)</a> guide.</p>`)
     ].join('\n'),
     faqs: [
       ['Does DocuSign have a free plan?', 'DocuSign advertises a free trial of its eSignature plans. Its listed sending plans are paid, starting with Personal at $11/month on an annual plan when we checked on November 14, 2026. Check DocuSign’s site for current terms.'],

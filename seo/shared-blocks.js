@@ -56,7 +56,7 @@ export const FEATURES = checklist([
   'Signers don’t need an account, and signing works in a mobile browser',
   'Signing order (one after another) or everyone at once',
   'Automatic email reminders and an expiration date for each request',
-  'Reusable templates and bulk send for the same document to many people',
+  'Reusable <a href="/e-signature-templates">templates</a> and <a href="/bulk-send-documents-for-signature">bulk send</a> for the same document to many people',
   'In-person signing on your device, and signers can decline with a reason',
   'Audit certificate with timestamps, IP addresses, and SHA-256 document fingerprints',
   'Pay per document: first one free, then $1, 10 for $5, or 50 for $10'

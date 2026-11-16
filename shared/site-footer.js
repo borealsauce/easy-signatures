@@ -13,11 +13,17 @@ export const FOOTER_GROUPS = [
     ['/fill-and-sign-pdf', 'Fill and sign PDF'],
     ['/sign-word-document-online', 'Sign Word files online'],
     ['/pay-per-document-e-signature', 'Pay per document'],
+    ['/bulk-send-documents-for-signature', 'Bulk send'],
+    ['/e-signature-templates', 'Templates and signing links'],
     ['/signature-generator', 'Free signature generator'],
     ['/contact', 'Contact']
   ]],
   ['Compare', [
+    ['/best-free-e-signature-software', 'Best free e-signature software'],
     ['/free-docusign-alternative', 'Free DocuSign alternatives'],
+    ['/signnow-alternative', 'SignNow alternative'],
+    ['/smallpdf-sign-alternative', 'Smallpdf / iLovePDF Sign alternative'],
+    ['/formswift-alternative', 'FormSwift alternative'],
     ['/docusign-alternative', 'DocuSign alternative'],
     ['/dropbox-sign-alternative', 'Dropbox Sign alternative'],
     ['/adobe-sign-alternative', 'Adobe Sign alternative'],

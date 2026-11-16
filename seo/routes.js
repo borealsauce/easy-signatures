@@ -7,6 +7,7 @@ import { MORE_PAGES } from './landing-more.js'
 import { POSTS, BLOG_INDEX } from './blog.js'
 import { TOOL_PAGE } from './tool-page.js'
 import { SIGN_PDF_PAGE } from './sign-pdf-page.js'
+import { COMPARE_PAGES } from './compare-more.js'
 import { PRIVACY, TERMS } from './legal.js'
 import { marketingHtml } from '../marketing.js'
 import { HOME_FAQ } from '../shared/home-faq.js'
@@ -17,7 +18,7 @@ export const INDEXNOW_KEY = '9c0f7c0d74dd681b044655de2b7164e1'
 const HTML_CACHE = 'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400'
 const ASSET_CACHE = 'public, max-age=86400, s-maxage=604800'
 
-export const SEO_PAGES = [SIGN_PDF_PAGE, ...PAGES, ...MORE_PAGES, TOOL_PAGE, BLOG_INDEX, ...POSTS, PRIVACY, TERMS]
+export const SEO_PAGES = [SIGN_PDF_PAGE, ...PAGES, ...MORE_PAGES, ...COMPARE_PAGES, TOOL_PAGE, BLOG_INDEX, ...POSTS, PRIVACY, TERMS]
 
 const HOME = {
   path: '/',
