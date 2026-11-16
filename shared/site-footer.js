@@ -34,11 +34,21 @@ export const FOOTER_GROUPS = [
     ['/leases', 'Leases and rentals'],
     ['/contractors', 'Contractors'],
     ['/hr-onboarding', 'HR onboarding'],
-    ['/nda', 'NDAs']
+    ['/nda', 'NDAs'],
+    ['/contractor-agreement-e-signature', 'Contractor agreements'],
+    ['/waiver-e-signature', 'Waivers and consent forms'],
+    ['/get-document-signed-by-email', 'Get a document signed by email']
   ]],
   ['Guides', [
     ['/blog', 'Blog'],
     ['/blog/are-electronic-signatures-legal', 'Are e-signatures legal?'],
+    ['/electronic-signature-laws-by-state', 'E-signature laws by state'],
+    ['/notarization-vs-e-signature', 'Notarization vs e-signature'],
+    ['/sign-pdf-on-iphone', 'Sign a PDF on iPhone'],
+    ['/sign-pdf-on-android', 'Sign a PDF on Android'],
+    ['/sign-pdf-on-mac', 'Sign a PDF on a Mac'],
+    ['/sign-pdf-on-windows', 'Sign a PDF on Windows'],
+    ['/sign-pdf-without-adobe', 'Sign a PDF without Adobe'],
     ['/blog/how-to-sign-a-pdf', 'How to sign a PDF'],
     ['/blog/how-to-electronically-sign-a-document', 'How to e-sign a document'],
     ['/blog/how-to-sign-a-pdf-on-iphone-or-android', 'Sign a PDF on your phone'],

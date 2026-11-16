@@ -1,4 +1,4 @@
-import { SITE, BRAND, checklist } from './layout.js'
+import { SITE, BRAND, checklist, howToLd } from './layout.js'
 import { competitorTable, PRICING_BLOCK } from './shared-blocks.js'
 
 const PUBLISHED = '2026-11-14'
@@ -18,7 +18,7 @@ export const POSTS = [
 <h3>Consumer consent</h3>
 <p>When a law requires that information be given to a consumer in writing, ESIGN lets you provide it electronically only if the consumer affirmatively consents after receiving certain disclosures, such as the right to get paper copies and how to withdraw consent, and consents in a way that shows they can access the electronic format.</p>
 <h2>UETA: the state law</h2>
-<p>The Uniform Law Commission approved UETA in 1999. It has been enacted in 49 states, the District of Columbia, Puerto Rico, and the U.S. Virgin Islands. New York is the exception: it relies on its own Electronic Signatures and Records Act, and ESIGN still applies there to interstate transactions (<a href="https://www.nycbar.org/issues-policy/advocacy-campaigns/ueta-esra-new-york-electronic-transactions-law/" rel="noopener" target="_blank">New York City Bar</a>).</p>
+<p>The Uniform Law Commission approved UETA in 1999. It has been enacted in 49 states, the District of Columbia, Puerto Rico, and the U.S. Virgin Islands. New York is the exception: it relies on its own Electronic Signatures and Records Act, and ESIGN still applies there to interstate transactions (<a href="https://www.nycbar.org/issues-policy/advocacy-campaigns/ueta-esra-new-york-electronic-transactions-law/" rel="noopener" target="_blank">New York City Bar</a>). See <a href="/electronic-signature-laws-by-state">e-signature laws by state</a> for citations.</p>
 <p>UETA says a record or signature may not be denied legal effect solely because it’s electronic, and that where a law requires a signature, an electronic signature satisfies it. UETA applies only when the parties have agreed to do business electronically, which can be shown by their conduct and the circumstances.</p>
 <h2>Documents the laws exclude</h2>
 <p>ESIGN (15 U.S.C. § 7003) excludes certain records from its rules, including:</p>
@@ -160,9 +160,9 @@ ${PRICING_BLOCK}
     body: art(`<p>You don’t need to print anything to sign a PDF that arrived on your phone. Here are the free options, then how to get someone <i>else</i> to sign from your phone.</p>
 <h2>iPhone and iPad: Markup (built in)</h2>
 <ol class="steps"><li>Open the PDF from the Files app or a Mail attachment.</li><li>Tap the <b>Markup</b> icon (a pen tip).</li><li>Tap <b>+</b>, then <b>Add Signature</b>, and sign with your finger.</li><li>Drag the signature onto the line, resize it, and tap <b>Done</b>. Share or save the signed copy.</li></ol>
-<p>Apple moves these buttons between iOS versions; Apple’s own help page for “fill out forms, sign documents” has the current steps.</p>
+<p>Apple moves these buttons between iOS versions; Apple’s own help page for “fill out forms, sign documents” has the current steps. More detail: <a href="/sign-pdf-on-iphone">how to sign a PDF on iPhone</a>.</p>
 <h2>Android: use a free PDF app</h2>
-<p>Android doesn’t have one built-in PDF signer across all phones. A free PDF app such as Adobe Acrobat Reader has a <b>Fill &amp; Sign</b> tool: open the PDF, choose Fill &amp; Sign, create your signature with your finger, place it, and save. Some phone makers include their own PDF markup tools too.</p>
+<p>Android doesn’t have one built-in PDF signer across all phones. A free PDF app such as Adobe Acrobat Reader has a <b>Fill &amp; Sign</b> tool: open the PDF, choose Fill &amp; Sign, create your signature with your finger, place it, and save. Some phone makers include their own PDF markup tools too. The Google Drive app can also draw on a PDF; see <a href="/sign-pdf-on-android">how to sign a PDF on Android</a>.</p>
 <h2>Any phone: a signature image</h2>
 <p>Our <a href="/signature-generator">free signature generator</a> works in your phone’s browser. Draw your signature with your finger and save a transparent PNG to reuse.</p>
 <h2>Send a PDF from your phone for someone else to sign</h2>
@@ -209,6 +209,9 @@ ${PRICING_BLOCK}
   }
 ].map(p => ({
   ...p,
+  howTo: p.slug.startsWith('how-to-') ? firstHowTo(p) : null
+})).map(p => ({
+  ...p,
   path: '/blog/' + p.slug,
   title: (p.title + ' | ' + BRAND).length <= 70 ? `${p.title} | ${BRAND}` : p.title,
   ogType: 'article',
@@ -222,8 +225,21 @@ ${PRICING_BLOCK}
     datePublished: p.published || PUBLISHED, dateModified: p.published || PUBLISHED, mainEntityOfPage: SITE + '/blog/' + p.slug,
     image: SITE + '/og.png', author: { '@type': 'Organization', name: BRAND, url: SITE + '/' },
     publisher: { '@type': 'Organization', name: BRAND, logo: { '@type': 'ImageObject', url: SITE + '/icon-512.png' } }
-  }]
+  }, ...(p.howTo ? [p.howTo] : [])]
 }))
+
+// HowTo schema built from the article's own first numbered step list, named after the section it's in.
+function firstHowTo(p) {
+  const i = p.body.indexOf('<ol class="steps">')
+  if (i < 0) return null
+  const list = p.body.slice(i, p.body.indexOf('</ol>', i))
+  const steps = [...list.matchAll(/<li>([\s\S]*?)<\/li>/g)].map(m => m[1])
+  if (steps.length < 2) return null
+  const h2 = [...p.body.slice(0, i).matchAll(/<h2>([\s\S]*?)<\/h2>/g)].pop()
+  const plain = s => s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&')
+  const name = plain(p.h1) + (h2 ? ': ' + plain(h2[1]) : '')
+  return howToLd({ name, path: '/blog/' + p.slug, steps })
+}
 
 export const BLOG_INDEX = {
   path: '/blog',

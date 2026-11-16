@@ -127,7 +127,9 @@ export const PAGES = [
     docs: ['Residential lease agreements', 'Lease renewals and extensions', 'Pet, parking, and other addenda', 'Move-in and move-out checklists', 'Commercial leases', 'Rental applications'],
     why: `<p>Getting every adult on a lease to sign used to mean meetings or mailing paper. Now each tenant gets their own link and signs in the browser, and everyone receives the same signed copy.</p><p>Add each roommate as a signer, use initials fields on key clauses, and set reminders so nobody holds up move-in. Small landlords who sign a few leases a year pay a few dollars, not a monthly plan.</p><p>Step-by-step instructions are in <a href="/blog/how-to-sign-a-lease-online">how to sign a lease online</a>.</p>`,
     caution: `<p>Leases can generally be signed electronically under the ESIGN Act and state UETA laws. But the federal ESIGN Act specifically excludes some notices, including notices of default, foreclosure, or eviction for a primary residence, from its electronic-delivery rules. State landlord-tenant laws also set rules for required disclosures and how notices must be delivered, so check your state’s requirements.</p>`,
-    faqs: [['Does each tenant need to sign?', 'You can add every tenant as a signer. Each gets a separate link, and the document completes when all of them have signed.'], ['Can I send the same lease to new tenants?', 'Yes. Save it as a template and reuse it.']]
+    extra: card(`<h2>How to send a lease for e-signature</h2><ol class="steps"><li><b>Upload the lease</b> as a PDF or Word file, with any addenda and disclosures in the same file.</li><li><b>Add each tenant, co-signer, and yourself</b> by name and email.</li><li><b>Place initials on each page</b>, and signature and date fields where they go.</li><li><b>Send.</b> Reminders go out automatically, and you can see who has opened and signed.</li><li><b>Everyone gets the fully signed lease</b> as a PDF with an audit certificate.</li></ol><p>Signing at a showing? Use in-person signing and hand the tenant your phone or tablet. Deeds and other recorded documents follow different rules; see <a href="/notarization-vs-e-signature">notarization vs e-signature</a> and <a href="/electronic-signature-laws-by-state">e-signature laws by state</a>.</p>`),
+    faqs: [['Does each tenant need to sign?', 'You can add every tenant as a signer. Each gets a separate link, and the document completes when all of them have signed.'], ['Can I send the same lease to new tenants?', 'Yes. Save it as a template and reuse it.']],
+    moreFaqs: [['Is an e-signed lease legally binding?', 'In the US, leases can generally be signed electronically under the ESIGN Act and state UETA laws when the parties agree to do business electronically. Some related notices have extra rules. This isn’t legal advice.'], ['Do I get proof of when each tenant signed?', 'Yes. The certificate page lists each signer’s email, when they opened and signed, and their IP address, with SHA-256 fingerprints of the file.']]
   }),
   useCase({
     slug: 'contractors', crumb: 'Contractors',
@@ -160,11 +162,13 @@ export const PAGES = [
     docs: ['Mutual NDAs', 'One-way (unilateral) NDAs', 'Vendor and supplier confidentiality agreements', 'Employee and contractor confidentiality agreements', 'Investor and partner NDAs', 'Event and beta-tester agreements'],
     why: `<p>An NDA is often the first document in a new relationship, and it shouldn’t take a week. Save your standard NDA as a template, add the other party’s email, and send.</p><p>For mutual NDAs, use signing order so the counterparty signs first and you countersign. When it’s done, both sides get the same finished PDF.</p>`,
     caution: `<p>NDAs are ordinary commercial contracts, and in the US they can generally be signed electronically under the ESIGN Act and state UETA laws. Whether a particular clause is enforceable is a separate question of contract law in your state.</p>`,
-    faqs: [['Can I reuse my NDA?', 'Yes. Save it as a template with fields placed, then send it to each new party.'], ['Can I countersign after the other party?', 'Yes. Turn on signing order and put yourself last.']]
+    extra: card(`<h2>What to check before you send an NDA</h2>${checklist(['Who the parties are, with full legal names', 'Whether it’s one-way or mutual', 'What counts as confidential information, and what’s excluded', 'How long the obligations last', 'Which state’s law governs it'])}<p>These are common points, not legal advice. Have a lawyer review an NDA that matters. Sending the same NDA to a group? Use <a href="/bulk-send-documents-for-signature">bulk send</a>, or a public signing link from a <a href="/e-signature-templates">template</a>.</p>`),
+    faqs: [['Can I reuse my NDA?', 'Yes. Save it as a template with fields placed, then send it to each new party.'], ['Can I countersign after the other party?', 'Yes. Turn on signing order and put yourself last.']],
+    moreFaqs: [['Is an e-signed NDA legally binding?', 'In the US, the ESIGN Act and state UETA laws generally give e-signatures the same legal effect as handwritten ones, and NDAs aren’t among the listed exceptions. Whether a particular NDA is enforceable depends on its terms. This isn’t legal advice.'], ['Do you provide an NDA template?', 'No. Upload your own NDA, or one your lawyer drafted, as a PDF or Word file.'], ['Does the other party need an account?', 'No. They sign through a secure link in any browser.']]
   })
 ]
 
-function useCase({ slug, crumb, title, description, h1, lede, docs, why, caution, faqs }) {
+function useCase({ slug, crumb, title, description, h1, lede, docs, why, caution, faqs, extra = '', moreFaqs = [] }) {
   return {
     path: '/' + slug, title, description, h1, lede, crumb, eyebrow: 'Use case',
     jsonld: [APP_LD],
@@ -172,9 +176,11 @@ function useCase({ slug, crumb, title, description, h1, lede, docs, why, caution
       card(`<h2>Documents people send</h2>${checklist(docs)}<p class="src">Upload your own documents. We don’t provide legal forms.</p>`),
       card(`<h2>Why it works</h2>${why}`),
       card(`<h2>How it works</h2>${HOW_IT_WORKS}`),
+      extra,
       card(`<h2>Know the rules</h2>${caution}${LEGAL_NOTE}`),
+      card(`<h2>Signing one you received?</h2><p>If someone emailed <i>you</i> a PDF to sign, use the <a href="/sign-pdf-online">free PDF signer</a>: add your signature, initials, and date, and download it. No account, and the file stays on your device.</p>`),
       card(`<h2>Pricing</h2>${PRICING_BLOCK}`)
-    ].join('\n'),
-    faqs: [...faqs, ['Is there a free option?', 'Yes. Your first document is free after you verify your email.']]
+    ].filter(Boolean).join('\n'),
+    faqs: [...faqs, ...moreFaqs, ['Is there a free option?', 'Yes. Your first document is free after you verify your email.']]
   }
 }

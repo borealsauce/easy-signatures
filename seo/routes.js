@@ -1,3 +1,4 @@
+import { GUIDE_PAGES } from './guides-more.js'
 import { readFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,7 +19,7 @@ export const INDEXNOW_KEY = '9c0f7c0d74dd681b044655de2b7164e1'
 const HTML_CACHE = 'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400'
 const ASSET_CACHE = 'public, max-age=86400, s-maxage=604800'
 
-export const SEO_PAGES = [SIGN_PDF_PAGE, ...PAGES, ...MORE_PAGES, ...COMPARE_PAGES, TOOL_PAGE, BLOG_INDEX, ...POSTS, PRIVACY, TERMS]
+export const SEO_PAGES = [SIGN_PDF_PAGE, ...PAGES, ...MORE_PAGES, ...COMPARE_PAGES, ...GUIDE_PAGES, TOOL_PAGE, BLOG_INDEX, ...POSTS, PRIVACY, TERMS]
 
 const HOME = {
   path: '/',

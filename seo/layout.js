@@ -48,6 +48,18 @@ export const APP_LD = {
   ]
 }
 
+// HowTo schema for step-by-step guides. Steps are plain text (tags stripped).
+export function howToLd({ name, path, steps, tools = [] }) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'HowTo',
+    name,
+    url: SITE + path,
+    ...(tools.length ? { tool: tools.map(t => ({ '@type': 'HowToTool', name: t })) } : {}),
+    step: steps.map((t, i) => ({ '@type': 'HowToStep', position: i + 1, name: t.replace(/<[^>]+>/g, '').split(/[.:]/)[0].slice(0, 80), text: t.replace(/<[^>]+>/g, '') }))
+  }
+}
+
 export function faqLd(faqs) {
   return {
     '@context': 'https://schema.org',
@@ -123,7 +135,7 @@ ${p.head || ''}
     ${p.eyebrow ? `<div class="s-eyebrow">${esc(p.eyebrow)}</div>` : ''}
     <h1>${p.h1}</h1>
     ${p.lede ? `<p class="s-lede">${p.lede}</p>` : ''}
-    ${p.noHeroCta ? '' : `<div class="s-cta"><a class="s-btn big" href="/#/signup" data-cta="hero">${esc(cta)}</a><span class="s-note">First document free · then from 20¢ per document · no subscription</span></div>`}
+    ${p.noHeroCta ? '' : `<div class="s-cta"><a class="s-btn big" href="${p.ctaHref || '/#/signup'}" data-cta="hero">${esc(cta)}</a><span class="s-note">${p.ctaNote || 'First document free · then from 20¢ per document · no subscription'}</span></div>`}
   </div>
 </header>
 <main id="content" class="s-main">
