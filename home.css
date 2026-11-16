@@ -163,3 +163,8 @@ body.marketing main { max-width: none; margin: 0; padding: 0; }
   .mkt .drag-float { animation: none; transform: translate(200px, 110px) rotate(-4deg); }
   .mkt .drop-zone { animation: none; }
 }
+
+.mkt .free-tool { display: inline-flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 6px 8px; margin: 18px auto 0; padding: 9px 16px; border-radius: 999px; background: rgba(20,184,166,.12); border: 1px solid rgba(94,234,212,.35); color: #E2F8F5; font-size: 14px; text-decoration: none; max-width: 100%; }
+.mkt .free-tool:hover { background: rgba(20,184,166,.2); color: #fff; }
+.mkt .free-tool b { color: #5EEAD4; }
+.mkt .free-tool-tag { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; background: #14C4B0; color: #042F2E; padding: 2px 8px; border-radius: 999px; }

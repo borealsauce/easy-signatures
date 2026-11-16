@@ -89,30 +89,6 @@ export const PAGES = [
     ]
   },
   {
-    path: '/sign-pdf-online',
-    title: 'Sign PDF Online Free: Add a Signature or Send for E-Signature',
-    description: 'Sign a PDF online free in your browser, or send it to others to sign. Add signature, initials, date, and text fields to any PDF. First document free.',
-    eyebrow: 'Sign PDF online', crumb: 'Sign a PDF online',
-    h1: 'Sign a PDF online and send it to others to sign',
-    lede: 'Upload any PDF, drag on signature, initials, and date fields, and email a secure signing link. Works in any modern browser.',
-    jsonld: [APP_LD],
-    body: [
-      card(`<h2>Three ways to sign a PDF</h2>
-<h3>1. Only you need to sign</h3><p>Free tools such as Adobe Acrobat Reader’s Fill &amp; Sign or the Markup tools in Apple Preview let you add your own signature to a PDF. Our <a href="/signature-generator">signature generator</a> also makes a signature image you can place in any document.</p>
-<h3>2. Someone else needs to sign</h3><p>Use an e-signature service so each signer gets a link, signs in their browser, and everyone ends up with the same finished file and a record of who signed and when. That’s what Easy Digital Signatures does.</p>
-<h3>3. Several people, in a set order</h3><p>Turn on signing order and each signer gets the link after the person before them finishes.</p>
-<p>For a full walkthrough, read <a href="/blog/how-to-sign-a-pdf">how to sign a PDF</a>. Need to fill in text too? See <a href="/fill-and-sign-pdf">fill and sign a PDF</a>.</p>`),
-      card(`<h2>How it works</h2>${HOW_IT_WORKS}`),
-      card(`<h2>Built for PDFs</h2>${checklist(['Upload PDFs up to 25 MB (Word files and photos work too), or start from a blank page', 'Signature, initials, date, name, and text fields', 'The finished file is flattened, so the signatures are part of the page', 'A certificate page records timestamps, IP addresses, and SHA-256 fingerprints', 'Signers can sign on a phone, tablet, or computer'])}`),
-      card(`<h2>Pricing</h2>${PRICING_BLOCK}`)
-    ].join('\n'),
-    faqs: [
-      ['Do I need to install anything to sign a PDF online?', 'No. Easy Digital Signatures runs in your web browser, and so does signing.'],
-      ['What file size can I upload?', 'Files up to 25 MB each.'],
-      ['Can signers download the signed PDF?', 'Yes. When everyone has signed, the finished PDF with its audit certificate is available to download.']
-    ]
-  },
-  {
     path: '/e-signature-pricing',
     title: 'E-Signature Pricing: $1 per Document, No Subscription',
     description: 'Simple e-signature pricing: first document free, then $1 each, 10 for $5, or 50 for $10. No monthly plan. Compare with DocuSign, Dropbox Sign, Adobe, and PandaDoc.',

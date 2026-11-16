@@ -6,6 +6,9 @@
 - `seo/pages.js` (alternatives, pricing, use cases), `seo/landing-more.js` (free-signature landing pages added 2026-11-15:
   free DocuSign alternatives, sign documents online free, send for signature, pay per document, fill and sign, Word),
   `seo/blog.js` (articles), `seo/tool-page.js` (signature generator).
+- `seo/sign-pdf-page.js` + `seo/sign-pdf.js`: free in-browser Sign PDF / Fill & Sign tool on `/sign-pdf-online` (added 2026-11-16).
+  pdf.js and pdf-lib load from CDN only when a PDF is chosen; the file never leaves the browser. Aliases `/sign-pdf-free`,
+  `/sign-pdf-online-free`, `/fill-and-sign-pdf-free`, `/free-pdf-signer` 301 to it. E2E check: `node scripts/e2e-sign-pdf.js [baseUrl]`.
 - Keyword research behind these pages: ranked target list in the 'EDS SEO keyword targets' Page (2026-11-15).
   Free-plan facts on `/free-docusign-alternative` were read on vendor pricing pages on 2026-11-15 (`FREE_CHECKED`).
 - `seo/layout.js` holds titles/meta/OG/Twitter/JSON-LD helpers. `shared/site-footer.js` is the site-wide footer

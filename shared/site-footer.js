@@ -7,7 +7,7 @@ export const FOOTER_GROUPS = [
     ['/pricing', 'Pricing'],
     ['/e-signature-pricing', 'E-signature pricing'],
     ['/free-electronic-signature', 'Free electronic signature'],
-    ['/sign-pdf-online', 'Sign a PDF online'],
+    ['/sign-pdf-online', 'Sign PDF free (no sign-up)'],
     ['/sign-document-online-free', 'Sign documents online free'],
     ['/send-document-for-signature', 'Send for signature'],
     ['/fill-and-sign-pdf', 'Fill and sign PDF'],

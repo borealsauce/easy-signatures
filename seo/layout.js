@@ -116,7 +116,7 @@ ${p.head || ''}
 <header class="s-hero${p.compactHero ? ' compact' : ''}">
   <nav class="s-nav" aria-label="Main">
     <a class="s-logo" href="/" aria-label="${BRAND_NAME}">${LOGO}<span>${WORDMARK}</span></a>
-    <div class="s-links"><a href="/e-signature-pricing">Pricing</a><a href="/signature-generator">Signature generator</a><a href="/blog">Blog</a><a href="/#/login">Log in</a><a class="s-btn" href="/#/signup" data-cta="nav">Start free</a></div>
+    <div class="s-links"><a href="/e-signature-pricing">Pricing</a><a href="/sign-pdf-online">Sign PDF free</a><a href="/signature-generator">Signature generator</a><a href="/blog">Blog</a><a href="/#/login">Log in</a><a class="s-btn" href="/#/signup" data-cta="nav">Start free</a></div>
   </nav>
   <div class="s-hero-copy">
     <ol class="crumbs">${trail.map(([n, h], i) => i === trail.length - 1 ? `<li aria-current="page">${esc(n)}</li>` : `<li><a href="${h}">${esc(n)}</a></li>`).join('')}</ol>

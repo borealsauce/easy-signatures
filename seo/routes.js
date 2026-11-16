@@ -6,16 +6,17 @@ import { PAGES } from './pages.js'
 import { MORE_PAGES } from './landing-more.js'
 import { POSTS, BLOG_INDEX } from './blog.js'
 import { TOOL_PAGE } from './tool-page.js'
+import { SIGN_PDF_PAGE } from './sign-pdf-page.js'
 import { PRIVACY, TERMS } from './legal.js'
 import { marketingHtml } from '../marketing.js'
 import { HOME_FAQ } from '../shared/home-faq.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const LASTMOD = '2026-11-15'
+const LASTMOD = '2026-11-16'
 const HTML_CACHE = 'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400'
 const ASSET_CACHE = 'public, max-age=86400, s-maxage=604800'
 
-export const SEO_PAGES = [...PAGES, ...MORE_PAGES, TOOL_PAGE, BLOG_INDEX, ...POSTS, PRIVACY, TERMS]
+export const SEO_PAGES = [SIGN_PDF_PAGE, ...PAGES, ...MORE_PAGES, TOOL_PAGE, BLOG_INDEX, ...POSTS, PRIVACY, TERMS]
 
 const HOME = {
   path: '/',
@@ -67,7 +68,8 @@ const ASSETS = {
   '/site.webmanifest': ['site.webmanifest', 'application/manifest+json'],
   '/seo.css': ['../seo.css', 'text/css; charset=utf-8'],
   '/analytics.js': ['../analytics.js', 'text/javascript; charset=utf-8'],
-  '/signature-generator.js': ['../signature-generator.js', 'text/javascript; charset=utf-8']
+  '/signature-generator.js': ['../signature-generator.js', 'text/javascript; charset=utf-8'],
+  '/sign-pdf.js': ['../sign-pdf.js', 'text/javascript; charset=utf-8']
 }
 
 // Inject SEO head tags (and optionally the prerendered homepage) into the SPA's index.html.
@@ -98,6 +100,7 @@ export function registerSeo(app, { root, config }) {
   }
 
   app.get('/', (req, res) => send(res, homeHtml))
+  for (const alias of ['/sign-pdf-free', '/sign-pdf-online-free', '/fill-and-sign-pdf-free', '/free-pdf-signer']) app.get(alias, (req, res) => res.redirect(301, '/sign-pdf-online'))
   for (const [path, s] of Object.entries(SHELLS)) {
     const html = shellHtml(indexHtml, { path, ...s, body: s.prerender ? homeBody : '' })
     app.get(path, (req, res) => send(res, html, undefined, 'public, max-age=0, s-maxage=600'))

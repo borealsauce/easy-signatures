@@ -38,6 +38,7 @@ ${checklist(['<b>Intent to sign</b>: the signer took a clear action to sign.', '
     description: 'Step-by-step ways to sign a PDF on a computer or phone, and how to send a PDF for someone else to sign online with an audit trail.',
     summary: 'Sign a PDF yourself on a Mac, PC, or phone, or send it to others to sign online with an audit trail.',
     body: art(`<p>How you sign a PDF depends on one question: <b>does anyone else need to sign it?</b> If it’s just you, a free PDF app is enough. If others need to sign, an e-signature service saves the back and forth.</p>
+<p><b>Fastest option:</b> our <a href="/sign-pdf-online">free online PDF signer</a> works on any computer or phone. Draw, type, or upload your signature, place it, and download. No account, and your file never leaves your browser.</p>
 <h2>1. Sign it yourself in Adobe Acrobat Reader (Windows or Mac)</h2>
 <p>Acrobat Reader is Adobe’s free PDF viewer, and it includes a Fill &amp; Sign tool.</p>
 <ol class="steps"><li>Open the PDF in Acrobat Reader.</li><li>Choose <b>Fill &amp; Sign</b> from the tools.</li><li>Choose <b>Sign</b>, then add your signature by typing, drawing, or uploading an image.</li><li>Place it on the page and save the file.</li></ol>

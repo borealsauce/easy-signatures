@@ -65,6 +65,7 @@ export const MORE_PAGES = [
     lede: 'Upload a contract, agreement, or form, show each person where to sign, and email them a link. They sign on any phone or computer, with no account.',
     jsonld: [APP_LD],
     body: [
+      card(`<h2>Sign a PDF yourself in seconds</h2><p>If you’re the only signer, our <a href="/sign-pdf-online">free PDF signer</a> lets you add your signature, text, and dates to a PDF right in your browser and download it. No account, and nothing is uploaded.</p>`),
       card(`<h2>What you can sign</h2>${checklist(['Contracts and service agreements', 'Leases, offers, and addenda', 'NDAs and confidentiality agreements', 'Estimates, invoices, and change orders', 'Offer letters and policy acknowledgments', 'Consent, waiver, and permission forms'])}<p>Upload ${FILE_TYPES}. Word files and photos are turned into a PDF for signing, and several photos can become one document.</p>`),
       card(`<h2>How to sign a document online</h2>${HOW_IT_WORKS}<p>Signing only for yourself? Choose “Skip, just me” when you add people, place your own fields, and sign.</p>`),
       card(`<h2>Sign a contract online with the other party</h2><p>For a contract, everyone should end up with the same final copy. Add each party as a signer, turn on signing order if you want to countersign last, and set reminders so it doesn’t stall. When everyone has signed, each person gets the flattened PDF and an audit certificate showing who signed and when.</p><p>For businesses that sign the same agreement often, save it as a template. See also <a href="/nda">NDAs</a>, <a href="/contractors">contractor agreements</a>, and <a href="/leases">leases</a>.</p>`),
@@ -128,6 +129,7 @@ export const MORE_PAGES = [
     lede: 'Add text, dates, initials, and signatures to any PDF in your browser, for yourself or for the people who need to complete it.',
     jsonld: [APP_LD],
     body: [
+      card(`<h2>Fill and sign it yourself, free</h2><p>Only you need to fill it in? Use our <a href="/sign-pdf-online"><b>free Fill &amp; Sign PDF tool</b></a>: type into the blanks, add the date and your signature, and download. No account, and the PDF never leaves your browser.</p><p><a class="s-btn" href="/sign-pdf-online">Open the free PDF signer</a></p>`),
       card(`<h2>Two ways to fill and sign</h2>
 <h3>Fill and sign it yourself</h3><p>Upload the PDF, choose “Skip, just me,” and place your text, date, name, initials, and signature fields where they belong. Then sign and download the finished PDF.</p>
 <h3>Have someone else fill and sign</h3><p>Add the other person as a signer and place text fields for the details they need to enter, plus their signature and date. They complete it from their phone or computer, and you both get the finished copy.</p>`),
