@@ -168,3 +168,5 @@ body.marketing main { max-width: none; margin: 0; padding: 0; }
 .mkt .free-tool:hover { background: rgba(20,184,166,.2); color: #fff; }
 .mkt .free-tool b { color: #5EEAD4; }
 .mkt .free-tool-tag { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; background: #14C4B0; color: #042F2E; padding: 2px 8px; border-radius: 999px; }
+.mkt .free-tool-note { font-size: 12.5px; opacity: .75; }
+@media (max-width: 640px) { .mkt .nav-links .nav-free { display: none; } .mkt .free-tool { border-radius: 16px; } .mkt .free-tool-note { flex-basis: 100%; } }

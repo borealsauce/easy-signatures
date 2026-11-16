@@ -23,7 +23,7 @@ export function marketingHtml({ loggedIn, smsEnabled = true }) {
       <a class="logo" href="#/" aria-label="${BRAND_NAME}">${logo()} ${WORDMARK}</a>
       <div class="nav-links">
         <a class="btn btn-teal" href="${start}">Start free</a>
-        <a href="/sign-pdf-online">Sign PDF free</a>
+        <a class="nav-free" href="/sign-pdf-online">Sign PDF free</a>
         <a href="#pricing">Pricing</a>
         ${account}
         <a href="#/contact">Need help?</a>
@@ -37,7 +37,7 @@ export function marketingHtml({ loggedIn, smsEnabled = true }) {
         <a class="btn-hero" href="${start}"><strong>Start Free! <span class="cta-actually">(Actually)</span></strong><em>First document’s on the house</em></a>
         <a class="btn btn-outline" href="#pricing">See pricing</a>
       </div>
-      <a class="free-tool" href="/sign-pdf-online" data-cta="home-free-tool"><span class="free-tool-tag">Free tool</span> Just need to sign a PDF yourself? <b>Sign PDF online free</b>, no account, file never leaves your browser <span aria-hidden="true">→</span></a>
+      <a class="free-tool" href="/sign-pdf-online" data-cta="home-free-tool"><span class="free-tool-tag">Free tool</span> <span>Just need to sign a PDF yourself? <b>Sign PDF online free&nbsp;→</b></span> <span class="free-tool-note">No account. Your file never leaves your browser.</span></a>
     </div>
     <div class="demo" aria-label="Signing editor preview">
       <div class="fields">
