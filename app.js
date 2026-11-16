@@ -300,7 +300,7 @@ async function route() {
     '': landing, pricing, login, signup, phone, contact, forgot, reset: () => resetPw(a), app: dashboard, new: newDoc, edit: () => editor(a),
     sign: () => signToken(a), inperson: () => inperson(a), cert: () => cert(a), templates, links, form: () => publicForm(a), bulk, proposal, team, 'team-invite': () => teamInvite(a), developer, settings
   }
-  if (['sign', 'inperson', 'edit', 'form'].includes(r)) { warmPdfLibs(); await SIG_FONTS_READY } else if (S.me) warmPdfLibs()
+  if (['sign', 'inperson', 'edit', 'form'].includes(r)) { warmPdfLibs(); await sigFontsReady() } else if (S.me) { warmPdfLibs(); sigFontsReady() }
   await (R[r] || landing)()
   if (pricingAnchor) document.getElementById('pricing')?.scrollIntoView()
   afterRender()
@@ -1781,5 +1781,7 @@ async function boot() {
   await route()
 }
 // Signature fonts load in the background; only views that draw typed signatures wait for them.
-const SIG_FONTS_READY = Promise.race([Promise.all(SIGFONTS.map(f => document.fonts.load(`64px '${f}'`))).catch(() => {}), new Promise(r => setTimeout(r, 4000))])
+// Signature fonts load only when a page draws signatures (not on the marketing pages).
+let sigFontsP
+const sigFontsReady = () => sigFontsP ||= Promise.race([Promise.all(SIGFONTS.map(f => document.fonts.load(`64px '${f}'`))).catch(() => {}), new Promise(r => setTimeout(r, 4000))])
 mountHelp(); boot()
