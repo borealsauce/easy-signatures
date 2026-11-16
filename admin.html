@@ -48,7 +48,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
 const fmt = d => d ? new Date(d).toLocaleString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' PT' : '—'
 const day = d => d ? new Date(d).toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', year: 'numeric' }) : '—'
 const money = n => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const TABS = [['income', 'Income'], ['users', 'Users'], ['promo', 'Promo codes'], ['documents', 'Documents'], ['activity', 'Activity'], ['support', 'Support'], ['health', 'Health']]
+const TABS = [['funnel', 'Funnel'], ['income', 'Income'], ['users', 'Users'], ['promo', 'Promo codes'], ['documents', 'Documents'], ['activity', 'Activity'], ['support', 'Support'], ['health', 'Health']]
 let tab = (location.hash || '').slice(1) || 'users'
 let cache = {}
 function toast(m, bad) { const t = document.getElementById('toast'); t.textContent = m; t.className = 'show' + (bad ? ' err' : ''); clearTimeout(t._t); t._t = setTimeout(() => t.className = '', 3200) }
@@ -73,6 +73,28 @@ async function gate() {
 async function show() { navTabs(); root.innerHTML = '<div class="card muted">Loading…</div>'; try { await VIEWS[tab]() } catch (e) { root.innerHTML = '<div class="card">Something went wrong: ' + esc(e.message) + '</div>' } }
 
 const VIEWS = {
+  async funnel() {
+    const days = Number(sessionStorage.getItem('eds_fdays') || 30)
+    const r = await api('/api/admin/funnel?days=' + days)
+    if (!r.ok) throw new Error(r.json.message || 'Could not load the funnel')
+    const d = r.json, top = d.steps[0].count || 0
+    const pct = (n, of) => of ? (Math.round(n / of * 1000) / 10) + '%' : '—'
+    const opts = [1, 7, 30, 90].map(n => '<option value="' + n + '"' + (n === days ? ' selected' : '') + '>Last ' + (n === 1 ? '24 hours' : n + ' days') + '</option>').join('')
+    const rows = d.steps.map((s, i) => '<tr><td><b>' + esc(s.label) + '</b><div class="muted">' + esc(s.key) + '</div></td><td style="font-size:18px;font-weight:800">' + s.count + ' <span class="muted">' + esc(s.unit) + '</span>'
+      + (s.key === 'purchase' && s.purchases ? '<div class="muted">' + s.purchases + ' purchases · ' + money(s.revenue) + '</div>' : '') + '</td><td>' + (i ? pct(s.count, d.steps[i - 1].count) : '') + '</td><td>' + pct(s.count, top)
+      + '</td><td style="width:30%"><div style="background:#e2e8f0;border-radius:6px;height:10px"><div style="background:var(--teal);height:10px;border-radius:6px;width:' + (top ? Math.min(100, s.count / top * 100) : 0) + '%"></div></div></td></tr>')
+    const list = (title, items, k) => '<div class="card"><h2>' + title + '</h2>' + table(['', 'Count'], items.map(x => '<tr><td>' + esc(x[k] || '—') + '</td><td>' + x.n + '</td></tr>'), 'Nothing yet.') + '</div>'
+    const byDay = {}
+    for (const x of d.daily) (byDay[x.day] = byDay[x.day] || {})[x.name] = x.n
+    const cols = ['landing_view', 'cta_click', 'signup_view', 'signup_started', 'checkout_started', 'pdf_tool_open', 'pdf_signed']
+    root.innerHTML = '<div class="card"><div class="row"><h2>Signup funnel</h2><span class="sp"></span><select id="fd">' + opts + '</select></div>'
+      + '<p class="muted">Visits, clicks and signup-form steps are anonymous per-tab sessions (no cookies, bots and automated browsers skipped). Accounts, confirmations, first sends and payments come from the app\'s own records, excluding the admin account. Step % is against the step above; overall % is against visits.</p>'
+      + table(['Step', 'Count', 'Step %', 'Overall %', ''], rows) + '</div>'
+      + '<div class="stats"><div class="stat"><div class="k">Free PDF tool opens</div><div class="v">' + (d.tool.pdf_tool_open || 0) + '</div></div><div class="stat"><div class="k">PDFs signed with the tool</div><div class="v">' + (d.tool.pdf_signed || 0) + '</div></div></div>'
+      + list('Top landing pages', d.landings, 'path') + list('Traffic sources', d.sources, 'source') + list('Calls to action clicked', d.ctas, 'cta')
+      + '<div class="card"><h2>By day (PT)</h2>' + table(['Day'].concat(cols), Object.keys(byDay).map(k => '<tr><td>' + k + '</td>' + cols.map(c => '<td>' + (byDay[k][c] || 0) + '</td>').join('') + '</tr>'), 'No events yet.') + '</div>'
+    document.getElementById('fd').onchange = e => { sessionStorage.setItem('eds_fdays', e.target.value); show() }
+  },
   async income() {
     const r = await api('/api/admin/income')
     if (!r.ok) { root.innerHTML = '<div class="card"><h1>Income</h1><p>' + esc(r.json.message || 'Could not load Stripe data.') + '</p></div>'; return }

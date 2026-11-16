@@ -1,4 +1,5 @@
 import express from 'express'
+import { createHash } from 'node:crypto'
 import multer from 'multer'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -34,6 +35,7 @@ import {
 } from './developer.js'
 import { existsSync } from 'node:fs'
 import { verifySvix, forwardInbound } from './inbound.js'
+import { recordEvent, cleanClientEvent, funnelReport } from './funnel.js'
 import { registerSeo } from '../seo/routes.js'
 import { notFoundPage } from '../seo/layout.js'
 
@@ -100,6 +102,17 @@ export async function createApp(env = process.env) {
       ctx.logError?.('inbound-email', String(e?.message || e).slice(0, 300))
       res.status(500).json({ error: 'forward_failed', message: 'Could not forward email.' })
     }
+  }))
+
+  // Cookie-free funnel beacon (navigator.sendBeacon). Funnel rows hold no IP, cookie, or email; the rate-limit key is a hash.
+  app.post('/api/ev', express.text({ type: '*/*', limit: '4kb' }), asyncRoute(async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    let body = null
+    try { body = JSON.parse(typeof req.body === 'string' ? req.body : '') } catch {}
+    const ev = cleanClientEvent(body, req.headers['user-agent'])
+    const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim()
+    if (ev && await allow(db, 'ev:' + createHash('sha256').update(ip || 'unknown').digest('hex').slice(0, 16), { limit: 300, windowMs: 60 * 60 * 1000 })) await recordEvent(db, ev)
+    res.status(204).end()
   }))
 
   app.use(express.json({ limit: '8mb' }))
@@ -317,6 +330,11 @@ export async function createApp(env = process.env) {
 
   app.get('/api/admin/support', adminOnly, asyncRoute(async (req, res) => {
     res.json({ messages: await adminSupport(ctx) })
+  }))
+
+  app.get('/api/admin/funnel', adminOnly, asyncRoute(async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    res.json(await funnelReport(ctx, { days: req.query.days, excludeEmails: req.query.all === '1' ? [] : config.adminEmails }))
   }))
 
   app.get('/api/admin/health', adminOnly, asyncRoute(async (req, res) => {
@@ -614,6 +632,7 @@ export async function createApp(env = process.env) {
       kind,
       documentId: req.body.documentId || ''
     })
+    await recordEvent(db, { name: 'checkout_started', userId: req.user.id, path: '/api/billing/checkout', meta: { pack: kind } })
     res.json({ url: session.url, id: session.id })
   }))
 
@@ -759,13 +778,15 @@ export async function createApp(env = process.env) {
   for (const page of ['/contact', '/signup', '/login', '/pricing', '/app']) {
     app.get(page, (req, res) => res.sendFile(join(root, 'index.html')))
   }
-  app.get('/app.js', (req, res) => res.sendFile(join(root, 'app.js')))
-  app.get('/app.css', (req, res) => res.sendFile(join(root, 'app.css')))
-  app.get('/home.css', (req, res) => res.sendFile(join(root, 'home.css')))
-  app.get('/help.css', (req, res) => res.sendFile(join(root, 'help.css')))
-  app.get('/help.js', (req, res) => res.sendFile(join(root, 'help.js')))
-  app.get('/marketing.js', (req, res) => res.sendFile(join(root, 'marketing.js')))
-  app.use('/shared', express.static(join(root, 'shared')))
+  // Edge-cache app code per deployment (Vercel purges on deploy); browsers always revalidate.
+  const STATIC_CACHE = { headers: { 'Cache-Control': 'public, max-age=0, s-maxage=86400, must-revalidate' } }
+  app.get('/app.js', (req, res) => res.sendFile(join(root, 'app.js'), STATIC_CACHE))
+  app.get('/app.css', (req, res) => res.sendFile(join(root, 'app.css'), STATIC_CACHE))
+  app.get('/home.css', (req, res) => res.sendFile(join(root, 'home.css'), STATIC_CACHE))
+  app.get('/help.css', (req, res) => res.sendFile(join(root, 'help.css'), STATIC_CACHE))
+  app.get('/help.js', (req, res) => res.sendFile(join(root, 'help.js'), STATIC_CACHE))
+  app.get('/marketing.js', (req, res) => res.sendFile(join(root, 'marketing.js'), STATIC_CACHE))
+  app.use('/shared', express.static(join(root, 'shared'), { maxAge: 0, setHeaders: res => res.setHeader('Cache-Control', STATIC_CACHE.headers['Cache-Control']) }))
   app.get('/layouts', (req, res) => res.sendFile(join(root, 'layouts', 'index.html')))
   app.get('/layouts/:id', (req, res, next) => {
     if (!['a', 'b', 'c'].includes(req.params.id)) return next()

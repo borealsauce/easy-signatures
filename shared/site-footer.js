@@ -4,7 +4,7 @@ import { logoMarkSvg, WORDMARK, BRAND_NAME } from './logo.js'
 export const FOOTER_GROUPS = [
   ['Product', [
     ['/', 'Home'],
-    ['/pricing', 'Pricing'],
+    ['/e-signature-pricing', 'Pricing'],
     ['/e-signature-pricing', 'E-signature pricing'],
     ['/free-electronic-signature', 'Free electronic signature'],
     ['/sign-pdf-online', 'Sign PDF free (no sign-up)'],

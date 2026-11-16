@@ -318,3 +318,19 @@ alter table profiles add column if not exists terms_accepted_ip text;
 
 -- Per-user favorite field types in the editor library.
 alter table profiles add column if not exists favorite_fields jsonb not null default '["signature","initials"]'::jsonb;
+
+-- First-party, cookie-free funnel events: an anonymous per-tab id (sessionStorage), never an IP or email.
+-- Signups, verifications, sends, and purchases are counted from their own tables; this holds the steps before them.
+create table if not exists funnel_events (
+  id bigserial primary key,
+  name text not null,
+  sid text,
+  user_id uuid,
+  path text,
+  source text,
+  meta jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists funnel_events_created_idx on funnel_events (created_at desc);
+create index if not exists funnel_events_name_idx on funnel_events (name, created_at desc);
+alter table funnel_events enable row level security;

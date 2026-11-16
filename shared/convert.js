@@ -1,3 +1,4 @@
+import { pdfLib } from './pdf-libs.js'
 // Turns whatever the user drops (PDF, photos, screenshots, HEIC, Word, Excel, text…) into PDF bytes in the browser.
 // Heavy converters load from a CDN only when a file actually needs them.
 
@@ -117,7 +118,7 @@ async function addImagePage(pd, c, { margin = 36, fitPage = false } = {}) {
 }
 
 export async function imagesToPdf(files, onStep = () => {}) {
-  const pd = await window.PDFLib.PDFDocument.create(); pd.setProducer('Easy Digital Signatures')
+  const pd = await (await pdfLib()).PDFDocument.create(); pd.setProducer('Easy Digital Signatures')
   for (let i = 0; i < files.length; i++) {
     onStep(`Converting image ${i + 1} of ${files.length}…`)
     await addImagePage(pd, await decodeImage(files[i]))
@@ -187,7 +188,7 @@ async function htmlToPdf(html, onStep) {
       }
       if (cur.childNodes.length > 1) { b.remove(); cur = newPage(); cur.appendChild(b) }
     }
-    const pd = await window.PDFLib.PDFDocument.create(); pd.setProducer('Easy Digital Signatures')
+    const pd = await (await pdfLib()).PDFDocument.create(); pd.setProducer('Easy Digital Signatures')
     const used = pages.filter(p => p.textContent.trim() || p.querySelector('img,table'))
     if (!used.length) throw new Error('This file looks empty.')
     for (let i = 0; i < used.length; i++) {

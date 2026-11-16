@@ -30,7 +30,6 @@ const WEBSITE_LD = { '@context': 'https://schema.org', '@type': 'WebSite', '@id'
 
 // Shell pages that the client app renders. They get real titles and analytics, but no body.
 const SHELLS = {
-  '/pricing': { title: 'Pricing | Easy Digital Signatures', description: 'First document free, then $1 per document, 10 for $5, or 50 for $10. No subscription.', canonical: '/', prerender: true },
   '/contact': { title: 'Contact Easy Digital Signatures', description: 'Questions about a document or your account? Send us a message and we’ll reply by email.' },
   '/signup': { title: 'Create your free account | Easy Digital Signatures', description: 'Create a free account and send your first document for e-signature at no cost.' },
   '/login': { title: 'Log in | Easy Digital Signatures', description: 'Log in to send documents for signature.', robots: 'noindex,follow' },
@@ -75,8 +74,10 @@ const ASSETS = {
 }
 
 // Inject SEO head tags (and optionally the prerendered homepage) into the SPA's index.html.
-function shellHtml(indexHtml, { path, title, description, robots, canonical, jsonld = [], body = '' }) {
+function shellHtml(indexHtml, { path, title, description, robots, canonical, jsonld = [], body = '' }, css = {}) {
   let html = indexHtml
+    // Inline the app's own stylesheets so first paint doesn't wait on three extra requests.
+    .replace(/<link rel="stylesheet" href="\/(app|home|help)\.css">/g, (m, name) => css[name] ? `<style>${css[name]}</style>` : m)
     .replace(/<link rel="(?:icon|apple-touch-icon)"[^>]*>/g, '')
     .replace(/<script src="(https:\/\/[^"]+)"><\/script>/g, '<script defer src="$1"></script>')
     // Google Fonts CSS shouldn't block first paint of the prerendered page (fonts use display=swap).
@@ -93,7 +94,9 @@ export function registerSeo(app, { root, config }) {
   const smsEnabled = config?.smsMode !== 'off'
   const homeBody = marketingHtml({ loggedIn: false, smsEnabled })
   const homeLd = [ORG_LD, WEBSITE_LD, APP_LD, faqLd(HOME_FAQ)]
-  const homeHtml = shellHtml(indexHtml, { ...HOME, jsonld: homeLd, body: homeBody })
+  const css = {}
+  for (const name of ['app', 'home', 'help']) { try { css[name] = readFileSync(join(root, name + '.css'), 'utf8').replace(/<\/style/gi, '') } catch {} }
+  const homeHtml = shellHtml(indexHtml, { ...HOME, jsonld: homeLd, body: homeBody }, css)
 
   const send = (res, html, type = 'text/html; charset=utf-8', cache = HTML_CACHE) => {
     res.setHeader('Content-Type', type)
@@ -102,9 +105,11 @@ export function registerSeo(app, { root, config }) {
   }
 
   app.get('/', (req, res) => send(res, homeHtml))
+  // /pricing used to be a copy of the homepage (canonical '/'); the real pricing page is /e-signature-pricing.
+  app.get('/pricing', (req, res) => res.redirect(301, '/e-signature-pricing'))
   for (const alias of ['/sign-pdf-free', '/sign-pdf-online-free', '/fill-and-sign-pdf-free', '/free-pdf-signer']) app.get(alias, (req, res) => res.redirect(301, '/sign-pdf-online'))
   for (const [path, s] of Object.entries(SHELLS)) {
-    const html = shellHtml(indexHtml, { path, ...s, body: s.prerender ? homeBody : '' })
+    const html = shellHtml(indexHtml, { path, ...s, body: s.prerender ? homeBody : '' }, css)
     app.get(path, (req, res) => send(res, html, undefined, 'public, max-age=0, s-maxage=600'))
   }
   for (const page of SEO_PAGES) {

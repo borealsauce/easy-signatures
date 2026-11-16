@@ -26,7 +26,19 @@
     if (!saved) sessionStorage.setItem('eds_touch', JSON.stringify(touch))
   } catch {}
 
+  // Anonymous per-tab id for the first-party funnel (sessionStorage, not a cookie).
+  let sid = ''
+  try { sid = sessionStorage.getItem('eds_sid') || ''; if (!sid) { sid = Math.random().toString(36).slice(2, 12) + Date.now().toString(36); sessionStorage.setItem('eds_sid', sid) } } catch {}
+  const FUNNEL = ['landing_view', 'cta_click', 'signup_view', 'signup_started', 'pdf_tool_open', 'pdf_signed', 'begin_checkout']
+  function beacon(name, data) {
+    if (!sid || !FUNNEL.includes(name) || (navigator.webdriver && !localStorage.getItem('eds_track_test'))) return
+    const body = JSON.stringify({ name, sid, path: location.pathname + (location.hash.startsWith('#/') ? location.hash.split('?')[0] : ''), data: { ...data, utm_source: touch.utm_source, utm_medium: touch.utm_medium, utm_campaign: touch.utm_campaign, ref: touch.ref, landing: touch.landing } })
+    try { if (navigator.sendBeacon && navigator.sendBeacon('/api/ev', new Blob([body], { type: 'text/plain' }))) return } catch {}
+    try { fetch('/api/ev', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'text/plain' } }).catch(() => {}) } catch {}
+  }
+
   window.edsTrack = function (name, data = {}) {
+    beacon(name, data)
     const flat = {}
     for (const [k, v] of Object.entries({ ...data, landing: touch.landing, utm_source: touch.utm_source, utm_campaign: touch.utm_campaign })) {
       if (v !== undefined && v !== '') flat[k] = typeof v === 'number' || typeof v === 'boolean' ? v : String(v).slice(0, 255)
@@ -64,6 +76,9 @@
       return p
     }
   }
+
+  // First page of this tab's visit.
+  try { if (!sessionStorage.getItem('eds_lv')) { sessionStorage.setItem('eds_lv', '1'); window.edsTrack('landing_view', {}) } } catch {}
 
   document.addEventListener('click', e => {
     const a = e.target.closest && e.target.closest('[data-cta]')

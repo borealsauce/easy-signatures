@@ -6,6 +6,7 @@ import { marketingHtml } from '/marketing.js'
 import { logoMarkSvg } from '/shared/logo.js'
 import { mountHelp } from '/help.js'
 import { ACCEPT, MAX_MB, toPdfs } from '/shared/convert.js'
+import { pdfjs, pdfLib, warmPdfLibs } from '/shared/pdf-libs.js'
 
 const $ = (s, r = document) => r.querySelector(s)
 const $$ = (s, r = document) => [...r.querySelectorAll(s)]
@@ -54,7 +55,6 @@ const DAY_MS = 864e5
 const recentlyReminded = d => d.lastReminded && Date.now() - new Date(d.lastReminded).getTime() < DAY_MS
 const PHONE_NOTE = "Your number is only used to verify your account. We'll never send spam or marketing texts."
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 
 function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 2800) }
 function modal(html) { $('#mbox').innerHTML = html; $('#modal').classList.remove('hidden') }
@@ -143,7 +143,7 @@ async function pdfBytes(d) {
 async function renderPages(el, d) {
   el.innerHTML = '<div class="pgload"><span class="spin"></span> Loading document…</div>'
   const bytes = await pdfBytes(d)
-  const pdf = await pdfjsLib.getDocument({ data: bytes.slice() }).promise // copy: pdf.js hands the buffer to its worker
+  const pdf = await (await pdfjs()).getDocument({ data: bytes.slice() }).promise // copy: pdf.js hands the buffer to its worker
   const SC = 1.6, p1 = await pdf.getPage(1), v1 = p1.getViewport({ scale: 1 })
   el.innerHTML = ''
   const wraps = [], jobs = []
@@ -300,6 +300,7 @@ async function route() {
     '': landing, pricing, login, signup, phone, contact, forgot, reset: () => resetPw(a), app: dashboard, new: newDoc, edit: () => editor(a),
     sign: () => signToken(a), inperson: () => inperson(a), cert: () => cert(a), templates, links, form: () => publicForm(a), bulk, proposal, team, 'team-invite': () => teamInvite(a), developer, settings
   }
+  if (['sign', 'inperson', 'edit', 'form'].includes(r)) { warmPdfLibs(); await SIG_FONTS_READY } else if (S.me) warmPdfLibs()
   await (R[r] || landing)()
   if (pricingAnchor) document.getElementById('pricing')?.scrollIntoView()
   afterRender()
@@ -334,10 +335,10 @@ function contact() {
 function login() {
   const params = new URLSearchParams(location.search)
   V.innerHTML = `<div class="card auth"><h1>Log in</h1>${params.get('verified') === '1' ? '<p class="banner">Email confirmed. Log in to continue.</p>' : ''}${params.get('verified') === '0' ? '<p class="banner">That confirmation link is invalid or already used.</p>' : ''}
-  <label class="f">Email</label><input id="em" type="email" autocomplete="username" style="width:100%">
-  <label class="f">Password</label><input id="pw" type="password" autocomplete="current-password" style="width:100%">
+  <label class="f" for="em">Email</label><input id="em" type="email" autocomplete="username" style="width:100%">
+  <label class="f" for="pw">Password</label><input id="pw" type="password" autocomplete="current-password" style="width:100%">
   <br><br><button class="p" id="go">Log in</button><div id="lmsg"></div>
-  <p><a href="#/forgot">Forgot password?</a> · <a href="#/signup">Create an account</a> · <a href="javascript:void 0" id="rs2">Resend confirmation email</a></p></div>`
+  <p><a href="#/forgot" class="tap">Forgot password?</a> · <a href="#/signup" class="tap">Create an account</a> · <a href="javascript:void 0" id="rs2" class="tap">Resend confirmation email</a></p></div>`
   const resendConfirm = async () => {
     const email = $('#em').value
     if (!email) return toast('Enter your email first')
@@ -345,6 +346,7 @@ function login() {
     toast(r.json?.message || (r.ok ? 'Sent' : 'Could not send'))
   }
   $('#rs2').onclick = resendConfirm
+  for (const id of ['#em', '#pw']) $(id).onkeydown = e => { if (e.key === 'Enter') $('#go').click() }
   $('#go').onclick = async () => {
     const res = await api('/api/auth/login', { method: 'POST', body: { email: $('#em').value, password: $('#pw').value } })
     if (!res.ok) {
@@ -363,7 +365,7 @@ function login() {
 
 function forgot() {
   V.innerHTML = `<div class="card auth"><h1>Reset your password</h1><p>Enter your account email and we’ll send you a reset link.</p>
-  <label class="f">Email</label><input id="em" type="email" autocomplete="email" style="width:100%">
+  <label class="f" for="em">Email</label><input id="em" type="email" autocomplete="email" style="width:100%">
   <br><br><button class="p" id="go">Send reset link</button><div id="fmsg"></div>
   <p><a href="#/login">Back to log in</a></p></div>`
   $('#go').onclick = async () => {
@@ -375,8 +377,8 @@ function forgot() {
 }
 function resetPw(token) {
   V.innerHTML = `<div class="card auth"><h1>Choose a new password</h1>
-  <label class="f">New password</label><input id="pw" type="password" autocomplete="new-password" style="width:100%">
-  <label class="f">Confirm new password</label><input id="pw2" type="password" autocomplete="new-password" style="width:100%">
+  <label class="f" for="pw">New password</label><input id="pw" type="password" autocomplete="new-password" style="width:100%">
+  <label class="f" for="pw2">Confirm new password</label><input id="pw2" type="password" autocomplete="new-password" style="width:100%">
   <br><br><button class="p" id="go">Save password</button><div id="rmsg"></div></div>`
   $('#go').onclick = async () => {
     if ($('#pw').value !== $('#pw2').value) { $('#rmsg').innerHTML = '<p class="banner">The passwords don’t match.</p>'; return }
@@ -387,17 +389,33 @@ function resetPw(token) {
 }
 
 function signup() {
-  V.innerHTML = `<div class="card auth"><h1>Create your account</h1><p>${S.smsEnabled ? 'You’ll confirm your email, then a mobile number, before the free document unlocks.' : 'You’ll confirm your email before the free document unlocks.'}</p>
-  <label class="f">Full name</label><input id="nm" autocomplete="name" style="width:100%">
-  <label class="f">Email</label><input id="em" type="email" autocomplete="email" style="width:100%">
-  <label class="f">Password</label><input id="pw" type="password" autocomplete="new-password" style="width:100%">
-  <label class="f">Promo code (optional)</label><input id="pc" autocomplete="off" style="width:100%;text-transform:uppercase" placeholder="Enter code">
-  <label class="row" style="margin-top:14px;align-items:flex-start;gap:8px"><input type="checkbox" id="tos" style="margin-top:3px"> <span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a></span></label>
-  <br><button class="p" id="go">Create account</button><div id="smsg"></div>
-  <p><a href="#/login">I already have an account</a></p></div>`
-  $('#go').onclick = async () => {
+  const track = (n, d) => { try { window.edsTrack && window.edsTrack(n, d) } catch {} }
+  V.innerHTML = `<div class="card auth"><h1>Create your free account</h1>
+  <p class="free-note"><b>Your first document is free.</b> No credit card. After that it’s $1 each, 10 for $5, or 50 for $10.</p>
+  <form id="sf" novalidate>
+  <label class="f" for="nm">Your name <span class="note">(signers see this)</span></label><input id="nm" autocomplete="name" required style="width:100%">
+  <label class="f" for="em">Email</label><input id="em" type="email" autocomplete="email" inputmode="email" required style="width:100%">
+  <label class="f" for="pw">Password <span class="note">(8+ characters)</span></label><input id="pw" type="password" autocomplete="new-password" minlength="8" required style="width:100%">
+  <p style="margin:10px 0 0"><a href="javascript:void 0" id="pcl" class="tap">Have a promo code?</a></p>
+  <div id="pcw" class="hidden"><label class="f" for="pc">Promo code</label><input id="pc" autocomplete="off" style="width:100%;text-transform:uppercase" placeholder="Enter code"></div>
+  <label for="tos" style="margin-top:14px;display:flex;flex-wrap:nowrap;align-items:flex-start;gap:10px;font-size:14px"><input type="checkbox" id="tos" style="margin:1px 0 0;width:20px;height:20px;flex-shrink:0;padding:0"> <span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a></span></label>
+  <br><button class="p" id="go" type="submit" style="width:100%">Create free account</button><div id="smsg" role="alert"></div>
+  </form>
+  <p class="note" style="margin-top:12px">${S.smsEnabled ? 'Next, confirm your email and a mobile number to unlock the free document.' : 'Next, click the link we email you to unlock the free document.'}</p>
+  <p><a href="#/login" class="tap">I already have an account</a></p></div>`
+  track('signup_view', {})
+  let started = false
+  $('#sf').addEventListener('input', () => { if (!started) { started = true; track('signup_started', {}) } })
+  $('#pcl').onclick = () => { $('#pcw').classList.remove('hidden'); $('#pcl').remove(); $('#pc').focus() }
+  if (new URLSearchParams(location.search).get('promo')) { $('#pcl').click(); $('#pc').value = new URLSearchParams(location.search).get('promo') }
+  $('#sf').onsubmit = e => { e.preventDefault(); $('#go').click() }
+  $('#go').onclick = async e => {
+    if (e) e.preventDefault()
+    if ($('#go').disabled) return
     if (!$('#tos').checked) { $('#smsg').innerHTML = '<p class="banner">Please agree to the Terms and Privacy Policy to create your account.</p>'; return }
+    $('#go').disabled = true; $('#go').textContent = 'Creating your account…'
     const res = await api('/api/auth/signup', { method: 'POST', body: { name: $('#nm').value, email: $('#em').value, password: $('#pw').value, promo: $('#pc').value, acceptTerms: true, termsVersion: TERMS_VERSION } })
+    $('#go').disabled = false; $('#go').textContent = 'Create free account'
     if (!res.ok) { $('#smsg').innerHTML = `<p class="banner">${esc(res.json?.message || 'Could not sign up')}</p>`; return }
     const em = esc($('#em').value)
     const promo = res.json.promo
@@ -412,10 +430,10 @@ function phone() {
   if (!S.smsEnabled) return location.hash = '#/app'
   if (!S.me) return location.hash = '#/login'
   V.innerHTML = `<div class="card auth"><h1>Verify your phone</h1><p>This unlocks your one free document. Paying does not require a phone number.</p>
-  <label class="f">Mobile number</label><input id="ph" placeholder="+1 415 555 0100" autocomplete="tel" style="width:100%">
+  <label class="f" for="ph">Mobile number</label><input id="ph" placeholder="+1 415 555 0100" autocomplete="tel" style="width:100%">
   <p class="note">${esc(PHONE_NOTE)}</p>
   <br><button class="p" id="send">Text me a code</button>
-  <div id="step2" class="hidden"><label class="f">6-digit code</label><input id="code" inputmode="numeric" maxlength="6" style="width:100%;letter-spacing:4px;font-size:20px"><br><br><button class="p" id="check">Verify</button></div>
+  <div id="step2" class="hidden"><label class="f" for="code">6-digit code</label><input id="code" inputmode="numeric" maxlength="6" style="width:100%;letter-spacing:4px;font-size:20px"><br><br><button class="p" id="check">Verify</button></div>
   <p><a href="#/app">Skip for now</a></p></div>`
   $('#send').onclick = async () => {
     const res = await api('/api/phone/start', { method: 'POST', body: { phone: $('#ph').value } })
@@ -718,7 +736,7 @@ async function sendPdf(bytes, filename, { name, template } = {}, onProgress) {
   return r.json
 }
 async function previewFirstPage(bytes, el) {
-  const pdf = await pdfjsLib.getDocument({ data: bytes.slice() }).promise, p = await pdf.getPage(1)
+  const pdf = await (await pdfjs()).getDocument({ data: bytes.slice() }).promise, p = await pdf.getPage(1)
   const vp = p.getViewport({ scale: 1.6 }), c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height
   await p.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise
   const w = document.createElement('div'); w.className = 'page'; w.style.width = Math.min(820, vp.width / 1.6 * 1.35) + 'px'; w.appendChild(c)
@@ -794,8 +812,8 @@ async function saveTpl(id) {
 }
 function tplBuilder() {
   modal(`<h3>Create a template</h3><p style="font-size:13px;color:var(--mut)">Build a reusable document from scratch. Nothing prebuilt.</p>
-  <label class="f">Template name</label><input id="tbn" style="width:100%" placeholder="e.g. Client intake form">
-  <label class="f">Roles (comma separated)</label><input id="tbr" style="width:100%" value="Client">
+  <label class="f" for="tbn">Template name</label><input id="tbn" style="width:100%" placeholder="e.g. Client intake form">
+  <label class="f" for="tbr">Roles (comma separated)</label><input id="tbr" style="width:100%" value="Client">
   <label class="f">Start from</label>
   <label class="row" style="font-size:14px"><input type="radio" name="tbs" value="up" checked> Upload my own PDF / image</label>
   <label class="row" style="font-size:14px"><input type="radio" name="tbs" value="bl"> Blank page(s) <input id="tbp" type="number" min="1" max="10" value="1" style="width:60px"></label>
@@ -962,7 +980,7 @@ async function editor(id) {
   <div class="panel"><h4 class="rcph">${d.tpl ? 'Roles' : 'Who needs to sign?'}${d.tpl || locked ? '' : '<button class="rcpedit" onclick="editRecipients()">Edit</button>'}</h4><label class="row" style="font-size:13px"><input type="checkbox" id="ord" ${d.ordered ? 'checked' : ''}> Sign in order — one after another</label><div id="sg"></div>${locked ? '' : '<button onclick="addSigner()" style="width:100%">+ Add recipient</button>'}
   <h4 style="margin-top:16px">Field properties</h4><div id="props"><p style="font-size:13px;color:var(--mut)">Select a field.</p></div>
   <h4 style="margin-top:16px">Settings</h4><label class="f">Folder</label><select id="fo">${S.folders.slice(1).map(f => `<option ${f === d.folder ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select>
-  <label class="f">Expires after (days)</label><input id="ex" type="number" min="1" max="365" value="${d.expiresDays}" style="width:100%"><p class="note" style="font-size:12px">The signing link closes after this many days. Unsigned signers and you get a warning email 2 days before.</p><label class="f">Automatic reminders</label>${remindSelect('rm', d.remindDays, 'style="width:100%"')}<p class="note" style="font-size:12px">Emails only people who haven’t signed. Up to 5 reminders; stops when signed, voided or expired.${locked && !d.tpl ? ` Sent ${d.autoReminders || 0} automatic so far.${d.lastReminded ? ' Last reminded ' + fmt(d.lastReminded) + '.' : ''}` : ''}</p>
+  <label class="f" for="ex">Expires after (days)</label><input id="ex" type="number" min="1" max="365" value="${d.expiresDays}" style="width:100%"><p class="note" style="font-size:12px">The signing link closes after this many days. Unsigned signers and you get a warning email 2 days before.</p><label class="f">Automatic reminders</label>${remindSelect('rm', d.remindDays, 'style="width:100%"')}<p class="note" style="font-size:12px">Emails only people who haven’t signed. Up to 5 reminders; stops when signed, voided or expired.${locked && !d.tpl ? ` Sent ${d.autoReminders || 0} automatic so far.${d.lastReminded ? ' Last reminded ' + fmt(d.lastReminded) + '.' : ''}` : ''}</p>
   <label class="row" style="font-size:13px;margin-top:8px"><input type="checkbox" id="idv" ${d.idv ? 'checked' : ''}> Email an access code</label><label class="f">Message</label><textarea id="msg" style="width:100%">${esc(d.message || '')}</textarea>
   ${locked && d.signers.some(s => s.token) ? `<h4>Signing links</h4>${d.signers.filter(s => s.token).map(s => `<p style="font-size:12px"><b>${esc(s.name)}</b> ${s.role === 'in-person' ? '<span class="note">(in person)</span>' : ''}<br><a href="#/${s.role === 'in-person' ? 'inperson/' + d.id : 'sign/' + s.token}">${s.role === 'in-person' ? 'Hand this device' : 'Open link'}</a></p>`).join('')}` : ''}</div></div>`
   window.addSigner = () => { d.signers.push({ id: uid(), name: 'Signer ' + (d.signers.length + 1), email: '', role: 'signer', color: COLORS[d.signers.length % 6], done: false }); save(); drawS() }
@@ -1024,14 +1042,14 @@ async function editor(id) {
     $$('.fld').forEach(x => x.classList.toggle('sel', x.dataset.id === sel))
     const assigners = [`<option value="${ME_ID}" ${f.signer === ME_ID ? 'selected' : ''}>Me (Fill out now)</option>`].concat(d.signers.filter(s => s.role !== 'cc').map(s => `<option value="${s.id}" ${s.id === f.signer ? 'selected' : ''}>${esc(s.name)}</option>`))
     $('#props').innerHTML = `<label class="f">Type</label><b>${esc(fieldMeta(f.type).label)}</b><label class="f">Assigned to</label><select id="pa" style="width:100%">${assigners.join('')}</select>
-    <label class="f">Label</label><input id="pl" value="${esc(f.label)}" style="width:100%">
-    <label class="f">Placeholder</label><input id="ph" value="${esc(f.placeholder || '')}" style="width:100%">
+    <label class="f" for="pl">Label</label><input id="pl" value="${esc(f.label)}" style="width:100%">
+    <label class="f" for="ph">Placeholder</label><input id="ph" value="${esc(f.placeholder || '')}" style="width:100%">
     <label class="row" style="font-size:13px;margin-top:6px"><input type="checkbox" id="pr" ${f.required ? 'checked' : ''}> Required</label>
     ${['text', 'name'].includes(f.type) ? `<label class="f">Validation</label><select id="pv" style="width:100%">${['none', 'email', 'number', 'zip', 'phone'].map(v => `<option ${f.valid === v ? 'selected' : ''}>${v}</option>`).join('')}</select>` : ''}
-    ${f.type === 'dropdown' || f.type === 'radio' ? `<label class="f">Options (comma separated)</label><input id="po" value="${esc((f.options || []).join(', '))}" style="width:100%">` : ''}
-    ${f.type === 'formula' ? `<label class="f">Formula — use {Label} of number fields</label><input id="pf" value="${esc(f.formula || '')}" placeholder="{Qty}*{Price}" style="width:100%">` : ''}
-    ${f.type === 'payment' ? `<label class="f">Amount ($)</label><input id="pm" type="number" value="${f.amount || 100}" style="width:100%">` : ''}
-    ${f.type === 'currency' ? `<label class="f">Currency</label><input id="pcu" value="${esc(f.currency || 'USD')}" maxlength="3" style="width:100%">` : ''}
+    ${f.type === 'dropdown' || f.type === 'radio' ? `<label class="f" for="po">Options (comma separated)</label><input id="po" value="${esc((f.options || []).join(', '))}" style="width:100%">` : ''}
+    ${f.type === 'formula' ? `<label class="f" for="pf">Formula — use {Label} of number fields</label><input id="pf" value="${esc(f.formula || '')}" placeholder="{Qty}*{Price}" style="width:100%">` : ''}
+    ${f.type === 'payment' ? `<label class="f" for="pm">Amount ($)</label><input id="pm" type="number" value="${f.amount || 100}" style="width:100%">` : ''}
+    ${f.type === 'currency' ? `<label class="f" for="pcu">Currency</label><input id="pcu" value="${esc(f.currency || 'USD')}" maxlength="3" style="width:100%">` : ''}
     ${f.type === 'datetime' ? `<label class="f">Format</label><select id="pfmt" style="width:100%"><option value="datetime" ${f.format !== 'date' ? 'selected' : ''}>Date and time</option><option value="date" ${f.format === 'date' ? 'selected' : ''}>Date only</option></select>` : ''}
     <label class="f">Show only when checkbox is checked</label><select id="pc" style="width:100%"><option value="">Always show</option>${d.fields.filter(x => x.type === 'checkbox' && x.id !== f.id).map(x => `<option value="${x.id}" ${f.cond === x.id ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select>`
     const on = (i, fn) => { const e = $(i); if (e) e.onchange = () => { fn(e); save(); drawF(); if (typeof drawPanel === 'function') drawPanel() } }
@@ -1238,7 +1256,7 @@ async function signToken(token) {
   const approver = s.role === 'approver'
   const brand = session.brand || {}
   V.innerHTML = `<div class="signbar" style="border-top:4px solid ${esc(brand.color || 'var(--brand2)')}">${brand.logoUrl ? `<img src="${esc(brand.logoUrl)}" alt="" style="height:28px;max-width:140px;object-fit:contain">` : ''}<b>${esc(brand.company ? brand.company + ' · ' : '')}${esc(d.name)}</b><span>· ${esc(s.name)}${s.role === 'in-person' ? ' · signing in person' : ''}</span><span class="sp"></span><span id="prog"></span>${approver ? '' : '<button id="nx" style="background:var(--acc)">Next field</button>'}<button id="fin" class="p" style="background:var(--brand2)">${approver ? 'Approve' : 'Finish'}</button><button id="dec" style="background:#fee2e2">Decline</button><button id="cm">Comments (${d.comments.length})</button></div>
-  <div class="card" id="consent" style="margin-bottom:12px">${session.accessCodeRequired ? `<label class="f">Access code from your email</label><input id="acode" maxlength="6" style="max-width:160px;letter-spacing:3px">` : ''}<label class="row"><input type="checkbox" id="ok"> ${esc(session.consentText).replace('Terms of Use', '<a href="/terms" target="_blank" rel="noopener">Terms of Use</a>')}</label></div><div class="pages" id="pages"></div>`
+  <div class="card" id="consent" style="margin-bottom:12px">${session.accessCodeRequired ? `<label class="f" for="acode">Access code from your email</label><input id="acode" maxlength="6" style="max-width:160px;letter-spacing:3px">` : ''}<label class="row"><input type="checkbox" id="ok"> ${esc(session.consentText).replace('Terms of Use', '<a href="/terms" target="_blank" rel="noopener">Terms of Use</a>')}</label></div><div class="pages" id="pages"></div>`
   await renderPages($('#pages'), d)
   const mine = () => d.fields.filter(f => f.signer === s.id && visible(d.fields, f) && f.type !== 'formula')
   const draw = () => {
@@ -1331,7 +1349,7 @@ function sigModal(kind, s, d, cb) {
     const sb = $('#sb'); let get, how
     if (tab === 'auto') {
       const pv = () => { $('#fp').innerHTML = SIGFONTS.map((f, i) => `<div class="genopt ${i === fi ? 'on' : ''}" data-fi="${i}"><img src="${typedSig(nm, f)}"><img src="${typedSig(initialsOf(nm), f)}" class="ini"><small>${esc(f)}</small></div>`).join(''); $$('[data-fi]').forEach(e => e.onclick = () => { fi = +e.dataset.fi; pv() }) }
-      sb.innerHTML = `<label class="f">Confirm your full name</label><input id="tn" value="${esc(nm)}" style="width:100%"><p style="font-size:12px;color:var(--mut);margin:6px 0">Initials: <b id="ti">${esc(initialsOf(nm))}</b> · a middle name adds a letter</p><div id="fp"></div>`
+      sb.innerHTML = `<label class="f" for="tn">Confirm your full name</label><input id="tn" value="${esc(nm)}" style="width:100%"><p style="font-size:12px;color:var(--mut);margin:6px 0">Initials: <b id="ti">${esc(initialsOf(nm))}</b> · a middle name adds a letter</p><div id="fp"></div>`
       pv(); $('#tn').oninput = () => { nm = $('#tn').value; $('#ti').textContent = initialsOf(nm); pv() }; get = () => nm.trim() ? 'both' : null; how = () => `generated, ${SIGFONTS[fi]}`
     }
     if (tab === 'current') { sb.innerHTML = `<img src="${saved}" style="max-width:100%;border:1px solid var(--line);border-radius:8px">`; get = () => saved; how = () => 'previously adopted' }
@@ -1400,7 +1418,7 @@ function links() {
 }
 function publicForm(lid) {
   const known = S.links.find(l => l.id === lid)
-  V.innerHTML = `<div class="card" style="max-width:460px;margin:auto"><h2>${esc(known?.name || 'Sign a document')}</h2><p>Enter your details to get your own copy.</p><label class="f">Full name</label><input id="pn" style="width:100%"><label class="f">Email</label><input id="pe" type="email" style="width:100%"><br><br><button class="p" id="go">Continue to sign</button></div>`
+  V.innerHTML = `<div class="card" style="max-width:460px;margin:auto"><h2>${esc(known?.name || 'Sign a document')}</h2><p>Enter your details to get your own copy.</p><label class="f" for="pn">Full name</label><input id="pn" style="width:100%"><label class="f" for="pe">Email</label><input id="pe" type="email" style="width:100%"><br><br><button class="p" id="go">Continue to sign</button></div>`
   $('#go').onclick = async () => {
     const res = await api('/api/links/' + lid + '/start', { method: 'POST', body: { name: $('#pn').value, email: $('#pe').value } })
     if (!res.ok) return toast(res.json?.message || 'This link is not accepting responses')
@@ -1487,7 +1505,7 @@ function proposal() {
   const r = () => {
     const t = tot()
     V.innerHTML = `<div class="row"><h1>Proposal builder</h1><span class="sp"></span><button class="p" id="cv">Convert to PDF and add signers</button></div><div class="card">
-    <label class="f">Title</label><input id="ti" value="${esc(P.title)}" style="width:100%"><label class="f">Client</label><input id="cl" value="${esc(P.client)}" style="width:100%"><label class="f">Intro</label><textarea id="in" style="width:100%">${esc(P.intro)}</textarea>
+    <label class="f" for="ti">Title</label><input id="ti" value="${esc(P.title)}" style="width:100%"><label class="f" for="cl">Client</label><input id="cl" value="${esc(P.client)}" style="width:100%"><label class="f">Intro</label><textarea id="in" style="width:100%">${esc(P.intro)}</textarea>
     <h3>Pricing table</h3>${table(['Item', 'Qty', 'Unit price', 'Line total', ''], P.items.map(([n, q, p], i) => `<tr><td><input data-i="${i}" data-c="0" value="${esc(n)}"></td><td><input data-i="${i}" data-c="1" type="number" value="${q}" style="width:70px"></td><td><input data-i="${i}" data-c="2" type="number" value="${p}" style="width:100px"></td><td>${money(q * p)}</td><td><a href="javascript:void 0" data-rm="${i}">✕</a></td></tr>`))}
     <p><button id="ai">+ Add line</button></p><div style="text-align:right">Subtotal ${money(t.sub)}<br>Discount <input id="di" type="number" value="${P.disc}" style="width:60px">%<br>Tax <input id="tx" type="number" value="${P.tax}" style="width:60px">%<br><b>Total ${money(t.total)}</b></div></div>`
     afterRender()
@@ -1501,7 +1519,7 @@ function proposal() {
     $('#di').onchange = e => { P.disc = +e.target.value; sv() }
     $('#tx').onchange = e => { P.tax = +e.target.value; sv() }
     $('#cv').onclick = async () => {
-      const { PDFDocument, StandardFonts, rgb } = PDFLib
+      const { PDFDocument, StandardFonts, rgb } = await pdfLib()
       const pd = await PDFDocument.create(); const pg = pd.addPage([612, 792])
       const f = await pd.embedFont(StandardFonts.Helvetica), b = await pd.embedFont(StandardFonts.HelveticaBold)
       let y = 730; const T = (s, x, sz = 11, fn = f) => pg.drawText(String(s).slice(0, 90), { x, y, size: sz, font: fn })
@@ -1544,7 +1562,7 @@ async function developer() {
   ${hookSecret ? `<div class="card" style="border-color:var(--acc)"><h3>Copy your webhook secret now</h3><p>Use it to verify the <span class="mono">X-EDS-Signature</span> header (sha256=...).</p><p class="mono" style="word-break:break-all">${esc(hookSecret)}</p></div>` : ''}
   <div class="card"><h3>Webhooks</h3><p class="note">We’ll POST JSON to your URL for <span class="mono">document.signed</span>, <span class="mono">document.declined</span>, and <span class="mono">document.expired</span>.</p>
     ${hooks.length ? table(['URL', 'Events', 'Status', ''], hooks.map(h => `<tr><td>${esc(h.url)}</td><td>${esc((h.events || []).join(', '))}</td><td>${h.active ? (h.lastStatus ? h.lastStatus + (h.lastError ? ' · ' + esc(h.lastError) : '') : 'Waiting') : 'Off'}</td><td><a href="javascript:void 0" data-dh="${h.id}">Delete</a></td></tr>`)) : '<p class="note">No webhooks yet.</p>'}
-    <label class="f">Endpoint URL</label><input id="hurl" placeholder="https://example.com/webhooks/eds" style="width:100%">
+    <label class="f" for="hurl">Endpoint URL</label><input id="hurl" placeholder="https://example.com/webhooks/eds" style="width:100%">
     <p style="margin-top:12px"><button class="p" id="hgo">Add webhook</button></p>
   </div>
   <div class="card"><h3>Send from a template</h3>
@@ -1591,7 +1609,7 @@ async function team() {
   if (!team) {
     V.innerHTML = `<h1>Team</h1><p style="color:var(--mut)">Share templates and a credit pool with coworkers. Each person still has their own account and sent documents.</p>
     ${pending.length ? `<div class="card"><h3>Invites waiting for you</h3>${pending.map(p => `<p><b>${esc(p.name)}</b> invited you as ${esc(p.role)}. <button class="p" data-join="${p.id}">Join</button></p>`).join('')}</div>` : ''}
-    <div class="card"><h3>Create a team</h3><label class="f">Team name</label><input id="tn" placeholder="e.g. Northwind Legal" style="max-width:280px"><p style="margin-top:12px"><button class="p" id="tgo">Create team</button></p></div>`
+    <div class="card"><h3>Create a team</h3><label class="f" for="tn">Team name</label><input id="tn" placeholder="e.g. Northwind Legal" style="max-width:280px"><p style="margin-top:12px"><button class="p" id="tgo">Create team</button></p></div>`
     $('#tgo').onclick = async () => {
       const res = await api('/api/team', { method: 'POST', body: { name: $('#tn').value } })
       if (!res.ok) return toast(res.json?.message || 'Could not create the team')
@@ -1663,7 +1681,7 @@ function settings() {
   const phoneLine = S.smsEnabled ? `<p>${S.usage?.phoneVerified ? 'Phone verified ' + esc(S.usage.phone) : 'Phone not verified'}</p><p><a href="#/phone">Update phone</a></p>` : ''
   V.innerHTML = `<h1>Settings</h1><div class="grid3" style="grid-template-columns:1fr 1fr"><div class="card"><h3>Account</h3><p>${esc(S.me.name)}<br>${esc(S.me.email)}</p>${phoneLine}<button id="out">Log out</button>
   <h3 style="margin-top:16px">Folders</h3><p>${S.folders.slice(1).map(esc).join(' · ') || 'None yet'}</p><button id="addf">+ Folder</button></div>
-  <div class="card"><h3>Branding</h3><label class="f">Company name</label><input id="bc" value="${esc(S.brand.company || '')}" style="width:100%"><label class="f">Accent color</label><input id="bk" type="color" value="${S.brand.color || '#0f766e'}">
+  <div class="card"><h3>Branding</h3><label class="f" for="bc">Company name</label><input id="bc" value="${esc(S.brand.company || '')}" style="width:100%"><label class="f" for="bk">Accent color</label><input id="bk" type="color" value="${S.brand.color || '#0f766e'}">
   <label class="f">Logo</label>
   ${S.brand.logoUrl ? `<p><img src="${esc(S.brand.logoUrl)}" alt="" style="height:40px;max-width:180px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:8px;padding:4px"></p>` : ''}
   <label class="btn">Upload logo<input id="blogo" type="file" accept="image/png,image/jpeg,image/webp" hidden></label>
@@ -1757,4 +1775,6 @@ async function boot() {
   if (params.get('checkout') === 'cancel') { toast('Checkout canceled'); history.replaceState({}, '', location.pathname) }
   await route()
 }
-Promise.all(['Caveat', 'Dancing Script', 'Great Vibes'].map(f => document.fonts.load(`64px '${f}'`))).catch(() => {}).finally(() => { mountHelp(); boot() })
+// Signature fonts load in the background; only views that draw typed signatures wait for them.
+const SIG_FONTS_READY = Promise.race([Promise.all(SIGFONTS.map(f => document.fonts.load(`64px '${f}'`))).catch(() => {}), new Promise(r => setTimeout(r, 4000))])
+mountHelp(); boot()
