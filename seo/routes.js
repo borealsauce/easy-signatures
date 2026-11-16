@@ -13,6 +13,7 @@ import { HOME_FAQ } from '../shared/home-faq.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const LASTMOD = '2026-11-16'
+export const INDEXNOW_KEY = '9c0f7c0d74dd681b044655de2b7164e1'
 const HTML_CACHE = 'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400'
 const ASSET_CACHE = 'public, max-age=86400, s-maxage=604800'
 
@@ -111,6 +112,8 @@ export function registerSeo(app, { root, config }) {
   }
   const sitemap = sitemapXml()
   app.get('/sitemap.xml', (req, res) => send(res, sitemap, 'application/xml; charset=utf-8'))
+  // IndexNow ownership key (public by design; Bing/Yandex fetch it to verify URL submissions).
+  app.get('/9c0f7c0d74dd681b044655de2b7164e1.txt', (req, res) => send(res, '9c0f7c0d74dd681b044655de2b7164e1', 'text/plain; charset=utf-8'))
   app.get('/robots.txt', (req, res) => send(res, ROBOTS, 'text/plain; charset=utf-8'))
   for (const [route, [file, type]] of Object.entries(ASSETS)) {
     const full = join(here, 'assets', file)

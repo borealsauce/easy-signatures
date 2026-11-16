@@ -17,6 +17,10 @@
 - Competitor prices were read on each vendor's public pricing page on 2026-11-14 (`seo/shared-blocks.js`).
   Re-check them before relying on them; update `CHECKED` in `seo/layout.js` when you do.
 
+## IndexNow (Bing, Yandex, Seznam…)
+Key file: `/9c0f7c0d74dd681b044655de2b7164e1.txt` (`INDEXNOW_KEY` in `seo/routes.js`). Submit changed URLs with
+`curl -X POST https://api.indexnow.org/indexnow -H 'Content-Type: application/json' -d '{"host":"easydigitalsignatures.com","key":"9c0f7c0d74dd681b044655de2b7164e1","urlList":["https://easydigitalsignatures.com/..."]}'`.
+
 ## Google Search Console (owner steps)
 Option A, DNS (recommended, covers http/https and all subdomains):
 1. https://search.google.com/search-console → Add property → **Domain** → `easydigitalsignatures.com`.
