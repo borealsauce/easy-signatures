@@ -2,7 +2,7 @@ import { SITE, BRAND, checklist } from './layout.js'
 import { competitorTable, PRICING_BLOCK } from './shared-blocks.js'
 
 const PUBLISHED = '2026-11-14'
-const art = inner => `<article class="card"><div class="prose"><p class="byline">By the Easy Digital Signatures team · Published November 14, 2026</p>${inner}<p class="src">This article is general information, not legal advice. Laws change and differ by state and document type; ask a lawyer about your situation.</p></div></article>`
+const art = (inner, date = 'November 14, 2026') => `<article class="card"><div class="prose"><p class="byline">By the Easy Digital Signatures team · Published ${date}</p>${inner}<p class="src">This article is general information, not legal advice. Laws change and differ by state and document type; ask a lawyer about your situation.</p></div></article>`
 
 export const POSTS = [
   {
@@ -33,7 +33,7 @@ ${checklist(['<b>Intent to sign</b>: the signer took a clear action to sign.', '
   },
   {
     slug: 'how-to-sign-a-pdf',
-    title: 'How to Sign a PDF: 4 Easy Ways (Free and Paid)',
+    title: 'How to Sign a PDF for Free (With or Without Adobe): 4 Ways',
     h1: 'How to sign a PDF: four easy ways',
     description: 'Step-by-step ways to sign a PDF on a computer or phone, and how to send a PDF for someone else to sign online with an audit trail.',
     summary: 'Sign a PDF yourself on a Mac, PC, or phone, or send it to others to sign online with an audit trail.',
@@ -45,11 +45,12 @@ ${checklist(['<b>Intent to sign</b>: the signer took a clear action to sign.', '
 <h2>2. Sign it yourself in Preview (Mac)</h2>
 <ol class="steps"><li>Open the PDF in Preview.</li><li>Show the Markup toolbar and click the <b>Sign</b> button.</li><li>Create a signature with your trackpad, camera, or iPhone.</li><li>Click the signature to place it, resize it, and save.</li></ol>
 <h2>3. Sign it on an iPhone or Android phone</h2>
+<p>Full steps are in <a href="/blog/how-to-sign-a-pdf-on-iphone-or-android">how to sign a PDF on your phone</a>.</p>
 <p>On iPhone, open the PDF in Files or Mail, tap the <b>Markup</b> icon, tap <b>+</b>, and choose <b>Add Signature</b>. On Android, a PDF app such as Adobe Acrobat Reader offers a similar Fill &amp; Sign tool.</p>
 <p>Want a clean signature image to reuse? Our <a href="/signature-generator">free signature generator</a> creates a transparent PNG from a typed or drawn signature, entirely in your browser.</p>
 <h2>4. Send the PDF for others to sign online</h2>
 <p>Emailing a PDF back and forth for each person to sign, save, and return gets messy fast. An e-signature service sends each signer a link and assembles one finished copy. With Easy Digital Signatures:</p>
-<ol class="steps"><li>Create a free account and upload your PDF (up to 10 MB).</li><li>Add signers by name and email, and drag signature, initials, date, name, and text fields onto the page for each person.</li><li>Choose whether they sign in order or all at once, and optionally set reminders and an expiration date.</li><li>Click send. Each signer gets a secure link, no account needed.</li><li>When everyone has signed, download the flattened PDF with its audit certificate.</li></ol>
+<ol class="steps"><li>Create a free account and upload your PDF (up to 25 MB).</li><li>Add signers by name and email, and drag signature, initials, date, name, and text fields onto the page for each person.</li><li>Choose whether they sign in order or all at once, and optionally set reminders and an expiration date.</li><li>Click send. Each signer gets a secure link, no account needed.</li><li>When everyone has signed, download the flattened PDF with its audit certificate.</li></ol>
 <p>Your first document is free. After that it’s $1 each, 10 for $5, or 50 for $10.</p>
 <h2>Print, sign, and scan</h2>
 <p>You can always print the PDF, sign it with a pen, and scan or photograph it. It works, but it’s slower, the scan can be hard to read, and you don’t get a record of when each person signed.</p>`)
@@ -124,20 +125,100 @@ ${checklist(['You send a few documents a month or your volume is uneven.', 'You�
 <h2>Our pricing</h2>
 ${PRICING_BLOCK}
 <p>See <a href="/e-signature-pricing">e-signature pricing</a> for details.</p>`)
+  },
+  {
+    slug: 'how-to-electronically-sign-a-document',
+    published: '2026-11-15',
+    title: 'How to Electronically Sign a Document for Free',
+    h1: 'How to electronically sign a document for free',
+    description: 'The free ways to electronically sign a PDF, Word file, or contract, on a computer or phone, and how to get other people to e-sign a document with an audit trail.',
+    summary: 'Free ways to e-sign a PDF, Word file, or contract yourself, and how to get others to sign with an audit trail.',
+    body: art(`<p>An electronic signature is any sign of agreement made electronically: a typed name, a drawn signature, or a click to accept. Which method you should use depends on <b>who needs to sign</b> and <b>what record you need afterwards</b>.</p>
+<h2>If only you need to sign</h2>
+<p>Free tools already on your devices are enough:</p>
+<ol class="steps"><li><b>Mac:</b> open the PDF in Preview, click the Markup tool, then Sign.</li><li><b>Windows or Mac:</b> Adobe Acrobat Reader is free and has a Fill &amp; Sign tool.</li><li><b>iPhone or iPad:</b> open the PDF in Files, tap Markup, then + and Add Signature. Details in <a href="/blog/how-to-sign-a-pdf-on-iphone-or-android">signing a PDF on your phone</a>.</li><li><b>Any device:</b> make a transparent signature image with our <a href="/signature-generator">free signature generator</a> and place it in the document.</li></ol>
+<p>Menu names change between app versions, so look for “Sign,” “Fill &amp; Sign,” or “Markup” if yours looks different.</p>
+<h2>If someone else needs to sign</h2>
+<p>Use an e-signature service. It sends each person a link, records when they opened and signed, and produces one finished copy for everyone. With Easy Digital Signatures:</p>
+<ol class="steps"><li>Create a free account and upload the document. PDFs, Word files, and photos all work.</li><li>Add each signer’s name and email and drag signature, initials, date, and text fields onto the page.</li><li>Send. Signers open the link on a phone or computer, with no account.</li><li>Download the signed PDF and its audit certificate when everyone is done.</li></ol>
+<p>Your first document is free; after that it’s $1, 10 for $5, or 50 for $10. See <a href="/send-document-for-signature">sending a document for signature</a>.</p>
+<h2>Word documents and Google Docs</h2>
+<p>For Word, see <a href="/blog/how-to-sign-a-word-document">how to sign a Word document</a>. For Google Docs, see <a href="/blog/how-to-sign-a-google-doc">how to sign a Google Doc</a>. In both cases, signing a PDF copy keeps the signed version from being edited later.</p>
+<h2>Is it legally binding?</h2>
+<p>In the US, the federal ESIGN Act and state laws based on the Uniform Electronic Transactions Act generally give electronic signatures the same effect as handwritten ones, with exceptions such as wills and some court and family-law documents. Read <a href="/blog/are-electronic-signatures-legal">are electronic signatures legal?</a> for more.</p>
+<h2>Electronic vs digital signatures</h2>
+<p>A “digital signature” usually means a certificate-based cryptographic signature, which some government filings require. Most everyday contracts only need an electronic signature. The difference is explained in <a href="/blog/electronic-signature-vs-digital-signature">electronic vs digital signatures</a>.</p>`, 'November 15, 2026')
+  },
+  {
+    slug: 'how-to-sign-a-pdf-on-iphone-or-android',
+    published: '2026-11-15',
+    title: 'How to Sign a PDF on Your Phone (iPhone or Android), Free',
+    h1: 'How to sign a PDF on your phone, iPhone or Android',
+    description: 'Free ways to sign a PDF on an iPhone or Android phone with your finger, and how to send a PDF from your phone for someone else to sign.',
+    summary: 'Sign a PDF with your finger on iPhone or Android, for free, or send it from your phone for others to sign.',
+    body: art(`<p>You don’t need to print anything to sign a PDF that arrived on your phone. Here are the free options, then how to get someone <i>else</i> to sign from your phone.</p>
+<h2>iPhone and iPad: Markup (built in)</h2>
+<ol class="steps"><li>Open the PDF from the Files app or a Mail attachment.</li><li>Tap the <b>Markup</b> icon (a pen tip).</li><li>Tap <b>+</b>, then <b>Add Signature</b>, and sign with your finger.</li><li>Drag the signature onto the line, resize it, and tap <b>Done</b>. Share or save the signed copy.</li></ol>
+<p>Apple moves these buttons between iOS versions; Apple’s own help page for “fill out forms, sign documents” has the current steps.</p>
+<h2>Android: use a free PDF app</h2>
+<p>Android doesn’t have one built-in PDF signer across all phones. A free PDF app such as Adobe Acrobat Reader has a <b>Fill &amp; Sign</b> tool: open the PDF, choose Fill &amp; Sign, create your signature with your finger, place it, and save. Some phone makers include their own PDF markup tools too.</p>
+<h2>Any phone: a signature image</h2>
+<p>Our <a href="/signature-generator">free signature generator</a> works in your phone’s browser. Draw your signature with your finger and save a transparent PNG to reuse.</p>
+<h2>Send a PDF from your phone for someone else to sign</h2>
+<p>When a client, tenant, or customer needs to sign, use an e-signature service so you both end up with the same signed copy and a record of when it was signed. Easy Digital Signatures works in a mobile browser, with no app to install:</p>
+<ol class="steps"><li>Open easydigitalsignatures.com on your phone and create a free account.</li><li>Upload the PDF, or take a photo of a paper document with the camera option.</li><li>Add the signer’s name and email and place the signature fields.</li><li>Send, or use in-person signing and hand them your phone.</li></ol>
+<p>Your first document is free. After that it’s $1 each, 10 for $5, or 50 for $10.</p>`, 'November 15, 2026')
+  },
+  {
+    slug: 'how-to-sign-a-word-document',
+    published: '2026-11-15',
+    title: 'How to Sign a Word Document Electronically (3 Free Ways)',
+    h1: 'How to sign a Word document electronically',
+    description: 'Three free ways to sign a Word document: insert a signature image, draw it in Word, or convert to PDF and e-sign, plus how to get others to sign a .docx.',
+    summary: 'Insert a signature image, draw it in Word, or convert to PDF and e-sign, plus how to get others to sign.',
+    body: art(`<p>Word can hold a signature, but a Word file stays editable after you sign it. For anything that matters, sign a PDF copy. Here are three free ways, from quickest to most reliable.</p>
+<h2>1. Insert a picture of your signature</h2>
+<ol class="steps"><li>Make a signature image: sign white paper and photograph it, or use our <a href="/signature-generator">free signature generator</a> for a transparent PNG.</li><li>In Word, click where the signature goes, then <b>Insert → Pictures</b> and choose the image.</li><li>Resize it, and set text wrapping to “In front of text” if you need to move it freely.</li></ol>
+<h2>2. Draw it in Word</h2>
+<p>On a touchscreen or with a trackpad, Word’s <b>Draw</b> tab lets you write your signature with a pen tool. Availability depends on your version of Word and device.</p>
+<h2>3. Save as PDF and e-sign (best for agreements)</h2>
+<p>Choose <b>File → Save As → PDF</b> (or File → Export on some versions) and sign the PDF. A PDF keeps the layout fixed, and an e-signature service adds a record of who signed and when. See <a href="/blog/how-to-sign-a-pdf">how to sign a PDF</a>.</p>
+<h2>What about Word’s “Signature Line”?</h2>
+<p>Word for Windows has <b>Insert → Signature Line</b>, which adds a line for a certificate-based digital signature. Signing it requires a digital ID (certificate), which most people don’t have, so it’s rarely the easiest route for everyday agreements.</p>
+<h2>When someone else needs to sign the Word document</h2>
+<p>Upload the .docx to Easy Digital Signatures; it’s converted to a PDF for signing. Add each signer’s email, place the fields, and send. Everyone gets the signed PDF with an audit certificate. Older .doc files need to be saved as .docx or PDF first. More on <a href="/sign-word-document-online">signing Word documents online</a>.</p>`, 'November 15, 2026')
+  },
+  {
+    slug: 'how-to-sign-a-google-doc',
+    published: '2026-11-15',
+    title: 'How to Sign a Google Doc (Free) and Get Others to Sign',
+    h1: 'How to sign a Google Doc',
+    description: 'How to add your signature to a Google Doc with a drawing or image, and how to get a Google Doc signed by others as a PDF with an audit trail.',
+    summary: 'Add your signature to a Google Doc with a drawing or image, or download it as a PDF and send it for e-signature.',
+    body: art(`<p>Google Docs gives you a couple of free ways to add your own signature. When other people need to sign, it’s usually easiest to download the doc as a PDF and send it for e-signature.</p>
+<h2>1. Draw your signature</h2>
+<ol class="steps"><li>Click where the signature goes.</li><li>Choose <b>Insert → Drawing → + New</b>.</li><li>Pick the <b>Scribble</b> tool from the line menu and draw your signature with the mouse or trackpad.</li><li>Click <b>Save and close</b>. Resize the drawing in the document.</li></ol>
+<h2>2. Insert a signature image</h2>
+<p>Make a transparent PNG with our <a href="/signature-generator">free signature generator</a>, then use <b>Insert → Image → Upload from computer</b>.</p>
+<h2>3. Google’s built-in eSignature</h2>
+<p>Some Google Workspace plans include an eSignature feature in Docs for requesting signatures. Whether you have it depends on your account type and plan; Google’s Docs help pages list the eligible plans.</p>
+<h2>Getting a Google Doc signed by someone else</h2>
+<ol class="steps"><li>In Google Docs, choose <b>File → Download → PDF document (.pdf)</b>. (Microsoft Word .docx also works with our uploader.)</li><li>Upload it to Easy Digital Signatures and add each signer’s name and email.</li><li>Place signature, initials, date, and text fields, then send.</li><li>When everyone has signed, download the flattened PDF with its audit certificate.</li></ol>
+<p>Signing a PDF copy means the signed version can’t be quietly edited afterwards, which can happen with a shared doc. Your first document is free. See <a href="/send-document-for-signature">sending a document for signature</a>.</p>`, 'November 15, 2026')
   }
 ].map(p => ({
   ...p,
   path: '/blog/' + p.slug,
   title: (p.title + ' | ' + BRAND).length <= 70 ? `${p.title} | ${BRAND}` : p.title,
   ogType: 'article',
-  published: PUBLISHED,
+  published: p.published || PUBLISHED,
   breadcrumbs: [['Home', '/'], ['Blog', '/blog'], [p.h1.replace(/<[^>]+>/g, ''), '/blog/' + p.slug]],
   eyebrow: 'Guide',
   noHeroCta: true,
   compactHero: true,
   jsonld: [{
     '@context': 'https://schema.org', '@type': 'BlogPosting', headline: p.h1, description: p.description,
-    datePublished: PUBLISHED, dateModified: PUBLISHED, mainEntityOfPage: SITE + '/blog/' + p.slug,
+    datePublished: p.published || PUBLISHED, dateModified: p.published || PUBLISHED, mainEntityOfPage: SITE + '/blog/' + p.slug,
     image: SITE + '/og.png', author: { '@type': 'Organization', name: BRAND, url: SITE + '/' },
     publisher: { '@type': 'Organization', name: BRAND, logo: { '@type': 'ImageObject', url: SITE + '/icon-512.png' } }
   }]
@@ -151,6 +232,6 @@ export const BLOG_INDEX = {
   h1: 'E-signature guides',
   lede: 'Plain-English answers about signing documents online: what the law says, how to do it, and what it costs.',
   compactHero: true, noHeroCta: true,
-  body: `<section class="posts">${POSTS.map(p => `<a class="post" href="${p.path}"><div class="meta">Guide · November 14, 2026</div><h2>${p.h1}</h2><p>${p.summary}</p></a>`).join('')}</section><div style="height:22px"></div>`,
-  jsonld: [{ '@context': 'https://schema.org', '@type': 'Blog', name: `${BRAND} Blog`, url: SITE + '/blog', blogPost: POSTS.map(p => ({ '@type': 'BlogPosting', headline: p.h1, url: SITE + p.path, datePublished: PUBLISHED })) }]
+  body: `<section class="posts">${POSTS.map(p => `<a class="post" href="${p.path}"><div class="meta">Guide · ${p.published === '2026-11-15' ? 'November 15, 2026' : 'November 14, 2026'}</div><h2>${p.h1}</h2><p>${p.summary}</p></a>`).join('')}</section><div style="height:22px"></div>`,
+  jsonld: [{ '@context': 'https://schema.org', '@type': 'Blog', name: `${BRAND} Blog`, url: SITE + '/blog', blogPost: POSTS.map(p => ({ '@type': 'BlogPosting', headline: p.h1, url: SITE + p.path, datePublished: p.published })) }]
 }

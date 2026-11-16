@@ -24,8 +24,8 @@ const GEN_CSS = `<style>
 
 export const TOOL_PAGE = {
   path: '/signature-generator',
-  title: 'Free Signature Generator: Type or Draw a Signature (PNG)',
-  description: 'Create a transparent PNG of your signature for free. Type your name in a handwriting font or draw it with your mouse or finger. Nothing is uploaded.',
+  title: 'Free Signature Generator: Make a Handwritten Signature Online',
+  description: 'Free online signature maker: type your name in a handwriting font or draw it with your mouse or finger, then download a transparent PNG. Nothing is uploaded.',
   eyebrow: 'Free tool', crumb: 'Signature generator',
   h1: 'Free signature generator',
   lede: 'Type your name or draw your signature, then download a transparent PNG. It’s made in your browser, and nothing is uploaded.',

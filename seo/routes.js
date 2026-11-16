@@ -3,6 +3,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { SITE, ORG_LD, APP_LD, faqLd, headTags, renderPage } from './layout.js'
 import { PAGES } from './pages.js'
+import { MORE_PAGES } from './landing-more.js'
 import { POSTS, BLOG_INDEX } from './blog.js'
 import { TOOL_PAGE } from './tool-page.js'
 import { PRIVACY, TERMS } from './legal.js'
@@ -10,15 +11,15 @@ import { marketingHtml } from '../marketing.js'
 import { HOME_FAQ } from '../shared/home-faq.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const LASTMOD = '2026-11-14'
+const LASTMOD = '2026-11-15'
 const HTML_CACHE = 'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400'
 const ASSET_CACHE = 'public, max-age=86400, s-maxage=604800'
 
-export const SEO_PAGES = [...PAGES, TOOL_PAGE, BLOG_INDEX, ...POSTS, PRIVACY, TERMS]
+export const SEO_PAGES = [...PAGES, ...MORE_PAGES, TOOL_PAGE, BLOG_INDEX, ...POSTS, PRIVACY, TERMS]
 
 const HOME = {
   path: '/',
-  title: 'Easy Digital Signatures: E-Sign PDFs for $1, First One Free',
+  title: 'Easy Digital Signatures: Free E-Signature Online, Then $1 per Document',
   description: 'Send PDFs for electronic signature. Place fields, email a secure link, and get a signed PDF with an audit certificate. First document free, then $1 or less.'
 }
 

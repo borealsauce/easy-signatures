@@ -8,10 +8,16 @@ export const FOOTER_GROUPS = [
     ['/e-signature-pricing', 'E-signature pricing'],
     ['/free-electronic-signature', 'Free electronic signature'],
     ['/sign-pdf-online', 'Sign a PDF online'],
+    ['/sign-document-online-free', 'Sign documents online free'],
+    ['/send-document-for-signature', 'Send for signature'],
+    ['/fill-and-sign-pdf', 'Fill and sign PDF'],
+    ['/sign-word-document-online', 'Sign Word files online'],
+    ['/pay-per-document-e-signature', 'Pay per document'],
     ['/signature-generator', 'Free signature generator'],
     ['/contact', 'Contact']
   ]],
   ['Compare', [
+    ['/free-docusign-alternative', 'Free DocuSign alternatives'],
     ['/docusign-alternative', 'DocuSign alternative'],
     ['/dropbox-sign-alternative', 'Dropbox Sign alternative'],
     ['/adobe-sign-alternative', 'Adobe Sign alternative'],
@@ -28,6 +34,10 @@ export const FOOTER_GROUPS = [
     ['/blog', 'Blog'],
     ['/blog/are-electronic-signatures-legal', 'Are e-signatures legal?'],
     ['/blog/how-to-sign-a-pdf', 'How to sign a PDF'],
+    ['/blog/how-to-electronically-sign-a-document', 'How to e-sign a document'],
+    ['/blog/how-to-sign-a-pdf-on-iphone-or-android', 'Sign a PDF on your phone'],
+    ['/blog/how-to-sign-a-word-document', 'Sign a Word document'],
+    ['/blog/how-to-sign-a-google-doc', 'Sign a Google Doc'],
     ['/blog/how-to-sign-a-lease-online', 'How to sign a lease online'],
     ['/blog/electronic-signature-vs-digital-signature', 'E-signature vs digital signature'],
     ['/blog/e-signature-cost-comparison', 'E-signature cost comparison']

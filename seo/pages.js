@@ -69,17 +69,18 @@ export const PAGES = [
   }),
   {
     path: '/free-electronic-signature',
-    title: 'Free Electronic Signature: Sign and Send Your First Document Free',
-    description: 'Get a free electronic signature on your first document. Upload a PDF, add signature fields, and email a secure signing link. No credit card to start.',
+    title: 'Free Electronic Signature Online: Your First Document Free',
+    description: 'Free electronic signature online: upload a PDF or Word file, add signature fields, and email a secure signing link. First document free, no credit card. Signers need no account.',
     eyebrow: 'Free e-signature', crumb: 'Free electronic signature',
-    h1: 'Get your first electronic signature free',
+    h1: 'Free electronic signature online: your first document is free',
     lede: 'Create an account, verify your email, and send one document for signature at no cost. No credit card needed to start.',
     jsonld: [APP_LD],
     body: [
       card(`<h2>What “free” means here</h2><p>Your first document is completely free: upload it, place fields for your signers, send it, and download the signed PDF with its audit certificate. We don’t ask for a card to get started.</p><p>After the free document, you buy credits only if you need them: $1 for one document, $5 for 10, or $10 for 50. There’s no subscription, so there’s nothing to cancel.</p>${PRICING_BLOCK}`),
       card(`<h2>How to send a document for e-signature</h2>${HOW_IT_WORKS}`),
       card(`<h2>What’s included, even on the free document</h2>${FEATURES}`),
-      card(`<h2>Only need to sign something yourself?</h2><p>If you just want an image of your signature to paste into a document, try our <a href="/signature-generator">free signature generator</a>. It makes a transparent PNG from a typed or drawn signature right in your browser.</p><p>When the other side needs to sign too, send it through Easy Digital Signatures so everyone gets the same signed copy and an audit trail.</p>`)
+      card(`<h2>Only need to sign something yourself?</h2><p>If you just want an image of your signature to paste into a document, try our <a href="/signature-generator">free signature generator</a>. It makes a transparent PNG from a typed or drawn signature right in your browser.</p><p>When the other side needs to sign too, send it through Easy Digital Signatures so everyone gets the same signed copy and an audit trail.</p>`),
+      card(`<h2>Comparing free e-signature plans?</h2><p>Most free plans cap you at a few documents a month. See how they compare in <a href="/free-docusign-alternative">free DocuSign alternatives</a>, or why some people prefer <a href="/pay-per-document-e-signature">pay-per-document e-signatures</a>.</p>`)
     ].join('\n'),
     faqs: [
       ['Is the free e-signature really free?', 'Yes. Your first document costs nothing and doesn’t need a credit card. You only pay if you send more documents.'],
@@ -89,8 +90,8 @@ export const PAGES = [
   },
   {
     path: '/sign-pdf-online',
-    title: 'Sign PDF Online: Add Signatures and Send for E-Signature',
-    description: 'Sign a PDF online in your browser and send it to others to sign. Drag signature, initials, and date fields onto any PDF. First document free.',
+    title: 'Sign PDF Online Free: Add a Signature or Send for E-Signature',
+    description: 'Sign a PDF online free in your browser, or send it to others to sign. Add signature, initials, date, and text fields to any PDF. First document free.',
     eyebrow: 'Sign PDF online', crumb: 'Sign a PDF online',
     h1: 'Sign a PDF online and send it to others to sign',
     lede: 'Upload any PDF, drag on signature, initials, and date fields, and email a secure signing link. Works in any modern browser.',
@@ -100,14 +101,14 @@ export const PAGES = [
 <h3>1. Only you need to sign</h3><p>Free tools such as Adobe Acrobat Reader’s Fill &amp; Sign or the Markup tools in Apple Preview let you add your own signature to a PDF. Our <a href="/signature-generator">signature generator</a> also makes a signature image you can place in any document.</p>
 <h3>2. Someone else needs to sign</h3><p>Use an e-signature service so each signer gets a link, signs in their browser, and everyone ends up with the same finished file and a record of who signed and when. That’s what Easy Digital Signatures does.</p>
 <h3>3. Several people, in a set order</h3><p>Turn on signing order and each signer gets the link after the person before them finishes.</p>
-<p>For a full walkthrough, read <a href="/blog/how-to-sign-a-pdf">how to sign a PDF</a>.</p>`),
+<p>For a full walkthrough, read <a href="/blog/how-to-sign-a-pdf">how to sign a PDF</a>. Need to fill in text too? See <a href="/fill-and-sign-pdf">fill and sign a PDF</a>.</p>`),
       card(`<h2>How it works</h2>${HOW_IT_WORKS}`),
-      card(`<h2>Built for PDFs</h2>${checklist(['Upload PDFs up to 10 MB, or start from a blank page', 'Signature, initials, date, name, and text fields', 'The finished file is flattened, so the signatures are part of the page', 'A certificate page records timestamps, IP addresses, and SHA-256 fingerprints', 'Signers can sign on a phone, tablet, or computer'])}`),
+      card(`<h2>Built for PDFs</h2>${checklist(['Upload PDFs up to 25 MB (Word files and photos work too), or start from a blank page', 'Signature, initials, date, name, and text fields', 'The finished file is flattened, so the signatures are part of the page', 'A certificate page records timestamps, IP addresses, and SHA-256 fingerprints', 'Signers can sign on a phone, tablet, or computer'])}`),
       card(`<h2>Pricing</h2>${PRICING_BLOCK}`)
     ].join('\n'),
     faqs: [
       ['Do I need to install anything to sign a PDF online?', 'No. Easy Digital Signatures runs in your web browser, and so does signing.'],
-      ['What file size can I upload?', 'PDFs up to 10 MB.'],
+      ['What file size can I upload?', 'Files up to 25 MB each.'],
       ['Can signers download the signed PDF?', 'Yes. When everyone has signed, the finished PDF with its audit certificate is available to download.']
     ]
   },

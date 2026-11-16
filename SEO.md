@@ -3,7 +3,11 @@
 ## What's here
 - `seo/routes.js` registers server-rendered pages (real HTML for crawlers), `/robots.txt`, `/sitemap.xml`,
   favicons, `/og.png`, and prerenders the homepage (`marketingHtml`) into `index.html` with full meta.
-- `seo/pages.js` (alternatives, pricing, use cases), `seo/blog.js` (articles), `seo/tool-page.js` (signature generator).
+- `seo/pages.js` (alternatives, pricing, use cases), `seo/landing-more.js` (free-signature landing pages added 2026-11-15:
+  free DocuSign alternatives, sign documents online free, send for signature, pay per document, fill and sign, Word),
+  `seo/blog.js` (articles), `seo/tool-page.js` (signature generator).
+- Keyword research behind these pages: ranked target list in the 'EDS SEO keyword targets' Page (2026-11-15).
+  Free-plan facts on `/free-docusign-alternative` were read on vendor pricing pages on 2026-11-15 (`FREE_CHECKED`).
 - `seo/layout.js` holds titles/meta/OG/Twitter/JSON-LD helpers. `shared/site-footer.js` is the site-wide footer
   (also used by the homepage), `shared/home-faq.js` the homepage FAQ (mirrored into FAQPage JSON-LD).
 - `scripts/build-seo-assets.js` regenerates `seo/assets` (og.png 1200x630, favicon.ico, icons, manifest).
