@@ -49,7 +49,7 @@ test('SEO pages are server-rendered with unique meta, canonical, JSON-LD, and ar
     const ok = await fetch(base + '/api/auth/signup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Yes Terms', email: 'yesterms@example.com', password: 'correct-horse', acceptTerms: true }) })
     assert.equal(ok.status, 201)
     const row = (await ctx.db.query(`select terms_version, terms_accepted_at from profiles where email='yesterms@example.com'`)).rows[0]
-    assert.equal(row.terms_version, '2026-11-16')
+    assert.equal(row.terms_version, '2026-11-16.2')
     assert.ok(row.terms_accepted_at)
     const home = await (await fetch(base + '/')).text()
     assert.match(home, /Use of this site constitutes acceptance of our/)

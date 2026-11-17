@@ -157,3 +157,12 @@ test('evidence: hash chain, append-only audit, consent, /verify, delete-content 
   assert.match(await (await fetch(base + '/court-evidence')).text(), /902\(11\)/)
   assert.equal((await fetch(base + '/legal/evidence', { redirect: 'manual' })).headers.get('location'), '/court-evidence')
 })
+
+test('legal: regulated-use limits and accessibility statement', async () => {
+  const { LEGAL_PAGES, SECURITY_PAGE } = await import('../seo/legal-more.js')
+  const acc = LEGAL_PAGES.find(p => p.path === '/accessibility')
+  assert.ok(acc && /WCAG\) 2\.1/.test(acc.body) && /100 out of 100/.test(acc.body))
+  for (const re of [/HIPAA/, /BAA/, /21 CFR Part 11/, /eIDAS/, /ESIGN/]) assert.match(SECURITY_PAGE.body, re)
+  const { siteFooterHtml } = await import('../shared/site-footer.js').catch(() => ({}))
+  if (siteFooterHtml) assert.match(siteFooterHtml(), /\/accessibility/)
+})

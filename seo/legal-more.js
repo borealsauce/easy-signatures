@@ -19,6 +19,7 @@ export const POLICY_VERSIONS = [
   ['Subprocessors', '/subprocessors', '2026-11-16'],
   ['Security', '/security', '2026-11-16'],
   ['Court evidence and records retention', '/court-evidence', '2026-11-16'],
+  ['Accessibility statement', '/accessibility', '2026-11-16'],
   ['Signer consent text', '/legal/changelog#consent', CONSENT_VERSION]
 ]
 
@@ -40,6 +41,11 @@ export const SECURITY_PAGE = {
   crumb: 'Security', h1: 'Security',
   lede: 'What we do to protect documents and signing records, and what we don’t claim.',
   body: wrap('2026-11-16', `<div class="note" role="note"><p style="margin:0"><b>Plain statement:</b> Easy Digital Signatures and its operator, ${OP}, have <b>not</b> completed a SOC 2 audit or any other third-party security certification. We run on providers that publish their own SOC 2 or ISO 27001 reports (listed below). Their certifications cover their systems, not ours.</p></div>
+<h2 id="not-supported">Compliance regimes we don’t support</h2>
+<ul><li><b>HIPAA:</b> Easy Digital Signatures isn’t intended for protected health information (PHI). We don’t offer or sign business associate agreements (BAAs). Don’t use it for PHI.</li>
+<li><b>21 CFR Part 11:</b> the service isn’t designed or validated for FDA 21 CFR Part 11 compliance.</li>
+<li><b>eIDAS and other countries:</b> we provide simple electronic signatures designed for US use under the ESIGN Act and state UETA laws. We don’t provide eIDAS advanced or qualified electronic signatures (AdES/QES).</li></ul>
+<p>These limits are also in our <a href="/terms#regulated">Terms of Service</a>.</p>
 <h2>Encryption</h2>
 <ul><li><b>In transit:</b> the site and API are served only over HTTPS (TLS), with HTTP Strict Transport Security. Our connections to the database, file storage, email, and payment providers also use TLS.</li>
 <li><b>At rest:</b> documents, the database, and backups are stored by Supabase, which encrypts customer data at rest with AES-256. Vercel and Resend also encrypt their data at rest.</li>
@@ -242,7 +248,8 @@ export const CHANGELOG = {
 <h2>Nov 16, 2026</h2>
 <ul><li><b>Terms of Service ${TERMS_VERSION}:</b> names Boreal MT LLC as operator and the only contracting party. Adds “not a law firm”, a stronger statement that you decide whether e-signatures are valid for your document type, and a “check local law” note. Extends the disclaimers, liability cap, and indemnity to Boreal MT LLC’s members, managers, and staff, and requires claims to be brought only against the company. Adds the DMCA agent designation number, records requests and legal process, the Acceptable Use Policy and DPA by reference, versioning, and two-factor responsibility.</li>
 <li><b>Privacy Policy 2026-11-16:</b> names the operator. Adds email delivery and open events, two-factor data, the detailed retention schedule (audit records for at least 7 years), the CCPA retention-by-category list, exceptions to deletion, and Global Privacy Control.</li>
-<li><b>New:</b> Acceptable Use Policy, Data Processing Addendum, Subprocessors, Security, and Court evidence and records retention, all at 2026-11-16.</li>
+<li><b>New:</b> Acceptable Use Policy, Data Processing Addendum, Subprocessors, Security, Court evidence and records retention, and Accessibility statement, all at 2026-11-16.</li>
+<li><b>Terms of Service 2026-11-16.2 and Security:</b> state that the service isn’t for HIPAA-regulated PHI (no BAA), isn’t 21 CFR Part 11 compliant, and provides US (ESIGN/UETA) simple e-signatures, not eIDAS advanced or qualified signatures.</li>
 <li id="consent"><b>Signer consent text ${CONSENT_VERSION}:</b> ${CONSENT_HISTORY[0][1]}</li></ul>
 <h2>Nov 14, 2026</h2>
 <ul><li><b>Terms of Service 2026-11-14.2</b> and the Privacy Policy: acceptance by use, the excluded-documents list, arbitration with a 30-day opt-out, the 6-month claims limit, and the CCPA/CPRA section.</li>
@@ -298,4 +305,26 @@ export const VERIFY_PAGE = {
   scripts: VERIFY_SCRIPT
 }
 
-export const LEGAL_PAGES = [SECURITY_PAGE, COURT_EVIDENCE, AUP, SUBPROCESSORS_PAGE, DPA, LEGAL_INDEX, CHANGELOG, VERIFY_PAGE]
+export const ACCESSIBILITY_PAGE = {
+  ...base,
+  path: '/accessibility',
+  title: 'Accessibility Statement | Easy Digital Signatures',
+  description: 'Accessibility statement for Easy Digital Signatures: our WCAG 2.1 AA goal, how we test, known limits, and how to report an accessibility problem.',
+  crumb: 'Accessibility', h1: 'Accessibility statement',
+  lede: 'We want everyone to be able to send and sign documents, including people who use assistive technology.',
+  body: wrap('2026-11-16', `<h2>Our goal</h2>
+<p>Our goal is to conform to the Web Content Accessibility Guidelines (WCAG) 2.1 at level AA. We haven’t had an independent accessibility audit, and we don’t claim full conformance.</p>
+<h2>How we test</h2>
+<ul><li>We run Google Lighthouse’s automated accessibility check on our main public pages. In our Nov 2026 tests, those pages (including the home page, signup, pricing, and guides) scored 100 out of 100 on mobile and desktop.</li>
+<li>Automated checks catch only some problems, so a perfect score doesn’t mean a page is free of barriers.</li>
+<li>We use semantic HTML, labeled form fields, visible focus, keyboard-reachable controls, and text alternatives for meaningful images.</li></ul>
+<h2>Known limits</h2>
+<ul><li>Placing signature fields on a PDF is a drag-and-drop task and may be harder with a keyboard or screen reader.</li>
+<li>Uploaded PDFs are created by senders. We can’t make the contents of someone else’s PDF accessible.</li>
+<li>Drawn signatures need a pointer or touch. Typed signatures are available as an alternative.</li></ul>
+<h2>Report a problem</h2>
+<p>If something on the site is hard to use with your setup, email ${SUPPORT} with the page, what you were trying to do, and the browser or assistive technology you use. We aim to reply within 5 business days, and we can help you complete a signing another way where possible.</p>
+<p>This statement is about the website. It isn’t a legal warranty and doesn’t change our <a href="/terms">Terms of Service</a>.</p>`)
+}
+
+export const LEGAL_PAGES = [SECURITY_PAGE, COURT_EVIDENCE, AUP, SUBPROCESSORS_PAGE, DPA, LEGAL_INDEX, CHANGELOG, VERIFY_PAGE, ACCESSIBILITY_PAGE]
