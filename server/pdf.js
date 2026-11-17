@@ -134,7 +134,7 @@ function cursor(pd, font, bold) {
   return { text, space(n = 8) { y -= n } }
 }
 
-export async function sealPdf({ original, doc, verifyUrl }) {
+export async function sealPdf({ original, doc, verifyUrl, publicVerifyUrl }) {
   const pd = await PDFDocument.load(original)
   pd.setProducer('Easy Digital Signatures')
   pd.setCreator('Easy Digital Signatures')
@@ -162,7 +162,13 @@ export async function sealPdf({ original, doc, verifyUrl }) {
   pen.text('Signed content SHA-256 (document after signatures, before this certificate)', 11, cbold)
   pen.text(contentHash, 8, cfont, INK, 4)
   pen.space(4)
-  pen.text('The complete file, including this certificate, has its own SHA-256. Compare it with the value published at ' + verifyUrl + ' . If the file was changed, the hashes will not match.', 9, cfont, MUTED, 4)
+  pen.text('The complete file, including this certificate, has its own SHA-256. Compare it with the value published at ' + verifyUrl + ' , or drop the file on ' + (publicVerifyUrl || verifyUrl) + ' to check it in your browser. If the file was changed, the hashes will not match.', 9, cfont, MUTED, 4)
+  if (doc.chainHead) {
+    pen.space(4)
+    pen.text('Audit trail hash chain (' + (doc.chainLength || 0) + ' events at sealing' + (doc.chainOk === false ? ', chain check reported a problem' : ', chain verified') + ')', 11, cbold)
+    pen.text(doc.chainHead, 8, cfont, INK, 4)
+    pen.text('Each audit event is hashed together with the previous event. Changing, removing, or reordering any event changes this value.', 8, cfont, MUTED, 4)
+  }
   pen.space(8)
   pen.text('Recipients', 13, cbold)
   for (const s of doc.signers || []) {
@@ -173,11 +179,18 @@ export async function sealPdf({ original, doc, verifyUrl }) {
   }
   pen.space(8)
   pen.text('Audit trail', 13, cbold)
+  pen.text('All times are UTC.', 8, cfont, MUTED, 4)
   for (const e of doc.events || []) {
-    pen.text(`${e.ts || ''}  ${e.t || e.type || ''}  (${e.who || ''})  ${e.ip || ''}`, 8, cfont, INK, 3)
+    pen.text(`${e.ts || ''}  ${e.t || e.type || ''}  (${e.who || ''}${e.email ? ' <' + e.email + '>' : ''})  ${e.ip || ''}`, 8, cfont, INK, 3)
+    if (e.ua) pen.text(e.ua, 7, cfont, MUTED, 3)
+  }
+  if (doc.consentText) {
+    pen.space(8)
+    pen.text('Consent text shown to each signer (version ' + (doc.consentVersion || 'n/a') + ')', 11, cbold)
+    pen.text(doc.consentText, 8, cfont, INK, 4)
   }
   pen.space(10)
-  pen.text('Each signer who completed the document checked an on-screen consent to do business electronically before their signature was applied. This page is an audit record, not legal advice.', 8, cfont, MUTED, 4)
+  pen.text('Each signer who completed the document checked an on-screen consent to do business electronically and clicked Finish (or Approve) before their signature was applied. Easy Digital Signatures is operated by Boreal MT LLC, which is not a party to this document and does not verify signers\' identities beyond the email address or access code used. Audit records are kept for at least 7 years after completion. This page is an audit record, not legal advice.', 8, cfont, MUTED, 4)
   const finalBytes = Buffer.from(await sealed.save())
   return { bytes: finalBytes, contentHash, finalHash: sha256(finalBytes) }
 }

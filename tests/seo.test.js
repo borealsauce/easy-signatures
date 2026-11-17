@@ -33,7 +33,7 @@ test('SEO pages are server-rendered with unique meta, canonical, JSON-LD, and ar
       assert.equal(v.status, 404, bad)
       assert.match(await v.text(), /couldn’t find that document/)
     }
-    for (const legal of ['/privacy', '/terms']) assert.match(await (await fetch(base + legal)).text(), /Last updated Nov 15, 2026/)
+    for (const legal of ['/privacy', '/terms']) assert.match(await (await fetch(base + legal)).text(), /Last updated Nov 16, 2026/)
     assert.match(await (await fetch(base + '/')).text(), /href="\/privacy"/)
     const privacyHtml = await (await fetch(base + '/privacy')).text()
     for (const re of [/CCPA\/CPRA/, /Right to delete/, /Data processing summary/, /<b>Vercel<\/b>/, /<b>Supabase<\/b>/, /<b>Resend<\/b>/, /<b>Stripe<\/b>/, /18 and older/]) assert.match(privacyHtml, re)
@@ -49,7 +49,7 @@ test('SEO pages are server-rendered with unique meta, canonical, JSON-LD, and ar
     const ok = await fetch(base + '/api/auth/signup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Yes Terms', email: 'yesterms@example.com', password: 'correct-horse', acceptTerms: true }) })
     assert.equal(ok.status, 201)
     const row = (await ctx.db.query(`select terms_version, terms_accepted_at from profiles where email='yesterms@example.com'`)).rows[0]
-    assert.equal(row.terms_version, '2026-11-14.2')
+    assert.equal(row.terms_version, '2026-11-16')
     assert.ok(row.terms_accepted_at)
     const home = await (await fetch(base + '/')).text()
     assert.match(home, /Use of this site constitutes acceptance of our/)

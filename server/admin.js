@@ -1,3 +1,4 @@
+import { appendAudit, retainAuditRecord } from './evidence.js'
 import { num } from './db.js'
 import { isAdmin } from './promo.js'
 
@@ -51,7 +52,12 @@ export async function adminSetBlocked(ctx, id, blocked) {
 }
 
 export async function deleteUserCompletely(ctx, row) {
-  const docs = (await ctx.db.query(`select original_path, final_path from documents where owner_id=$1`, [row.id])).rows
+  const docs = (await ctx.db.query(`select id, status, is_template, original_path, final_path from documents where owner_id=$1`, [row.id])).rows
+  // Keep a retention snapshot of every sent document's audit trail before the account's data is removed.
+  for (const d of docs) {
+    if (d.is_template || d.status === 'draft') continue
+    await retainAuditRecord(ctx.db.query.bind(ctx.db), d.id, 'account_deleted')
+  }
   const keys = docs.flatMap(d => [d.original_path, d.final_path]).filter(Boolean)
   if (keys.length && ctx.storage.remove) {
     try { await ctx.storage.remove(keys) } catch (e) { console.error('storage cleanup failed:', String(e?.message || e).slice(0, 200)) }
@@ -66,7 +72,9 @@ export async function deleteUserCompletely(ctx, row) {
     for (const t of ['free_phone_claims', 'free_email_claims', 'free_device_claims', 'free_ip_claims', 'card_fingerprints']) {
       await q(`delete from ${t} where user_id=$1`, [row.id])
     }
-    // profiles cascade: entitlements, documents (signers, audit events), signing links, payments, otps, promo redemptions
+    // profiles cascade: entitlements, documents (signers, audit events), signing links, payments, otps, promo redemptions.
+    // audit_records (retention snapshots) have no foreign key and are kept until retain_until.
+    await q(`select set_config('eds.audit_purge', 'on', true)`)
     await q(`delete from profiles where id=$1`, [row.id])
   })
   return { ok: true, id: row.id, email: row.email, deleted: true }
@@ -144,8 +152,9 @@ export async function adminVoidDocument(ctx, id) {
   await ctx.db.tx(async q => {
     await q(`update documents set status='voided', updated_at=now() where id=$1`, [doc.id])
     await q(`update signers set token=null, token_hash=null where document_id=$1 and signed_at is null`, [doc.id])
-    await q(`insert into audit_events (document_id, event_type, actor) values ($1,'Voided by site admin','Admin')`, [doc.id])
+    await appendAudit(q, doc.id, { type: 'Voided by site admin', actor: 'Admin' })
   })
+  if (doc.status !== 'draft') await retainAuditRecord(ctx.db.query.bind(ctx.db), doc.id, 'voided').catch(() => {})
   return { ok: true, id: doc.id, status: 'voided' }
 }
 

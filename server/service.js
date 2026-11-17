@@ -16,6 +16,9 @@ import { appConfirmUrl } from './confirm-link.js'
 import { DISABLED_MESSAGE } from './admin.js'
 import { checkCode, consumePromo, normalizeCode, promoUsage, redeemCode } from './promo.js'
 import { fireWebhooks } from './webhooks.js'
+import { appendAudit, retainAuditRecord, loadChain, verifyChain } from './evidence.js'
+import { checkTotp, newTotpSecret, otpauthUrl, qrSvg, newRecoveryCodes, currentStep } from './totp.js'
+import { allow } from './ratelimit.js'
 import { membershipFor, consumeTeamCredit, canUseTemplate, sharedTemplates } from './teams.js'
 
 export const REMIND_OPTIONS = [0, 2, 3, 7]
@@ -144,6 +147,8 @@ function mapDoc(row, signers, events, secret, reveal) {
     hashOrig: row.original_sha256,
     hashContent: row.content_sha256,
     hashFinal: row.final_sha256,
+    auditSealHash: row.audit_seal_hash || null,
+    contentDeleted: !!row.content_deleted_at,
     sent: iso(row.sent_at),
     expiresAt: row.sent_at ? new Date(new Date(row.sent_at).getTime() + Number(row.expires_days) * 864e5).toISOString() : null,
     completed: iso(row.completed_at),
@@ -166,11 +171,7 @@ function mapDoc(row, signers, events, secret, reveal) {
 }
 
 async function audit(q, docId, { type, actor, email, ip, ua, signerId, meta }) {
-  await q(
-    `insert into audit_events (document_id, signer_id, event_type, actor, email, ip, user_agent, meta)
-     values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
-    [docId, signerId || null, type, actor || null, email || null, ip || null, ua || null, JSON.stringify(meta || null)]
-  )
+  return appendAudit(q, docId, { type, actor, email, ip, ua, signerId, meta })
 }
 
 function cleanSigners(list) {
@@ -423,7 +424,8 @@ export async function resetPassword(ctx, { token, password }) {
   return { ok: true, message: 'Password updated. Log in with your new password.' }
 }
 
-export async function logout(ctx, token) {
+export async function logout(ctx, rawToken) {
+  const token = splitSessionToken(ctx, rawToken).base
   if (ctx.config.authMode !== 'supabase' || !token) return { ok: true }
   try {
     const admin = await supabaseAdmin(ctx.config)
@@ -486,7 +488,94 @@ export async function verifyEmailToken(ctx, token) {
   return { ok: true, email: row.rows[0].email }
 }
 
-export async function login(ctx, { email, password }) {
+// ---------- two-factor authentication (TOTP) ----------
+// A session token for an account with 2FA on carries a suffix "~<HMAC>" that proves the second factor
+// was checked at login. userFromAuth rejects tokens without it, so a password-only session (including
+// one minted directly against the auth provider) can't call the API.
+function mfaSig(ctx, base) {
+  return crypto.createHmac('sha256', String(ctx.config.jwtSecret)).update('mfa:' + base).digest('base64url')
+}
+export function withMfa(ctx, token) {
+  return `${token}~${mfaSig(ctx, token)}`
+}
+export function splitSessionToken(ctx, token) {
+  const t = String(token || '')
+  const i = t.lastIndexOf('~')
+  if (i < 0) return { base: t, mfa: false }
+  const base = t.slice(0, i)
+  const a = Buffer.from(t.slice(i + 1))
+  const b = Buffer.from(mfaSig(ctx, base))
+  return { base, mfa: a.length === b.length && crypto.timingSafeEqual(a, b) }
+}
+
+async function checkSecondFactor(ctx, user, { totp, recoveryCode }) {
+  if (!await allow(ctx.db, `totp:${user.id}`, { limit: 10, windowMs: 15 * 60 * 1000 })) {
+    throw fail(429, 'rate_limit', 'Too many two-factor attempts. Wait 15 minutes and try again.')
+  }
+  if (recoveryCode) {
+    const hash = hashSecret(String(recoveryCode).trim().toLowerCase(), ctx.config.jwtSecret)
+    const list = asJson(user.totp_recovery, [])
+    if (!list.includes(hash)) return false
+    await ctx.db.query(`update profiles set totp_recovery=$2::jsonb where id=$1`, [user.id, JSON.stringify(list.filter(h => h !== hash))])
+    return true
+  }
+  const secret = unseal(user.totp_secret || '', ctx.config.jwtSecret)
+  if (!secret) return false
+  const step = checkTotp(secret, totp, { lastStep: user.totp_last_step })
+  if (step == null) return false
+  await ctx.db.query(`update profiles set totp_last_step=$2 where id=$1`, [user.id, step])
+  return true
+}
+
+async function requireSecondFactor(ctx, userId, body, dropSession) {
+  const user = (await ctx.db.query(`select * from profiles where id=$1`, [userId])).rows[0]
+  if (!user?.totp_enabled_at) return false
+  const totp = String(body?.totp || '').trim()
+  const recoveryCode = String(body?.recoveryCode || '').trim()
+  if (!totp && !recoveryCode) {
+    await dropSession()
+    throw fail(401, 'totp_required', 'Enter the 6-digit code from your authenticator app.')
+  }
+  if (!await checkSecondFactor(ctx, user, { totp, recoveryCode })) {
+    await dropSession()
+    throw fail(401, 'totp_invalid', 'That code didn’t work. Check your authenticator app and try again, or use a recovery code.')
+  }
+  return true
+}
+
+export async function startTwoFactor(ctx, user) {
+  if (user.totp_enabled_at) throw fail(409, 'totp_on', 'Two-factor authentication is already on.')
+  const secret = newTotpSecret()
+  await ctx.db.query(`update profiles set totp_pending=$2 where id=$1`, [user.id, seal(secret, ctx.config.jwtSecret)])
+  const url = otpauthUrl(secret, user.email)
+  return { secret, otpauthUrl: url, qrSvg: qrSvg(url).replace(/^<\?xml[^>]*>\s*/, '') }
+}
+
+export async function enableTwoFactor(ctx, user, code, currentToken) {
+  if (user.totp_enabled_at) throw fail(409, 'totp_on', 'Two-factor authentication is already on.')
+  const secret = unseal(user.totp_pending || '', ctx.config.jwtSecret)
+  if (!secret) throw fail(400, 'totp_setup', 'Start the setup again.')
+  const step = checkTotp(secret, code)
+  if (step == null) throw fail(400, 'totp_invalid', 'That code didn’t match. Make sure your phone’s clock is set automatically and try the newest code.')
+  const codes = newRecoveryCodes()
+  await ctx.db.query(
+    `update profiles set totp_secret=$2, totp_pending=null, totp_enabled_at=now(), totp_last_step=$3, totp_recovery=$4::jsonb where id=$1`,
+    [user.id, seal(secret, ctx.config.jwtSecret), step, JSON.stringify(codes.map(c => hashSecret(c, ctx.config.jwtSecret)))]
+  )
+  const base = splitSessionToken(ctx, currentToken).base
+  return { ok: true, recoveryCodes: codes, token: withMfa(ctx, base) }
+}
+
+export async function disableTwoFactor(ctx, user, body) {
+  if (!user.totp_enabled_at) return { ok: true, already: true }
+  const ok = await checkSecondFactor(ctx, user, { totp: String(body?.totp || '').trim(), recoveryCode: String(body?.recoveryCode || '').trim() })
+  if (!ok) throw fail(400, 'totp_invalid', 'Enter a current code from your authenticator app (or a recovery code) to turn off two-factor authentication.')
+  await ctx.db.query(`update profiles set totp_secret=null, totp_pending=null, totp_enabled_at=null, totp_last_step=null, totp_recovery=null where id=$1`, [user.id])
+  return { ok: true }
+}
+
+export async function login(ctx, body = {}) {
+  const { email, password } = body
   const cleanEmail = String(email || '').trim().toLowerCase()
   if (ctx.config.authMode === 'supabase') {
     const { createClient } = await import('@supabase/supabase-js')
@@ -499,16 +588,28 @@ export async function login(ctx, { email, password }) {
     }
     const prof = (await ctx.db.query(`select blocked_at from profiles where id=$1`, [data.user.id])).rows[0]
     if (prof?.blocked_at) throw fail(403, 'account_disabled', DISABLED_MESSAGE)
-    return { token: data.session.access_token, userId: data.user.id }
+    const token = data.session.access_token
+    const mfa = await requireSecondFactor(ctx, data.user.id, body, () => logout(ctx, token))
+    return { token: mfa ? withMfa(ctx, token) : token, userId: data.user.id }
   }
   const found = await ctx.db.query(`select * from profiles where email=$1`, [cleanEmail])
   const user = found.rows[0]
   if (!user || !verifyPassword(password, user.password_hash)) throw fail(401, 'login', 'Email or password is incorrect.')
   if (user.blocked_at) throw fail(403, 'account_disabled', DISABLED_MESSAGE)
-  return { token: signJwt({ uid: user.id }, ctx.config.jwtSecret), userId: user.id }
+  const token = signJwt({ uid: user.id }, ctx.config.jwtSecret)
+  const mfa = await requireSecondFactor(ctx, user.id, body, async () => {})
+  return { token: mfa ? withMfa(ctx, token) : token, userId: user.id }
 }
 
-export async function userFromAuth(ctx, token) {
+export async function userFromAuth(ctx, rawToken) {
+  if (!rawToken) return null
+  const { base: token, mfa } = splitSessionToken(ctx, rawToken)
+  const profile = await userFromBaseToken(ctx, token)
+  if (profile?.totp_enabled_at && !mfa) return null
+  return profile
+}
+
+async function userFromBaseToken(ctx, token) {
   if (!token) return null
   if (ctx.config.authMode === 'supabase') {
     const admin = await supabaseAdmin(ctx.config)
@@ -621,6 +722,8 @@ function publicUser(user) {
     },
     folders: asJson(user.folders, ['All', 'Sales', 'HR', 'Real Estate', 'Legal']),
     proposal: asJson(user.proposal, null),
+    twoFactor: !!user.totp_enabled_at,
+    recoveryCodesLeft: user.totp_enabled_at ? asJson(user.totp_recovery, []).length : 0,
     reminderDefault: cadence(user.default_remind_days, 3),
     senderNudgeDays: cadence(user.sender_nudge_days, 0),
     favoriteFields: Array.isArray(asJson(user.favorite_fields, null)) ? asJson(user.favorite_fields, []) : ['signature', 'initials']
@@ -882,10 +985,7 @@ async function storeNewDoc(ctx, user, { name, template, signers, bytes, folder, 
     [id, user.id, name, folder || 'Sales', template, key, cadence(user.default_remind_days, 3), teamId || null]
   )
   await ctx.db.tx(q => insertSigners(q, id, signers))
-  await ctx.db.query(
-    `insert into audit_events (document_id, event_type, actor) values ($1,$2,$3)`,
-    [id, template ? 'Template created' : 'Document created', user.full_name || 'You']
-  )
+  await audit(ctx.db.query.bind(ctx.db), id, { type: template ? 'Template created' : 'Document created', actor: user.full_name || 'You', email: user.email })
   return getOwned(ctx, user, id)
 }
 
@@ -985,9 +1085,32 @@ export async function copyAsTemplate(ctx, user, id, name) {
 export async function deleteDocument(ctx, user, id) {
   const doc = await ownDoc(ctx.db.query.bind(ctx.db), user.id, id)
   if (!doc.is_template && doc.status !== 'draft') throw fail(409, 'locked', 'Sent documents stay in your account for the audit trail.')
-  await ctx.db.query(`delete from signing_links where template_id=$1`, [id])
-  await ctx.db.query(`delete from documents where id=$1`, [id])
+  await ctx.db.tx(async q => {
+    await q(`delete from signing_links where template_id=$1`, [id])
+    // Drafts and templates were never sent, so their audit rows can go with them.
+    await q(`select set_config('eds.audit_purge', 'on', true)`)
+    await q(`delete from documents where id=$1 and (is_template or status='draft')`, [id])
+  })
   return { ok: true }
+}
+
+// Owner-controlled deletion of a sent document's files and field values. The audit trail, signer
+// records, and hashes stay (and a retention snapshot is taken first) so the record can still be verified.
+export async function deleteDocumentContent(ctx, user, id, device = {}) {
+  const doc = await ownDoc(ctx.db.query.bind(ctx.db), user.id, id)
+  if (doc.is_template || doc.status === 'draft') throw fail(400, 'draft', 'Delete drafts and templates with the normal Delete button.')
+  if (['sent', 'waiting'].includes(doc.status)) throw fail(409, 'status', 'This document is still out for signature. Void it or wait until it is completed, declined, or expired.')
+  if (doc.content_deleted_at) return { ok: true, already: true }
+  await retainAuditRecord(ctx.db.query.bind(ctx.db), id, 'content_deleted')
+  const keys = [doc.original_path, doc.final_path].filter(Boolean)
+  if (keys.length && ctx.storage.remove) await ctx.storage.remove(keys)
+  const fields = asJson(doc.fields, []).map(f => ({ ...f, value: null }))
+  await ctx.db.query(
+    `update documents set original_path=null, final_path=null, fields=$2::jsonb, comments='[]'::jsonb, content_deleted_at=now(), updated_at=now() where id=$1`,
+    [id, JSON.stringify(fields)]
+  )
+  await audit(ctx.db.query.bind(ctx.db), id, { type: 'Document files and field values deleted by the owner (audit record kept)', actor: user.full_name || 'Owner', email: user.email, ip: device.ip, ua: device.ua })
+  return { ok: true, contentDeleted: true }
 }
 
 function readyErrors(signers, fields, secret) {
@@ -1021,15 +1144,28 @@ function brandOf(user, ctx) {
   return out
 }
 
+// Remember which Resend message belongs to which document/signer so delivery webhooks can be audited.
+async function trackEmail(ctx, sent, { documentId, signerId, email, kind }) {
+  const id = sent && typeof sent.id === 'string' ? sent.id : null
+  if (!id) return null
+  try {
+    await ctx.db.query(
+      `insert into email_messages (message_id, document_id, signer_id, email, kind) values ($1,$2,$3,$4,$5) on conflict do nothing`,
+      [id, documentId || null, signerId || null, email || null, kind]
+    )
+  } catch (err) { await ctx.logError?.('email.track', String(err?.message || err).slice(0, 200)) }
+  return id
+}
+
 async function emailSigner(ctx, user, doc, signer, token, accessCode, { reminder = false } = {}) {
-  if (!signer.email) return
+  if (!signer.email) return null
   const href = `${ctx.config.appUrl}/#/sign/${token}`
   const first = String(signer.full_name || signer.name || '').trim().split(/\s+/)[0]
   const hi = first && !/^signer$/i.test(first) ? `Hi ${first}, ` : ''
   const note = accessCode
     ? `Access code: <b>${esc(accessCode)}</b>. You don’t need an account.`
     : 'You don’t need an account. The link is unique to you.'
-  await ctx.email.send({
+  const sent = await ctx.email.send({
     to: signer.email,
     subject: reminder ? `Reminder: “${doc.name}” is waiting for your ${signer.role === 'approver' ? 'review' : 'signature'}` : `${brandOf(user, ctx).company} sent you “${doc.name}” to ${signer.role === 'approver' ? 'review' : 'sign'}`,
     text: `${hi}${reminder ? 'reminder: ' : ''}${user.full_name} asked you to ${signer.role === 'approver' ? 'review' : 'sign'} ${doc.name}. ${href}${accessCode ? ' Access code: ' + accessCode : ''}`,
@@ -1044,6 +1180,7 @@ async function emailSigner(ctx, user, doc, signer, token, accessCode, { reminder
       brand: brandOf(user, ctx)
     })
   })
+  return trackEmail(ctx, sent, { documentId: doc.id, signerId: signer.id, email: signer.email, kind: reminder ? 'reminder' : 'signing' })
 }
 
 export async function sendDocument(ctx, user, id, device) {
@@ -1141,16 +1278,10 @@ export async function sendDocument(ctx, user, id, device) {
   for (const s of firsts) {
     if (s.role === 'in-person' || !s.email) continue
     try {
-      await emailSigner(ctx, prepared.profile, prepared.doc, s, s.token, s.access)
-      await ctx.db.query(
-        `insert into audit_events (document_id, signer_id, event_type, actor, email) values ($1,$2,$3,$4,$5)`,
-        [id, s.id, `Email sent to ${s.full_name || s.name}`, 'System', s.email]
-      )
+      const messageId = await emailSigner(ctx, prepared.profile, prepared.doc, s, s.token, s.access)
+      await audit(ctx.db.query.bind(ctx.db), id, { type: `Email sent to ${s.full_name || s.name}`, actor: 'System', email: s.email, signerId: s.id, meta: messageId ? { messageId, provider: 'Resend' } : null })
     } catch (err) {
-      await ctx.db.query(
-        `insert into audit_events (document_id, event_type, actor, meta) values ($1,$2,$3,$4::jsonb)`,
-        [id, 'Email failed', 'System', JSON.stringify({ error: String(err.message || err).slice(0, 200), email: s.email })]
-      )
+      await audit(ctx.db.query.bind(ctx.db), id, { type: 'Email failed', actor: 'System', email: s.email, signerId: s.id, meta: { error: String(err.message || err).slice(0, 200), email: s.email } })
     }
   }
   const document = await getOwned(ctx, user, id)
@@ -1190,9 +1321,9 @@ export async function remind(ctx, user, id, { force = false, auto = false } = {}
     }
     const token = unseal(s.token, ctx.config.jwtSecret)
     try {
-      await emailSigner(ctx, user, doc, { ...s, name: s.full_name }, token, access, { reminder: true })
+      const messageId = await emailSigner(ctx, user, doc, { ...s, name: s.full_name }, token, access, { reminder: true })
       sent++
-      await audit(ctx.db.query.bind(ctx.db), id, { type: `${auto ? 'Automatic reminder' : 'Reminder'} sent to ${s.full_name}`, actor: auto ? 'System' : user.full_name, email: s.email })
+      await audit(ctx.db.query.bind(ctx.db), id, { type: `${auto ? 'Automatic reminder' : 'Reminder'} sent to ${s.full_name}`, actor: auto ? 'System' : user.full_name, email: s.email, signerId: s.id, meta: messageId ? { messageId, provider: 'Resend' } : null })
     } catch (err) {
       await ctx.logError?.('email.reminder', String(err?.message || err))
       await audit(ctx.db.query.bind(ctx.db), id, { type: 'Email failed', actor: 'System', meta: { error: String(err.message || err).slice(0, 200), email: s.email } })
@@ -1264,6 +1395,7 @@ export async function signSession(ctx, token, device, { markView }) {
     if (Date.now() > exp) {
       await ctx.db.query(`update documents set status='expired', updated_at=now() where id=$1`, [doc.id])
       await audit(ctx.db.query.bind(ctx.db), doc.id, { type: 'Expired', actor: 'System' })
+      await retainAuditRecord(ctx.db.query.bind(ctx.db), doc.id, 'expired').catch(() => {})
       return { status: 'expired', name: doc.name }
     }
   }
@@ -1363,6 +1495,9 @@ export async function finishSign(ctx, token, body, device) {
   const signer = await signerByToken(ctx, token)
   if (!signer) throw fail(404, 'not_found', 'This signing link is not valid.')
   if (body?.consent !== true) throw fail(400, 'consent', 'Accept the electronic signature consent before finishing.')
+  if (body?.consentVersion != null && String(body.consentVersion) !== CONSENT_VERSION) {
+    throw fail(409, 'consent_version', 'The consent text on this page is out of date. Reload the page, review it, and sign again.')
+  }
   await saveSignFields(ctx, token, body || {}, device)
   const doc = await partyDoc(ctx, signer)
   const signers = await loadSigners(ctx.db.query.bind(ctx.db), doc.id)
@@ -1386,6 +1521,15 @@ export async function finishSign(ctx, token, body, device) {
       if (f.required && empty) throw fail(400, 'field', `“${f.label || f.type}” is required.`)
     }
   }
+  await audit(ctx.db.query.bind(ctx.db), doc.id, {
+    type: `Electronic records and signature consent accepted by ${me.full_name}`,
+    actor: me.full_name,
+    email: me.email,
+    ip: device.ip,
+    ua: device.ua,
+    signerId: me.id,
+    meta: { consentVersion: CONSENT_VERSION, consentText: CONSENT_TEXT }
+  })
   await ctx.db.query(
     `update signers set signed_at=now(), consent_at=now(), consent_text=$2, consent_version=$3, consent_ip=$4, consent_ua=$5, sign_ip=$4, sign_ua=$5 where id=$1`,
     [me.id, CONSENT_TEXT, CONSENT_VERSION, device.ip, device.ua]
@@ -1397,7 +1541,14 @@ export async function finishSign(ctx, token, body, device) {
     ip: device.ip,
     ua: device.ua,
     signerId: me.id,
-    meta: { consentVersion: CONSENT_VERSION }
+    meta: {
+      consentVersion: CONSENT_VERSION,
+      consentTextSha256: sha256(Buffer.from(CONSENT_TEXT, 'utf8')),
+      intent: approver ? 'Clicked Approve after checking the electronic-signature consent' : 'Clicked Finish after checking the electronic-signature consent',
+      clientReportedConsentVersion: body?.consentVersion != null ? String(body.consentVersion).slice(0, 40) : null,
+      documentSha256BeforeSigning: doc.original_sha256 || null,
+      fieldsCompleted: approver ? 0 : fields.filter(f => f.signer === me.id && f.value != null && f.value !== '' && f.value !== false).length
+    }
   })
   const after = await loadSigners(ctx.db.query.bind(ctx.db), doc.id)
   const remaining = after.filter(s => s.role !== 'cc' && !s.signed_at)
@@ -1411,8 +1562,9 @@ export async function finishSign(ctx, token, body, device) {
         await ctx.db.query(`update signers set access_code_hash=$2 where id=$1`, [next.id, hashSecret(access, ctx.config.jwtSecret)])
       }
       const owner = (await ctx.db.query(`select * from profiles where id=$1`, [doc.owner_id])).rows[0]
-      try { await emailSigner(ctx, owner, doc, next, tokenNext, access) } catch { /* link still works */ }
-      await audit(ctx.db.query.bind(ctx.db), doc.id, { type: `Sent to ${next.full_name}`, actor: 'System', email: next.email })
+      let messageId = null
+      try { messageId = await emailSigner(ctx, owner, doc, next, tokenNext, access) } catch { /* link still works */ }
+      await audit(ctx.db.query.bind(ctx.db), doc.id, { type: `Sent to ${next.full_name}`, actor: 'System', email: next.email, signerId: next.id, meta: messageId ? { messageId, provider: 'Resend' } : null })
     }
     return { ok: true, status: 'waiting', remaining: remaining.length }
   }
@@ -1461,6 +1613,7 @@ export async function declineSign(ctx, token, reason, device) {
       signer: { name: signer.full_name, email: signer.email }
     })
   } catch { /* delivery recorded on the webhook */ }
+  try { await retainAuditRecord(ctx.db.query.bind(ctx.db), doc.id, 'declined') } catch (err) { await ctx.logError?.('audit.retain', String(err?.message || err).slice(0, 200)) }
   return { ok: true, status: 'declined', reason: why }
 }
 
@@ -1475,9 +1628,11 @@ export async function completeDocument(ctx, id) {
   const original = await ctx.storage.get(doc.original_path)
   const completedAt = new Date().toISOString()
   const mappedSigners = signers.map(s => mapSigner(s, ctx.config.jwtSecret, false))
+  const chainAtSeal = verifyChain(await loadChain(ctx.db.query.bind(ctx.db), id))
   const sealed = await sealPdf({
     original,
     verifyUrl: `${ctx.config.appUrl}/verify/${id}`,
+    publicVerifyUrl: `${ctx.config.appUrl}/verify`,
     doc: {
       id,
       name: doc.name,
@@ -1487,27 +1642,31 @@ export async function completeDocument(ctx, id) {
       consentVersion: CONSENT_VERSION,
       fields: decryptAllFields(asJson(doc.fields, []), ctx.config.jwtSecret),
       signers: mappedSigners,
-      events: events.map(e => ({ t: e.event_type, ts: iso(e.created_at), who: e.actor, ip: e.ip || '' }))
+      events: events.map(e => ({ t: e.event_type, ts: iso(e.created_at), who: e.actor, ip: e.ip || '', email: e.email || '', ua: e.user_agent || '' })),
+      consentText: CONSENT_TEXT,
+      chainHead: chainAtSeal.head,
+      chainLength: chainAtSeal.length,
+      chainOk: chainAtSeal.ok
     }
   })
   const finalKey = `${doc.owner_id}/${id}/final.pdf`
   await ctx.storage.put(finalKey, sealed.bytes)
   const updated = await ctx.db.query(
     `update documents set status='completed', completed_at=$2, final_path=$3, content_sha256=$4, final_sha256=$5,
-      original_sha256=coalesce(original_sha256,$6), updated_at=now()
+      original_sha256=coalesce(original_sha256,$6), audit_seal_hash=$7, updated_at=now()
      where id=$1 and status <> 'completed'
      returning id`,
-    [id, completedAt, finalKey, sealed.contentHash, sealed.finalHash, sha256(original)]
+    [id, completedAt, finalKey, sealed.contentHash, sealed.finalHash, sha256(original), chainAtSeal.head]
   )
   if (!updated.rows[0]) return (await ctx.db.query(`select * from documents where id=$1`, [id])).rows[0]
-  await audit(ctx.db.query.bind(ctx.db), id, { type: 'Document completed', actor: 'System', meta: { finalSha256: sealed.finalHash, contentSha256: sealed.contentHash } })
+  await audit(ctx.db.query.bind(ctx.db), id, { type: 'Document completed', actor: 'System', meta: { originalSha256: doc.original_sha256 || sha256(original), contentSha256: sealed.contentHash, finalSha256: sealed.finalHash, auditChainHeadAtSeal: chainAtSeal.head, auditChainLengthAtSeal: chainAtSeal.length, auditChainVerified: chainAtSeal.ok } })
   const recipients = new Map()
   recipients.set(owner.email, owner.full_name)
   for (const s of signers) if (s.email) recipients.set(s.email, s.full_name)
   const filename = `${String(doc.name).replace(/[^\w\-]+/g, '_').slice(0, 80) || 'document'}_signed.pdf`
   for (const [email, name] of recipients) {
     try {
-      await ctx.email.send({
+      const sentId = await ctx.email.send({
         to: email,
         subject: `Completed: ${doc.name}`,
         text: `${doc.name} is signed. The sealed PDF is attached. Verify it at ${ctx.config.appUrl}/verify/${id}`,
@@ -1519,11 +1678,13 @@ export async function completeDocument(ctx, id) {
           brand: brandOf(owner, ctx)
         }),
         attachments: [{ filename, content: Buffer.from(sealed.bytes).toString('base64') }]
-      })
+      }).then(sent => trackEmail(ctx, sent, { documentId: id, signerId: signers.find(x => x.email === email)?.id || null, email, kind: 'completed' }))
+      await audit(ctx.db.query.bind(ctx.db), id, { type: `Completed copy emailed to ${name || email}`, actor: 'System', email, meta: sentId ? { messageId: sentId, provider: 'Resend' } : null })
     } catch (err) {
       await audit(ctx.db.query.bind(ctx.db), id, { type: 'Completion email failed', actor: 'System', email, meta: { error: String(err.message || err).slice(0, 180) } })
     }
   }
+  try { await retainAuditRecord(ctx.db.query.bind(ctx.db), id, 'completed') } catch (err) { await ctx.logError?.('audit.retain', String(err?.message || err).slice(0, 200)) }
   try {
     await fireWebhooks(ctx, doc.owner_id, 'document.signed', {
       documentId: id,
@@ -1537,6 +1698,7 @@ export async function completeDocument(ctx, id) {
 
 export async function ownerFile(ctx, user, id, final) {
   const doc = await ownDoc(ctx.db.query.bind(ctx.db), user.id, id)
+  if (doc.content_deleted_at) throw fail(410, 'deleted', 'The owner deleted this document’s files. The audit-trail record is kept.')
   if (final) {
     if (doc.status !== 'completed') throw fail(409, 'status', 'The sealed PDF is ready after everyone signs.')
     return { bytes: await ctx.storage.get(doc.final_path), name: doc.name }
@@ -1548,6 +1710,7 @@ export async function signerFile(ctx, token, final) {
   const signer = await signerByToken(ctx, token)
   if (!signer) throw fail(404, 'not_found', 'This signing link is not valid.')
   const doc = await partyDoc(ctx, signer)
+  if (doc.content_deleted_at) throw fail(410, 'deleted', 'The owner deleted this document’s files. The audit-trail record is kept.')
   if (final) {
     if (!doc.final_path) throw fail(409, 'status', 'The sealed PDF is not ready yet.')
     return { bytes: await ctx.storage.get(doc.final_path), name: doc.name }
@@ -1611,7 +1774,7 @@ export async function publicStart(ctx, linkId, { name, email }, device) {
   const owner = cloned.owner
   const sent = await sendDocument(ctx, owner, cloned.id, { ...device, localId: '', cookieId: '', allowMissingDevice: true })
   if (!sent.ok) {
-    await ctx.db.query(`delete from documents where id=$1`, [cloned.id])
+    await ctx.db.tx(async q => { await q(`select set_config('eds.audit_purge', 'on', true)`); await q(`delete from documents where id=$1 and status='draft'`, [cloned.id]) })
     throw fail(sent.status || 402, sent.error || 'payment_required', 'The sender has no documents left to send. Ask them to add a document credit.')
   }
   await ctx.db.query(`update signing_links set responses=responses+1 where id=$1`, [linkId])
@@ -1769,6 +1932,7 @@ async function expireDocument(ctx, id) {
   const doc = updated.rows[0]
   if (!doc) return
   await audit(ctx.db.query.bind(ctx.db), doc.id, { type: 'Expired', actor: 'System' })
+      await retainAuditRecord(ctx.db.query.bind(ctx.db), doc.id, 'expired').catch(() => {})
   const owner = (await ctx.db.query(`select * from profiles where id=$1`, [doc.owner_id])).rows[0]
   const signers = await loadSigners(ctx.db.query.bind(ctx.db), doc.id)
   const waiting = signers.filter(s => s.role !== 'cc' && !s.signed_at && !s.declined_at)
@@ -1919,7 +2083,13 @@ export async function verificationRecord(ctx, id) {
     `select id, name, status, original_sha256, content_sha256, final_sha256, completed_at from documents where id=$1`,
     [id]
   )
-  const doc = row.rows[0]
+  let doc = row.rows[0]
+  if (!doc) {
+    // The document or account was deleted: fall back to the retained audit record.
+    doc = (await ctx.db.query(
+      `select document_id as id, document_name as name, status, original_sha256, content_sha256, final_sha256, completed_at
+         from audit_records where document_id=$1 and status='completed' order by created_at limit 1`, [id])).rows[0]
+  }
   if (!doc || doc.status !== 'completed') return null
   return {
     id: doc.id,
@@ -1929,5 +2099,30 @@ export async function verificationRecord(ctx, id) {
     originalSha256: doc.original_sha256,
     contentSha256: doc.content_sha256,
     finalSha256: doc.final_sha256
+  }
+}
+
+// Owner-only evidence export: the full hash-chained audit trail plus a fresh chain check.
+export async function documentEvidence(ctx, user, id) {
+  const doc = await ownDoc(ctx.db.query.bind(ctx.db), user.id, id)
+  const q = ctx.db.query.bind(ctx.db)
+  const chain = await loadChain(q, id)
+  const check = verifyChain(chain)
+  const signers = await loadSigners(q, id)
+  return {
+    exportedAt: new Date().toISOString(),
+    operator: 'Boreal MT LLC (Easy Digital Signatures)',
+    document: {
+      id: doc.id, name: doc.name, status: doc.status, sentAt: iso(doc.sent_at), completedAt: iso(doc.completed_at),
+      originalSha256: doc.original_sha256, contentSha256: doc.content_sha256, finalSha256: doc.final_sha256,
+      auditChainHeadAtSeal: doc.audit_seal_hash || null, contentDeletedAt: iso(doc.content_deleted_at)
+    },
+    signers: signers.map(s => ({
+      name: s.full_name, email: s.email, role: s.role, viewedAt: iso(s.viewed_at), signedAt: iso(s.signed_at), declinedAt: iso(s.declined_at),
+      consentAt: iso(s.consent_at), consentVersion: s.consent_version, consentText: s.consent_text,
+      signIp: s.sign_ip, signUserAgent: s.sign_ua, viewIp: s.view_ip, viewUserAgent: s.view_ua
+    })),
+    chain: { algorithm: 'event_hash = SHA-256(prev_hash + "|" + payload)', ok: check.ok, length: check.length, head: check.head, problems: check.problems },
+    events: chain.map(r => ({ seq: r.seq, at: iso(r.created_at), type: r.event_type, actor: r.actor, email: r.email, ip: r.ip, userAgent: r.user_agent, meta: r.meta ?? null, prevHash: r.prev_hash, hash: r.event_hash, payload: r.payload }))
   }
 }

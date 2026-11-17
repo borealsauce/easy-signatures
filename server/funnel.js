@@ -1,13 +1,22 @@
-// Conversion funnel: anonymous page/CTA/signup-form events from the browser (POST /api/ev, cookie-free),
+// Conversion funnel: anonymous page/CTA/signup-form events from the browser (POST /api/ev),
+// each with a random per-browser visitor id and a salted one-way hash of the IP (never the raw IP),
 // plus signups, email confirmations, first sends, checkouts, and purchases from the app's own tables.
-export const CLIENT_EVENTS = new Set(['landing_view', 'cta_click', 'signup_view', 'signup_started', 'pdf_tool_open', 'pdf_signed', 'begin_checkout'])
+import crypto from 'node:crypto'
+
+export const CLIENT_EVENTS = new Set(['page_view', 'landing_view', 'cta_click', 'signup_view', 'signup_started', 'pdf_tool_open', 'pdf_signed', 'begin_checkout'])
 const BOT_UA = /bot|crawl|spider|slurp|lighthouse|headless|preview|facebookexternalhit|bingpreview|curl|wget|python-requests/i
 const clip = (v, n) => (v == null ? null : String(v).slice(0, n))
 
-export async function recordEvent(db, { name, sid, userId, path, source, meta }) {
+// Salted one-way hash of an IP address. The raw IP is never stored in funnel_events.
+export function ipHash(ip, salt) {
+  if (!ip) return null
+  return crypto.createHmac('sha256', 'funnel-ip:' + String(salt || '')).update(String(ip)).digest('hex').slice(0, 32)
+}
+
+export async function recordEvent(db, { name, sid, vid, userId, path, source, meta, ipHash: ih, internal }) {
   try {
-    await db.query(`insert into funnel_events (name, sid, user_id, path, source, meta) values ($1,$2,$3,$4,$5,$6::jsonb)`,
-      [clip(name, 40), clip(sid, 40), userId || null, clip(path, 200), clip(source, 80), JSON.stringify(meta || {})])
+    await db.query(`insert into funnel_events (name, sid, vid, user_id, path, source, meta, ip_hash, internal) values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9)`,
+      [clip(name, 40), clip(sid, 40), clip(vid, 40), userId || null, clip(path, 200), clip(source, 80), JSON.stringify(meta || {}), ih || null, !!internal])
   } catch (e) { /* analytics must never break the app */ }
 }
 
@@ -26,7 +35,8 @@ export function cleanClientEvent(body, ua = '') {
   let path = String(body.path || '').split('?')[0]
   if (!path.startsWith('/')) path = '/'
   const source = clip(body.data?.utm_source || body.data?.ref || '', 80) || 'direct'
-  return { name, sid, path: clip(path, 200), source, meta }
+  const vid = /^[A-Za-z0-9_-]{8,40}$/.test(String(body.vid || '')) ? String(body.vid) : null
+  return { name, sid, vid, path: clip(path, 200), source, meta, internal: body.internal === true }
 }
 
 const SESSION_STEPS = [['landing_view', 'Visited the site'], ['cta_click', 'Clicked a call to action'], ['signup_view', 'Opened the signup form'], ['signup_started', 'Started typing in the signup form']]
@@ -63,4 +73,31 @@ export async function funnelReport(ctx, { days = 30, excludeEmails = [] } = {}) 
   const daily = await top(`select to_char(date_trunc('day', created_at at time zone 'America/Los_Angeles'), 'YYYY-MM-DD') as day, name, count(distinct coalesce(sid, user_id::text))::int as n
       from funnel_events where created_at >= ${since} group by 1, 2 order by 1 desc`)
   return { days: d, steps, landings, sources, ctas, tool: Object.fromEntries(tool.map(r => [r.name, r.n])), daily }
+}
+
+// Real visitors: browsers (visitor id, or tab session when there is none) that were never flagged as ours.
+// A browser is excluded if it EVER sent an event with the internal flag (?internal=1 cookie), came from an
+// excluded IP hash, or belongs to an excluded account (owner/admin emails, the smoke-test account).
+export async function realVisitorsReport(ctx, { days = 30, excludeEmails = [], excludeIpHashes = [] } = {}) {
+  const d = Math.min(Math.max(Number(days) || 30, 1), 365)
+  const ex = excludeEmails.map(e => String(e).toLowerCase())
+  const dbIps = (await ctx.db.query(`select ip_hash from funnel_excluded_ips`)).rows.map(r => r.ip_hash)
+  const ips = [...new Set([...excludeIpHashes, ...dbIps].filter(Boolean))]
+  const cte = `with bad as (
+      select distinct coalesce(vid, sid) as v from funnel_events
+       where internal or ip_hash = any($2::text[]) or user_id in (select id from profiles where lower(email) = any($3::text[]))
+    ), ev as (
+      select coalesce(vid, sid) as v, name, path, source, created_at from funnel_events
+       where created_at >= now() - ($1::int * interval '1 day') and coalesce(vid, sid) is not null
+         and not internal and (ip_hash is null or not (ip_hash = any($2::text[])))
+         and coalesce(vid, sid) not in (select v from bad where v is not null)
+         and name in ('page_view', 'landing_view')
+    )`
+  const q = sql => ctx.db.query(cte + sql, [d, ips, ex]).then(r => r.rows)
+  const daily = await q(` select to_char(date_trunc('day', created_at at time zone 'America/Los_Angeles'), 'YYYY-MM-DD') as day, count(distinct v)::int as visitors, count(*) filter (where name='page_view')::int as views from ev group by 1 order by 1 desc`)
+  const total = (await q(` select count(distinct v)::int as n from ev`))[0]?.n || 0
+  const pages = await q(` select path, count(distinct v)::int as n from ev group by path order by n desc, path limit 15`)
+  const referrers = await q(` select source, count(distinct v)::int as n from ev where name='landing_view' group by source order by n desc, source limit 15`)
+  const excluded = (await ctx.db.query(`select count(distinct coalesce(vid, sid))::int as n from funnel_events where created_at >= now() - ($1::int * interval '1 day') and (internal or ip_hash = any($2::text[]))`, [d, ips])).rows[0]?.n || 0
+  return { days: d, uniqueVisitors: total, daily, pages, referrers, excludedBrowsers: excluded, excludedIpCount: ips.length }
 }

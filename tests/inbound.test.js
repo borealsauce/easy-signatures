@@ -49,7 +49,7 @@ test('/api/inbound-email rejects bad signatures', async () => {
   const server = await new Promise(resolve => { const s = ctx.app.listen(0, '127.0.0.1', () => resolve(s)) })
   const base = `http://127.0.0.1:${server.address().port}`
   try {
-    const body = JSON.stringify({ type: 'email.sent', data: {} })
+    const body = JSON.stringify({ type: 'contact.created', data: {} })
     const bad = await fetch(base + '/api/inbound-email', { method: 'POST', headers: { 'content-type': 'application/json', ...sign(body), 'svix-signature': 'v1,AAAA' }, body })
     assert.equal(bad.status, 401)
     const good = await fetch(base + '/api/inbound-email', { method: 'POST', headers: { 'content-type': 'application/json', ...sign(body) }, body })

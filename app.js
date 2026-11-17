@@ -95,6 +95,7 @@ async function hydrate() {
   if (!TOKEN) return
   const res = await api('/api/state')
   if (!res.ok) return
+  if (res.json.me?.internal || res.json.me?.isAdmin) { try { window.edsMarkInternal && window.edsMarkInternal() } catch {} }
   S.docs = res.json.documents || []
   S.templates = res.json.templates || []
   S.links = res.json.links || []
@@ -342,6 +343,7 @@ function login() {
   V.innerHTML = `<div class="card auth"><h1>Log in</h1>${params.get('verified') === '1' ? '<p class="banner">Email confirmed. Log in to continue.</p>' : ''}${params.get('verified') === '0' ? '<p class="banner">That confirmation link is invalid or already used.</p>' : ''}
   <label class="f" for="em">Email</label><input id="em" type="email" autocomplete="username" style="width:100%">
   <label class="f" for="pw">Password</label><input id="pw" type="password" autocomplete="current-password" style="width:100%">
+  <div id="tfa" hidden><label class="f" for="otp">Authenticator code</label><input id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="11" placeholder="6-digit code or recovery code" style="width:100%"><p class="note">Two-factor authentication is on for this account. Lost your phone? Enter one of your recovery codes instead.</p></div>
   <br><br><button class="p" id="go">Log in</button><div id="lmsg"></div>
   <p><a href="#/forgot" class="tap">Forgot password?</a> · <a href="#/signup" class="tap">Create an account</a> · <a href="javascript:void 0" id="rs2" class="tap">Resend confirmation email</a></p></div>`
   const resendConfirm = async () => {
@@ -351,9 +353,17 @@ function login() {
     toast(r.json?.message || (r.ok ? 'Sent' : 'Could not send'))
   }
   $('#rs2').onclick = resendConfirm
-  for (const id of ['#em', '#pw']) $(id).onkeydown = e => { if (e.key === 'Enter') $('#go').click() }
+  for (const id of ['#em', '#pw', '#otp']) $(id).onkeydown = e => { if (e.key === 'Enter') $('#go').click() }
   $('#go').onclick = async () => {
-    const res = await api('/api/auth/login', { method: 'POST', body: { email: $('#em').value, password: $('#pw').value } })
+    const second = $('#otp').value.trim()
+    const body = { email: $('#em').value, password: $('#pw').value }
+    if (second) { if (/^\d{6}$/.test(second.replace(/\s+/g, ''))) body.totp = second.replace(/\s+/g, ''); else body.recoveryCode = second }
+    const res = await api('/api/auth/login', { method: 'POST', body })
+    if (!res.ok && (res.json?.error === 'totp_required' || res.json?.error === 'totp_invalid')) {
+      $('#tfa').hidden = false; $('#otp').focus()
+      $('#lmsg').innerHTML = res.json.error === 'totp_invalid' ? `<p class="banner">${esc(res.json.message)}</p>` : ''
+      return
+    }
     if (!res.ok) {
       $('#lmsg').innerHTML = `<p class="banner">${esc(res.json?.message || 'Could not log in')}${res.json?.error === 'email_unverified' ? ' <a href="javascript:void 0" id="rs">Resend confirmation</a>' : ''}</p>`
       if ($('#rs')) $('#rs').onclick = resendConfirm
@@ -403,7 +413,7 @@ function signup() {
   <label class="f" for="pw">Password <span class="note">(8+ characters)</span></label><input id="pw" type="password" autocomplete="new-password" minlength="8" required style="width:100%">
   <p style="margin:10px 0 0"><button type="button" id="pcl" class="tap" style="background:none;border:0;padding:5px 0;color:var(--teal,#0f766e);text-decoration:underline;font:inherit;font-size:14px;cursor:pointer">Have a promo code?</button></p>
   <div id="pcw" class="hidden"><label class="f" for="pc">Promo code</label><input id="pc" autocomplete="off" style="width:100%;text-transform:uppercase" placeholder="Enter code"></div>
-  <label for="tos" style="margin-top:14px;display:flex;flex-wrap:nowrap;align-items:flex-start;gap:10px;font-size:14px"><input type="checkbox" id="tos" style="margin:1px 0 0;width:20px;height:20px;flex-shrink:0;padding:0"> <span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a></span></label>
+  <label for="tos" style="margin-top:14px;display:flex;flex-wrap:nowrap;align-items:flex-start;gap:10px;font-size:14px"><input type="checkbox" id="tos" style="margin:1px 0 0;width:20px;height:20px;flex-shrink:0;padding:0"> <span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a> (including binding arbitration), <a href="/acceptable-use" target="_blank" rel="noopener">Acceptable Use Policy</a>, and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a> of Boreal MT LLC</span></label>
   <br><button class="p" id="go" type="submit" style="width:100%">Create free account</button><div id="smsg" role="alert"></div>
   </form>
   <p class="note" style="margin-top:12px">${S.smsEnabled ? 'Next, confirm your email and a mobile number to unlock the free document.' : 'Next, click the link we email you to unlock the free document.'}</p>
@@ -1261,7 +1271,7 @@ async function signToken(token) {
   const approver = s.role === 'approver'
   const brand = session.brand || {}
   V.innerHTML = `<div class="signbar" style="border-top:4px solid ${esc(brand.color || 'var(--brand2)')}">${brand.logoUrl ? `<img src="${esc(brand.logoUrl)}" alt="" style="height:28px;max-width:140px;object-fit:contain">` : ''}<b>${esc(brand.company ? brand.company + ' · ' : '')}${esc(d.name)}</b><span>· ${esc(s.name)}${s.role === 'in-person' ? ' · signing in person' : ''}</span><span class="sp"></span><span id="prog"></span>${approver ? '' : '<button id="nx" style="background:var(--acc)">Next field</button>'}<button id="fin" class="p" style="background:var(--brand2)">${approver ? 'Approve' : 'Finish'}</button><button id="dec" style="background:#fee2e2">Decline</button><button id="cm">Comments (${d.comments.length})</button></div>
-  <div class="card" id="consent" style="margin-bottom:12px">${session.accessCodeRequired ? `<label class="f" for="acode">Access code from your email</label><input id="acode" maxlength="6" style="max-width:160px;letter-spacing:3px">` : ''}<label class="row"><input type="checkbox" id="ok"> ${esc(session.consentText).replace('Terms of Use', '<a href="/terms" target="_blank" rel="noopener">Terms of Use</a>')}</label></div><div class="pages" id="pages"></div>`
+  <div class="card" id="consent" style="margin-bottom:12px">${session.accessCodeRequired ? `<label class="f" for="acode">Access code from your email</label><input id="acode" maxlength="6" style="max-width:160px;letter-spacing:3px">` : ''}<label class="row"><input type="checkbox" id="ok"> <span>${esc(session.consentText).replace('Terms of Use', '<a href="/terms" target="_blank" rel="noopener">Terms of Use</a>')} <small class="note">(consent version ${esc(session.consentVersion || '')})</small></span></label><p class="note" style="margin:8px 0 0">When you click ${approver ? 'Approve' : 'Finish'}, your ${approver ? 'approval' : 'signature'}, name, email, IP address, browser, and the time are recorded in the document’s audit trail.</p></div><div class="pages" id="pages"></div>`
   await renderPages($('#pages'), d)
   const mine = () => d.fields.filter(f => f.signer === s.id && visible(d.fields, f) && f.type !== 'formula')
   const draw = () => {
@@ -1336,7 +1346,7 @@ async function signToken(token) {
   $('#cm').onclick = () => { modal(`<h3>Comments</h3>${d.comments.map(c => `<div class="card" style="margin:6px 0;padding:10px"><b>${esc(c.who)}</b> <small>${fmt(c.ts)}</small><br>${esc(c.t)}</div>`).join('') || '<p>No comments yet.</p>'}<textarea id="ct" style="width:100%"></textarea><br><br><button class="p" id="cs">Post</button> <button onclick="closeModal()">Close</button>`); $('#cs').onclick = async () => { const t = $('#ct').value.trim(); if (!t) return; await fetch('/api/sign/' + token + '/comment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t }) }); d.comments.push({ t, who: s.name, ts: now() }); closeModal(); toast('Comment posted') } }
   $('#fin').onclick = async () => {
     if (!$('#ok').checked) return toast('Please accept the electronic-signature consent first'), $('#consent').scrollIntoView({ block: 'center' })
-    const r = await fetch('/api/sign/' + token + '/finish', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Device-Local': deviceLocal() }, body: JSON.stringify({ consent: true, accessCode: $('#acode')?.value || '', name: s.name, fields: d.fields.filter(f => f.signer === s.id).map(f => ({ id: f.id, value: f.value })) }) })
+    const r = await fetch('/api/sign/' + token + '/finish', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Device-Local': deviceLocal() }, body: JSON.stringify({ consent: true, consentVersion: session.consentVersion, accessCode: $('#acode')?.value || '', name: s.name, fields: d.fields.filter(f => f.signer === s.id).map(f => ({ id: f.id, value: f.value })) }) })
     const j = await r.json()
     if (!r.ok) return toast(j.message || 'Could not finish')
     if (j.status === 'completed') V.innerHTML = `<div class="card" style="text-align:center"><h2>Thanks, ${esc(s.name)}. Everyone has signed.</h2><p>A sealed PDF is on its way by email.</p><p><a class="btn p" href="/api/sign/${token}/download">Download the sealed PDF</a></p>${handBack('Hand the device back')}</div>`
@@ -1397,7 +1407,27 @@ async function cert(id) {
   <div class="grid3" style="grid-template-columns:1fr 1fr;margin:16px 0"><div><b>Document</b><br>${esc(d.name)}</div><div><b>Status</b><br><span class="pill s-${d.status}">${d.status}</span></div><div><b>Document ID</b><br><span class="mono">${d.id}</span></div><div><b>Completed</b><br>${fmt(d.completed)}</div></div>
   <p><b>Original SHA-256</b><br><span class="mono">${d.hashOrig || '—'}</span></p><p><b>Signed content SHA-256</b><br><span class="mono">${d.hashContent || '—'}</span></p><p><b>Complete file SHA-256</b><br><span class="mono">${d.hashFinal || '—'}</span></p>
   <h3>Recipients</h3>${table(['Name', 'Email', 'Role', 'Status', 'Signed at', 'IP'], d.signers.map(s => `<tr><td>${esc(s.name)}</td><td>${esc(s.email)}</td><td>${s.role}</td><td>${s.done ? (s.role === 'approver' ? 'Approved' : 'Signed') : s.declined ? 'Declined' + (s.declineReason ? ' — ' + esc(s.declineReason) : '') : s.role === 'cc' ? 'Copied' : 'Pending'}</td><td>${fmt(s.doneAt)}</td><td>${esc(s.signIp || s.viewIp || '—')}</td></tr>`))}
-  <h3>Audit trail</h3>${table(['Time', 'Event', 'By', 'IP'], d.events.map(e => `<tr><td>${fmt(e.ts)}</td><td>${esc(e.t)}</td><td>${esc(e.who || '')}</td><td>${esc(e.ip || '')}</td></tr>`))}</div>`
+  <h3>Audit trail</h3>${table(['Time', 'Event', 'By', 'IP'], d.events.map(e => `<tr><td>${fmt(e.ts)}</td><td>${esc(e.t)}</td><td>${esc(e.who || '')}</td><td>${esc(e.ip || '')}</td></tr>`))}
+  <h3>Evidence</h3><p class="note">Every audit event is hash-chained. Check the chain, or download the full record (JSON) to keep with your files or give to a lawyer. See <a href="/court-evidence" target="_blank" rel="noopener">court evidence and records requests</a>.</p>
+  <div class="row"><button id="chk">Check audit chain</button><a class="btn" href="javascript:void 0" id="evdl">Download evidence record</a>${['completed', 'declined', 'expired', 'voided'].includes(d.status) && !d.contentDeleted ? '<button id="delc" style="background:#fee2e2">Delete files, keep audit record</button>' : ''}${d.contentDeleted ? '<span class="note">Files deleted by you; the audit record is kept.</span>' : ''}</div><div id="chkout"></div></div>`
+  $('#chk').onclick = async () => {
+    const r = await api('/api/documents/' + id + '/evidence')
+    if (!r.ok) return toast(r.json?.message || 'Could not check the chain')
+    const c = r.json.chain
+    $('#chkout').innerHTML = `<p class="banner">${c.ok ? `Audit chain verified: ${c.length} events, unbroken.` : 'Problem found: ' + esc(c.problems.join('; '))}<br><span class="mono" style="word-break:break-all">${esc(c.head || '')}</span></p>`
+  }
+  $('#evdl').onclick = async () => {
+    const r = await api('/api/documents/' + id + '/evidence')
+    if (!r.ok) return toast(r.json?.message || 'Could not export')
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(r.json, null, 2)], { type: 'application/json' })); a.download = 'evidence-' + id + '.json'; a.click()
+  }
+  const dc = $('#delc')
+  if (dc) dc.onclick = async () => {
+    if (!confirm('Delete this document’s PDF files and field values from Easy Digital Signatures? Download your copy first. The audit trail, signer records, and fingerprints are kept for at least 7 years. This can’t be undone.')) return
+    const r = await api('/api/documents/' + id + '/delete-content', { method: 'POST' })
+    if (!r.ok) return toast(r.json?.message || 'Could not delete the files')
+    toast('Files deleted. The audit record is kept.'); await hydrate(); cert(id)
+  }
 }
 
 function templates() {
@@ -1700,12 +1730,36 @@ function settings() {
   <p class="note">Signers who haven’t signed get a reminder on this schedule, up to 5 times. You can change it on each document.</p>
   <label class="f" style="margin-top:12px">Email me a follow-up about documents still waiting</label>${remindSelect('rnud', S.me.senderNudgeDays ?? 0, 'style="width:100%"')}
   <p class="note">A short digest like “Your NDA is still waiting on Jane, sent 3 days ago” with a one-click Resend link.</p></div>
+  <div class="card" id="tfacard"><h3>Two-factor authentication</h3>${S.me.twoFactor
+    ? `<p><span class="pill s-completed">On</span> You’ll enter a code from your authenticator app when you log in. ${S.me.recoveryCodesLeft} recovery code${S.me.recoveryCodesLeft === 1 ? '' : 's'} left.</p><label class="f" for="tfoff">Current code (or a recovery code) to turn it off</label><div class="row"><input id="tfoff" autocomplete="one-time-code" style="max-width:200px"><button id="tfdis">Turn off</button></div>`
+    : `<p>Add a second step to logging in with an authenticator app such as Google Authenticator, Microsoft Authenticator, 1Password, or Authy.</p><button class="p" id="tfstart">Set up two-factor authentication</button>`}<div id="tfbox"></div></div>
   ${S.me.isAdmin ? '<div class="card"><h3>Owner</h3><p><a class="btn" href="/admin">Open admin</a></p></div>' : ''}</div>`
   const saveRem = async () => {
     const r = await api('/api/settings', { method: 'PUT', body: { reminderDefault: +$('#rdef').value, senderNudgeDays: +$('#rnud').value } })
     if (r.ok) { S.me = { ...S.me, ...r.json, isAdmin: S.me.isAdmin }; toast('Reminder settings saved') } else toast(r.json?.message || 'Could not save')
   }
   $('#rdef').onchange = saveRem; $('#rnud').onchange = saveRem
+  const tfs = $('#tfstart')
+  if (tfs) tfs.onclick = async () => {
+    const r = await api('/api/2fa/setup', { method: 'POST' })
+    if (!r.ok) return toast(r.json?.message || 'Could not start setup')
+    $('#tfbox').innerHTML = `<p>1. Scan this code with your authenticator app, or enter the key by hand.</p><div style="width:180px;height:180px;background:#fff">${r.json.qrSvg}</div><p class="note">Key: <span class="mono" style="word-break:break-all">${esc(r.json.secret.replace(/(.{4})/g, '$1 ').trim())}</span></p><label class="f" for="tfcode">2. Enter the 6-digit code it shows</label><div class="row"><input id="tfcode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" style="max-width:140px"><button class="p" id="tfon">Turn on</button></div>`
+    $('#tfon').onclick = async () => {
+      const e = await api('/api/2fa/enable', { method: 'POST', body: { code: $('#tfcode').value.trim() } })
+      if (!e.ok) return toast(e.json?.message || 'That code didn’t match')
+      setToken(e.json.token)
+      S.me = { ...S.me, twoFactor: true, recoveryCodesLeft: e.json.recoveryCodes.length }
+      $('#tfacard').innerHTML = `<h3>Two-factor authentication is on</h3><p><b>Save these recovery codes now.</b> Each one works once if you lose your phone. They won’t be shown again.</p><pre class="mono" style="background:#f8fafc;padding:12px;border-radius:8px">${e.json.recoveryCodes.map(esc).join('\n')}</pre><button id="tfdone">I saved them</button>`
+      $('#tfdone').onclick = () => route()
+    }
+  }
+  const tfd = $('#tfdis')
+  if (tfd) tfd.onclick = async () => {
+    const v = $('#tfoff').value.trim()
+    const r = await api('/api/2fa/disable', { method: 'POST', body: /^\d{6}$/.test(v) ? { totp: v } : { recoveryCode: v } })
+    if (!r.ok) return toast(r.json?.message || 'Could not turn it off')
+    S.me = { ...S.me, twoFactor: false, recoveryCodesLeft: 0 }; toast('Two-factor authentication is off'); route()
+  }
   $('#pgo').onclick = async () => {
     const r = await api('/api/promo/redeem', { method: 'POST', body: { code: $('#pcode').value } })
     if (!r.ok) { $('#pmsg').innerHTML = `<p class="banner">${esc(r.json?.message || 'That code could not be applied.')}</p>`; return }

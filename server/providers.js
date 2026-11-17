@@ -21,9 +21,9 @@ export function createEmail(config, mailbox) {
   return {
     mode: config.emailMode,
     async send({ to, subject, html, text, attachments, replyTo }) {
-      if (!to) return
+      if (!to) return null
       remember(config, mailbox, { type: 'email', to, subject, replyTo: replyTo || '', text: text || html?.replace(/<[^>]+>/g, ' ').slice(0, 500), url: (html || '').match(/https?:\/\/[^\s"<]+(?:#\/sign\/|\/auth\/|\/verify\/|\/r\/|#\/app|#\/reset\/|#\/team-invite\/)[^\s"<]*/)?.[0] || (html || '').match(/https?:\/\/[^\s"<]+/)?.[0] || '' })
-      if (config.emailMode !== 'resend') return
+      if (config.emailMode !== 'resend') return { id: null }
       const body = {
         from: config.emailFrom,
         to: Array.isArray(to) ? to : [to],
@@ -42,6 +42,8 @@ export function createEmail(config, mailbox) {
         const detail = await res.text()
         throw new Error('Email failed: ' + detail.slice(0, 300))
       }
+      const out = await res.json().catch(() => ({}))
+      return { id: typeof out?.id === 'string' ? out.id : null }
     }
   }
 }

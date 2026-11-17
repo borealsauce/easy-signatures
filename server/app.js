@@ -1,5 +1,6 @@
 import express from 'express'
 import { createHash } from 'node:crypto'
+import { clientIp } from './crypto.js'
 import multer from 'multer'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -9,7 +10,8 @@ import { createStorage } from './storage.js'
 import { createEmail, createPayments, createSms, htmlEmail } from './providers.js'
 import {
   bulkSend, checkPhone, commentAs, copyAsTemplate, createBlank, createLink, createUpload, finishDirectUpload, instantiateTemplate, startDirectUpload, UPLOAD_MAX_MB,
-  declineSign, deleteDocument, deviceFrom, fail, finishSign, grantCheckout, login,
+  startTwoFactor, enableTwoFactor, disableTwoFactor,
+  declineSign, deleteDocument, deleteDocumentContent, documentEvidence, deviceFrom, fail, finishSign, grantCheckout, login,
   ownerFile, publicStart, remind, resendVerification, runMaintenance,
   saveDraft, saveSettings, saveFavorites, saveLogo, removeLogo, brandLogo, saveSignFields, sendDocument, setLinkActive, signSession,
   signerFile, signup, startPhone, stateFor, userFromAuth, verificationRecord,
@@ -35,7 +37,8 @@ import {
 } from './developer.js'
 import { existsSync } from 'node:fs'
 import { verifySvix, forwardInbound } from './inbound.js'
-import { recordEvent, cleanClientEvent, funnelReport } from './funnel.js'
+import { recordDeliveryEvent, lookupByHash } from './evidence.js'
+import { recordEvent, cleanClientEvent, funnelReport, realVisitorsReport, ipHash } from './funnel.js'
 import { registerSeo } from '../seo/routes.js'
 import { notFoundPage } from '../seo/layout.js'
 
@@ -45,6 +48,11 @@ function projectRoot() {
   return candidates.find(dir => existsSync(join(dir, 'index.html'))) || candidates[0]
 }
 const root = projectRoot()
+
+// Accounts whose visits never count as real traffic: owner/admin emails, the smoke-test account, and FUNNEL_EXCLUDE_EMAILS.
+export function internalEmails(config) {
+  return [...new Set([...(config.adminEmails || []), 'borealsauce-t0vm8s@mail.grokbot.com', ...(config.funnelExcludeEmails || [])].map(e => String(e).toLowerCase()))]
+}
 
 function asyncRoute(fn) {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
@@ -71,6 +79,12 @@ export async function createApp(env = process.env) {
   const app = express()
   app.disable('x-powered-by')
   app.locals.ctx = ctx
+  app.use((req, res, next) => {
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN')
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    next()
+  })
 
   app.post('/api/billing/webhook', express.raw({ type: 'application/json', limit: '1mb' }), asyncRoute(async (req, res) => {
     if (config.stripeMode !== 'stripe') return res.status(404).json({ error: 'not_found', message: 'Stripe is not configured.' })
@@ -96,6 +110,14 @@ export async function createApp(env = process.env) {
     if (!verifySvix(config.resendWebhookSecret, req.headers, raw)) return res.status(401).json({ error: 'signature', message: 'Invalid webhook signature.' })
     let event
     try { event = JSON.parse(raw.toString('utf8')) } catch { return res.status(400).json({ error: 'json', message: 'Invalid JSON.' }) }
+    if (event?.type && event.type !== 'email.received') {
+      try {
+        return res.json({ received: true, ...(await recordDeliveryEvent(db, event, req.headers['svix-id'])) })
+      } catch (e) {
+        ctx.logError?.('email-events', String(e?.message || e).slice(0, 300))
+        return res.status(500).json({ error: 'record_failed', message: 'Could not record the email event.' })
+      }
+    }
     try {
       res.json({ received: true, ...(await forwardInbound(config, event)) })
     } catch (e) {
@@ -104,14 +126,18 @@ export async function createApp(env = process.env) {
     }
   }))
 
-  // Cookie-free funnel beacon (navigator.sendBeacon). Funnel rows hold no IP, cookie, or email; the rate-limit key is a hash.
+  // Funnel beacon (navigator.sendBeacon). Rows hold a random visitor id and a salted IP hash, never the raw IP or an email.
   app.post('/api/ev', express.text({ type: '*/*', limit: '4kb' }), asyncRoute(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     let body = null
     try { body = JSON.parse(typeof req.body === 'string' ? req.body : '') } catch {}
     const ev = cleanClientEvent(body, req.headers['user-agent'])
-    const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim()
-    if (ev && await allow(db, 'ev:' + createHash('sha256').update(ip || 'unknown').digest('hex').slice(0, 16), { limit: 300, windowMs: 60 * 60 * 1000 })) await recordEvent(db, ev)
+    const ip = clientIp(req, config) || String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim()
+    if (ev) {
+      ev.ipHash = ipHash(ip, config.jwtSecret)
+      if (/(?:^|;\s*)eds_internal=1/.test(String(req.headers.cookie || ''))) ev.internal = true
+    }
+    if (ev && await allow(db, 'ev:' + createHash('sha256').update(ip || 'unknown').digest('hex').slice(0, 16), { limit: 600, windowMs: 60 * 60 * 1000 })) await recordEvent(db, ev)
     res.status(204).end()
   }))
 
@@ -197,8 +223,24 @@ export async function createApp(env = process.env) {
   }))
 
   app.post('/api/auth/login', asyncRoute(async (req, res) => {
+    if (!await allow(db, `login:${req.device.ip || 'unknown'}`, { limit: Number(process.env.LOGIN_PER_15M || 30), windowMs: 15 * 60 * 1000 })) {
+      return res.status(429).json({ error: 'rate_limit', message: 'Too many login attempts from this network. Wait 15 minutes and try again.' })
+    }
     const out = await login(ctx, req.body)
     res.json(out)
+  }))
+
+  app.post('/api/2fa/setup', auth, asyncRoute(async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    res.json(await startTwoFactor(ctx, req.user))
+  }))
+  app.post('/api/2fa/enable', auth, asyncRoute(async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    const header = req.headers.authorization || ''
+    res.json(await enableTwoFactor(ctx, req.user, req.body?.code, header.startsWith('Bearer ') ? header.slice(7) : ''))
+  }))
+  app.post('/api/2fa/disable', auth, asyncRoute(async (req, res) => {
+    res.json(await disableTwoFactor(ctx, req.user, req.body || {}))
   }))
 
   app.post('/api/auth/resend', auth, asyncRoute(async (req, res) => {
@@ -240,7 +282,7 @@ export async function createApp(env = process.env) {
 
   app.get('/api/me', auth, asyncRoute(async (req, res) => {
     const state = await stateFor(ctx, req.user, req.device)
-    res.json({ me: { ...state.me, isAdmin: isAdmin(config, req.user) }, usage: state.usage })
+    res.json({ me: { ...state.me, isAdmin: isAdmin(config, req.user), internal: internalEmails(config).includes(String(req.user.email || '').toLowerCase()) }, usage: state.usage })
   }))
   app.patch('/api/me/favorites', auth, asyncRoute(async (req, res) => {
     res.json(await saveFavorites(ctx, req.user, req.body?.types))
@@ -334,7 +376,19 @@ export async function createApp(env = process.env) {
 
   app.get('/api/admin/funnel', adminOnly, asyncRoute(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
-    res.json(await funnelReport(ctx, { days: req.query.days, excludeEmails: req.query.all === '1' ? [] : config.adminEmails }))
+    const excludeEmails = req.query.all === '1' ? [] : internalEmails(config)
+    const report = await funnelReport(ctx, { days: req.query.days, excludeEmails })
+    report.real = await realVisitorsReport(ctx, { days: req.query.days, excludeEmails: internalEmails(config), excludeIpHashes: config.funnelExcludeIpHashes })
+    report.myIpExcluded = (await db.query(`select 1 from funnel_excluded_ips where ip_hash=$1`, [ipHash(req.device.ip, config.jwtSecret)])).rows.length > 0
+    res.json(report)
+  }))
+  // Exclude (or stop excluding) the admin's current network from "Real visitors". Only the salted hash is stored.
+  app.post('/api/admin/funnel/exclude-ip', adminOnly, asyncRoute(async (req, res) => {
+    const h = ipHash(req.device.ip, config.jwtSecret)
+    if (!h) return res.status(400).json({ error: 'ip', message: 'Could not read your IP address.' })
+    if (req.body?.remove) await db.query(`delete from funnel_excluded_ips where ip_hash=$1`, [h])
+    else await db.query(`insert into funnel_excluded_ips (ip_hash, label) values ($1,$2) on conflict (ip_hash) do nothing`, [h, String(req.body?.label || '').slice(0, 60) || null])
+    res.json({ ok: true, excluded: !req.body?.remove })
   }))
 
   app.get('/api/admin/health', adminOnly, asyncRoute(async (req, res) => {
@@ -348,7 +402,7 @@ export async function createApp(env = process.env) {
 
   app.get('/api/state', auth, asyncRoute(async (req, res) => {
     const state = await stateFor(ctx, req.user, req.device)
-    res.json({ ...state, me: { ...state.me, isAdmin: isAdmin(config, req.user) } })
+    res.json({ ...state, me: { ...state.me, isAdmin: isAdmin(config, req.user), internal: internalEmails(config).includes(String(req.user.email || '').toLowerCase()) } })
   }))
 
   app.put('/api/settings', auth, asyncRoute(async (req, res) => {
@@ -506,6 +560,15 @@ export async function createApp(env = process.env) {
 
   app.delete('/api/documents/:id', auth, asyncRoute(async (req, res) => {
     res.json(await deleteDocument(ctx, req.user, req.params.id))
+  }))
+  app.post('/api/documents/:id/delete-content', auth, asyncRoute(async (req, res) => {
+    res.json(await deleteDocumentContent(ctx, req.user, req.params.id, req.device))
+  }))
+  app.get('/api/documents/:id/evidence', auth, asyncRoute(async (req, res) => {
+    const out = await documentEvidence(ctx, req.user, req.params.id)
+    res.setHeader('Cache-Control', 'no-store')
+    if (req.query.download === '1') res.setHeader('Content-Disposition', `attachment; filename="evidence-${out.document.id}.json"`)
+    res.json(out)
   }))
 
   app.post('/api/documents/:id/send', auth, asyncRoute(async (req, res) => {
@@ -668,6 +731,18 @@ export async function createApp(env = process.env) {
   })
   app.get('/api/cron/reminders', cron)
   app.post('/api/cron/reminders', cron)
+
+  // Public hash check for /verify. The file is hashed in the browser; only the 64-hex SHA-256 is sent.
+  // The answer is limited to match / no match, the completion date, and the number of signers.
+  app.post('/api/verify', asyncRoute(async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    if (!await allow(db, `verify:${req.device.ip || 'unknown'}`, { limit: 60, windowMs: 60 * 60 * 1000 })) {
+      return res.status(429).json({ error: 'rate_limit', message: 'Too many checks from this network. Try again in an hour.' })
+    }
+    const out = await lookupByHash(db.query.bind(db), req.body?.sha256)
+    if (!out.valid) return res.status(400).json({ error: 'sha256', message: 'Send a 64-character SHA-256 hex value.' })
+    res.json(out.match ? { match: true, completed: out.completed, signers: out.signers } : { match: false })
+  }))
 
   app.get('/verify/:id', asyncRoute(async (req, res) => {
     const id = String(req.params.id || '')

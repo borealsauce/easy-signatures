@@ -10,6 +10,7 @@ import { TOOL_PAGE } from './tool-page.js'
 import { SIGN_PDF_PAGE } from './sign-pdf-page.js'
 import { COMPARE_PAGES } from './compare-more.js'
 import { PRIVACY, TERMS } from './legal.js'
+import { LEGAL_PAGES } from './legal-more.js'
 import { marketingHtml } from '../marketing.js'
 import { HOME_FAQ } from '../shared/home-faq.js'
 
@@ -19,7 +20,7 @@ export const INDEXNOW_KEY = '9c0f7c0d74dd681b044655de2b7164e1'
 const HTML_CACHE = 'public, max-age=0, s-maxage=3600, stale-while-revalidate=86400'
 const ASSET_CACHE = 'public, max-age=86400, s-maxage=604800'
 
-export const SEO_PAGES = [SIGN_PDF_PAGE, ...PAGES, ...MORE_PAGES, ...COMPARE_PAGES, ...GUIDE_PAGES, TOOL_PAGE, BLOG_INDEX, ...POSTS, PRIVACY, TERMS]
+export const SEO_PAGES = [SIGN_PDF_PAGE, ...PAGES, ...MORE_PAGES, ...COMPARE_PAGES, ...GUIDE_PAGES, TOOL_PAGE, BLOG_INDEX, ...POSTS, PRIVACY, TERMS, ...LEGAL_PAGES]
 
 const HOME = {
   path: '/',
@@ -108,6 +109,10 @@ export function registerSeo(app, { root, config }) {
   app.get('/', (req, res) => send(res, homeHtml))
   // /pricing used to be a copy of the homepage (canonical '/'); the real pricing page is /e-signature-pricing.
   app.get('/pricing', (req, res) => res.redirect(301, '/e-signature-pricing'))
+  for (const alias of ['/legal/evidence', '/evidence', '/legal/court-evidence']) app.get(alias, (req, res) => res.redirect(301, '/court-evidence'))
+  for (const alias of ['/legal/security', '/trust']) app.get(alias, (req, res) => res.redirect(301, '/security'))
+  app.get('/legal/dpa', (req, res) => res.redirect(301, '/dpa'))
+  app.get('/aup', (req, res) => res.redirect(301, '/acceptable-use'))
   for (const alias of ['/sign-pdf-free', '/sign-pdf-online-free', '/fill-and-sign-pdf-free', '/free-pdf-signer']) app.get(alias, (req, res) => res.redirect(301, '/sign-pdf-online'))
   for (const [path, s] of Object.entries(SHELLS)) {
     const html = shellHtml(indexHtml, { path, ...s, body: s.prerender ? homeBody : '' }, css)

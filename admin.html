@@ -72,6 +72,16 @@ async function gate() {
 }
 async function show() { navTabs(); root.innerHTML = '<div class="card muted">Loading…</div>'; try { await VIEWS[tab]() } catch (e) { root.innerHTML = '<div class="card">Something went wrong: ' + esc(e.message) + '</div>' } }
 
+function realView(d) {
+  const r = d.real
+  if (!r) return ''
+  const t = (title, items, k) => '<div><h3>' + title + '</h3>' + table(['', 'Visitors'], items.map(x => '<tr><td>' + esc(x[k] || '—') + '</td><td>' + x.n + '</td></tr>'), 'Nothing yet.') + '</div>'
+  return '<div class="card"><div class="row"><h2>Real visitors</h2><span class="muted">' + r.uniqueVisitors + ' unique in the period</span><span class="sp"></span><button class="b" id="xip">' + (d.myIpExcluded ? 'Count my current network again' : 'Exclude my current network') + '</button></div>'
+    + '<p class="muted">Unique browsers (a random id in local storage; per tab for older visits). Left out: owner, admin and smoke-test accounts; any browser that ever opened the site with <code>?internal=1</code> (' + r.excludedBrowsers + ' in this period); ' + r.excludedIpCount + ' excluded network(s), stored as salted hashes. Bots and automated browsers are never counted.</p>'
+    + table(['Day (PT)', 'Unique visitors', 'Page views'], r.daily.map(x => '<tr><td>' + x.day + '</td><td><b>' + x.visitors + '</b></td><td>' + x.views + '</td></tr>'), 'No real visits yet.')
+    + '<div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">' + t('Top pages', r.pages, 'path') + t('Referrers', r.referrers, 'source') + '</div></div>'
+}
+
 const VIEWS = {
   async funnel() {
     const days = Number(sessionStorage.getItem('eds_fdays') || 30)
@@ -91,9 +101,16 @@ const VIEWS = {
       + '<p class="muted">Visits, clicks and signup-form steps are anonymous per-tab sessions (no cookies, bots and automated browsers skipped). Accounts, confirmations, first sends and payments come from the app\'s own records, excluding the admin account. Step % is against the step above; overall % is against visits.</p>'
       + table(['Step', 'Count', 'Step %', 'Overall %', ''], rows) + '</div>'
       + '<div class="stats"><div class="stat"><div class="k">Free PDF tool opens</div><div class="v">' + (d.tool.pdf_tool_open || 0) + '</div></div><div class="stat"><div class="k">PDFs signed with the tool</div><div class="v">' + (d.tool.pdf_signed || 0) + '</div></div></div>'
+      + realView(d)
       + list('Top landing pages', d.landings, 'path') + list('Traffic sources', d.sources, 'source') + list('Calls to action clicked', d.ctas, 'cta')
       + '<div class="card"><h2>By day (PT)</h2>' + table(['Day'].concat(cols), Object.keys(byDay).map(k => '<tr><td>' + k + '</td>' + cols.map(c => '<td>' + (byDay[k][c] || 0) + '</td>').join('') + '</tr>'), 'No events yet.') + '</div>'
     document.getElementById('fd').onchange = e => { sessionStorage.setItem('eds_fdays', e.target.value); show() }
+    const xb = document.getElementById('xip')
+    if (xb) xb.onclick = async () => {
+      const r2 = await api('/api/admin/funnel/exclude-ip', { method: 'POST', body: d.myIpExcluded ? { remove: true } : { label: 'Owner network' } })
+      if (!r2.ok) return toast(r2.json.message || 'Could not update', true)
+      toast(r2.json.excluded ? 'This network is now excluded (only a salted hash is stored).' : 'This network counts again.'); show()
+    }
   },
   async income() {
     const r = await api('/api/admin/income')

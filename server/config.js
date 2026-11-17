@@ -58,6 +58,8 @@ export function loadConfig(env = process.env) {
     aiModel: env.AI_MODEL || 'grok-3',
     cronSecret: env.CRON_SECRET || '',
     adminEmails: String(env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean),
+    funnelExcludeEmails: String(env.FUNNEL_EXCLUDE_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean),
+    funnelExcludeIpHashes: String(env.FUNNEL_EXCLUDE_IP_HASHES || '').split(',').map(e => e.trim().toLowerCase()).filter(h => /^[0-9a-f]{32}$/.test(h)),
     vercel: env.VERCEL === '1',
     // Public client identifiers for optional cloud import. Buttons stay hidden until these are set.
     dropboxAppKey: String(env.DROPBOX_APP_KEY || '').trim(),

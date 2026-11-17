@@ -8,7 +8,7 @@ import { cleanClientEvent } from '../server/funnel.js'
 
 test('beacon validation drops bots, unknown events and bad ids', () => {
   const ok = { name: 'landing_view', sid: 'abcdef123456', path: '/sign-pdf-online?x=1', data: { utm_source: 'google', cta: 'x' } }
-  assert.deepEqual(cleanClientEvent(ok, 'Mozilla/5.0'), { name: 'landing_view', sid: 'abcdef123456', path: '/sign-pdf-online', source: 'google', meta: { cta: 'x' } })
+  assert.deepEqual(cleanClientEvent(ok, 'Mozilla/5.0'), { name: 'landing_view', sid: 'abcdef123456', vid: null, path: '/sign-pdf-online', source: 'google', meta: { cta: 'x' }, internal: false })
   assert.equal(cleanClientEvent(ok, 'Googlebot/2.1'), null)
   assert.equal(cleanClientEvent(ok, 'Chrome-Lighthouse'), null)
   assert.equal(cleanClientEvent({ ...ok, name: 'drop_table' }, ''), null)
@@ -76,6 +76,25 @@ test('funnel: beacons, signup, first send, checkout, admin report, /pricing redi
     assert.equal(step.purchase, 0)
     assert.equal(rep.sources[0].source, 'google')
     assert.equal(rep.ctas[0].cta, 'home-hero')
+
+    // Real visitors: internal cookie, ?internal flag, and excluded IP hashes are left out; raw IPs never stored.
+    const pv = (vid, extra = {}, headers = {}) => fetch(base + '/api/ev', { method: 'POST', headers: { 'content-type': 'text/plain', 'user-agent': 'Mozilla/5.0', 'x-forwarded-for': extra.ip || '198.51.100.70', ...headers }, body: JSON.stringify({ name: 'page_view', sid: 'tab' + vid, vid, path: extra.path || '/sign-pdf-online', internal: !!extra.internal, data: { ref: 'news.example' } }) })
+    await pv('vreal00001'); await pv('vreal00001', { path: '/nda' }); await pv('vreal00002', { ip: '198.51.100.71' })
+    await pv('vmine00001', { internal: true }); await pv('vmine00001')
+    await pv('vcook00001', {}, { cookie: 'eds_internal=1' })
+    await pv('voffice001', { ip: '198.51.100.99' })
+    const rawIp = await ctx.db.query(`select count(*)::int n from funnel_events where ip_hash like '198.%' or meta::text like '%198.51.100%'`)
+    assert.equal(rawIp.rows[0].n, 0)
+    await call('/api/admin/funnel/exclude-ip', { method: 'POST', token: owner, ip: '198.51.100.99', body: {} })
+    const real = json(await call('/api/admin/funnel?days=30', { token: owner, ip: '198.51.100.99' }))
+    assert.equal(real.myIpExcluded, true)
+    assert.equal(real.real.uniqueVisitors >= 2, true)
+    const ids = (await ctx.db.query(`select distinct vid from funnel_events where vid is not null`)).rows.map(r => r.vid)
+    assert.ok(ids.includes('vmine00001'))
+    const pagesSeen = Object.fromEntries(real.real.pages.map(x => [x.path, x.n]))
+    assert.equal(pagesSeen['/sign-pdf-online'], 2, JSON.stringify(real.real))
+    assert.equal(pagesSeen['/nda'], 1)
+    assert.ok(real.real.excludedBrowsers >= 3)
 
     const p = await call('/pricing')
     assert.equal(p.status, 301)

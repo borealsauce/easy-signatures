@@ -14,6 +14,26 @@
   if (s) { s.defer = true
   s.src = '/_vercel/insights/script.js'
   document.head.appendChild(s) }
+  // Vercel Speed Insights (Core Web Vitals from real visits; enabled on the project).
+  window.si = window.si || function () { (window.siq = window.siq || []).push(arguments) }
+  if (prod) { const si = document.createElement('script'); si.defer = true; si.src = '/_vercel/speed-insights/script.js'; document.head.appendChild(si) }
+
+  // Internal-traffic flag: open any page once with ?internal=1 on each of your own devices.
+  // It sets a first-party cookie (2 years) so this browser's visits are left out of "Real visitors".
+  // ?internal=0 clears it.
+  let internal = false
+  try {
+    const iq = new URLSearchParams(location.search).get('internal')
+    if (iq === '1') { document.cookie = 'eds_internal=1; Max-Age=63072000; Path=/; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : ''); localStorage.setItem('eds_internal', '1') }
+    if (iq === '0') { document.cookie = 'eds_internal=; Max-Age=0; Path=/'; localStorage.removeItem('eds_internal') }
+    internal = /(?:^|; )eds_internal=1/.test(document.cookie) || localStorage.getItem('eds_internal') === '1'
+  } catch {}
+  window.edsMarkInternal = function () {
+    try { document.cookie = 'eds_internal=1; Max-Age=63072000; Path=/; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : ''); localStorage.setItem('eds_internal', '1'); internal = true } catch {}
+  }
+  // Random anonymous visitor id kept in this browser's local storage (not a cookie), used to count unique visitors.
+  let vid = ''
+  try { vid = localStorage.getItem('eds_vid') || ''; if (!vid) { vid = 'v' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36); localStorage.setItem('eds_vid', vid) } } catch {}
 
   const PACK_VALUE = { doc1: 1, doc10: 5, doc50: 10 }
   let touch = {}
@@ -29,10 +49,10 @@
   // Anonymous per-tab id for the first-party funnel (sessionStorage, not a cookie).
   let sid = ''
   try { sid = sessionStorage.getItem('eds_sid') || ''; if (!sid) { sid = Math.random().toString(36).slice(2, 12) + Date.now().toString(36); sessionStorage.setItem('eds_sid', sid) } } catch {}
-  const FUNNEL = ['landing_view', 'cta_click', 'signup_view', 'signup_started', 'pdf_tool_open', 'pdf_signed', 'begin_checkout']
+  const FUNNEL = ['page_view', 'landing_view', 'cta_click', 'signup_view', 'signup_started', 'pdf_tool_open', 'pdf_signed', 'begin_checkout']
   function beacon(name, data) {
     if (!sid || !FUNNEL.includes(name) || (navigator.webdriver && !localStorage.getItem('eds_track_test'))) return
-    const body = JSON.stringify({ name, sid, path: location.pathname + (location.hash.startsWith('#/') ? location.hash.split('?')[0] : ''), data: { ...data, utm_source: touch.utm_source, utm_medium: touch.utm_medium, utm_campaign: touch.utm_campaign, ref: touch.ref, landing: touch.landing } })
+    const body = JSON.stringify({ name, sid, vid, internal, path: location.pathname + (location.hash.startsWith('#/') ? location.hash.split('?')[0] : ''), data: { ...data, utm_source: touch.utm_source, utm_medium: touch.utm_medium, utm_campaign: touch.utm_campaign, ref: touch.ref, landing: touch.landing } })
     try { if (navigator.sendBeacon && navigator.sendBeacon('/api/ev', new Blob([body], { type: 'text/plain' }))) return } catch {}
     try { fetch('/api/ev', { method: 'POST', body, keepalive: true, headers: { 'Content-Type': 'text/plain' } }).catch(() => {}) } catch {}
   }
@@ -78,6 +98,7 @@
   }
 
   // First page of this tab's visit.
+  try { window.edsTrack('page_view', { ref: document.referrer ? new URL(document.referrer).hostname : '' }) } catch {}
   try { if (!sessionStorage.getItem('eds_lv')) { sessionStorage.setItem('eds_lv', '1'); window.edsTrack('landing_view', {}) } } catch {}
 
   document.addEventListener('click', e => {
